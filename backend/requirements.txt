@@ -1,0 +1,9 @@
+# Runtime dependencies (Python 3.13).
+fastapi==0.142.2
+uvicorn==0.54.0
+SQLAlchemy[asyncio]==2.1.1
+asyncmy==0.2.15
+# Required by asyncmy for MySQL 8 caching_sha2_password authentication.
+cryptography==50.0.2
+alembic==1.20.0
+pydantic-settings==2.15.0

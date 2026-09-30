@@ -1,0 +1,26 @@
+---
+import type { HealthStatus } from '../lib/api/health';
+
+interface Props {
+  health: HealthStatus | null;
+}
+
+const { health } = Astro.props;
+const apiOk = health?.status === 'ok';
+const databaseOk = health?.database === 'ok';
+---
+
+<ul class="space-y-2 text-sm">
+  <li class="flex items-center justify-between gap-4">
+    <span>API</span>
+    <span class:list={['rounded-full px-2.5 py-0.5 font-medium', apiOk ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800']}>
+      {apiOk ? 'Disponible' : 'No disponible'}
+    </span>
+  </li>
+  <li class="flex items-center justify-between gap-4">
+    <span>Base de datos</span>
+    <span class:list={['rounded-full px-2.5 py-0.5 font-medium', databaseOk ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800']}>
+      {databaseOk ? 'Disponible' : 'No disponible'}
+    </span>
+  </li>
+</ul>

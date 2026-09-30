@@ -1,0 +1,25 @@
+# Environment (only .env.example is versioned)
+.env
+.env.*
+!.env.example
+
+# Node / Astro
+node_modules/
+dist/
+.astro/
+npm-debug.log*
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editors / OS
+.idea/
+.DS_Store
+
+# Claude Code local settings (project skills in .claude/skills are versioned)
+.claude/settings.local.json
