@@ -6,4 +6,8 @@ asyncmy==0.2.15
 # Required by asyncmy for MySQL 8 caching_sha2_password authentication.
 cryptography==50.0.2
 alembic==1.20.0
+# Password hashing (Argon2id).
+argon2-cffi==25.1.0
+# Email validation for Pydantic EmailStr.
+email-validator==2.3.0
 pydantic-settings==2.15.0

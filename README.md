@@ -92,6 +92,19 @@ Crear una migración nueva (revisa siempre el archivo generado):
 .venv/bin/alembic revision --autogenerate -m "describe the change"
 ```
 
+## Crear el primer administrador (HU-001)
+
+No existe registro público de administradores. El primer administrador se crea en el servidor con un comando interactivo (la contraseña se pide sin mostrarla en pantalla):
+
+```bash
+cd backend
+.venv/bin/python -m app.cli create-admin
+```
+
+- Obligatorios: nombre completo, correo electrónico y contraseña (12 a 128 caracteres). Opcionales: número de documento y teléfono.
+- Si ya existe un administrador activo, el comando rechaza la operación.
+- Códigos de salida: `0` creado, `1` datos inválidos o conflicto, `2` sin terminal interactiva o sin conexión a la base de datos.
+
 ## Ejecución del backend
 
 ```bash
@@ -117,11 +130,16 @@ Abre `http://localhost:4321`. La página inicial muestra el estado de la API y d
 
 ### Backend
 
-Requiere la base de datos de pruebas (`TEST_DB_NAME`). Las pruebas nunca usan la base de desarrollo: se niegan a ejecutarse si `TEST_DB_NAME` no termina en `_test`. El esquema de pruebas se crea con `alembic upgrade head` y cada prueba se revierte al terminar.
+Las pruebas están separadas:
+
+- `tests/unit/`: no necesitan MySQL.
+- `tests/integration/`: usan la base de datos de pruebas (`TEST_DB_NAME`). Nunca usan la base de desarrollo: se niegan a ejecutarse si `TEST_DB_NAME` no termina en `_test`. El esquema se crea con `alembic upgrade head` y cada prueba se revierte al terminar.
 
 ```bash
 cd backend
-.venv/bin/pytest
+.venv/bin/pytest tests/unit          # sin base de datos
+.venv/bin/pytest tests/integration   # requiere MySQL y la base *_test
+.venv/bin/pytest                     # todas
 ```
 
 ### Frontend

@@ -8,10 +8,9 @@ async def test_unknown_route_uses_standard_error_format(client: AsyncClient) -> 
     response = await client.get("/api/v1/does-not-exist")
 
     assert response.status_code == 404
-    body = response.json()
-    assert body["error"]["code"] == "NOT_FOUND"
-    assert body["error"]["message"] == "El recurso solicitado no existe."
-    assert body["error"]["details"] == []
+    assert response.json() == {
+        "error": {"code": "NOT_FOUND", "message": "El recurso solicitado no existe.", "details": []}
+    }
 
 
 async def test_wrong_method_uses_standard_error_format(client: AsyncClient) -> None:

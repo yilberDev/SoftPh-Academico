@@ -10,7 +10,8 @@ def create_engine(url: URL, **kwargs: object) -> AsyncEngine:
     return create_async_engine(
         url,
         pool_pre_ping=True,
-        connect_args={"connect_timeout": 5},
+        # Every connection works in UTC, so CURRENT_TIMESTAMP defaults are UTC.
+        connect_args={"connect_timeout": 5, "init_command": "SET time_zone = '+00:00'"},
         **kwargs,
     )
 

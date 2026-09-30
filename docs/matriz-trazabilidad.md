@@ -4,7 +4,7 @@ Cadena: HU → RF → CU → implementación → prueba. Se actualiza al complet
 
 | HU | RF | CU | Nombre | Implementación | Pruebas | Estado |
 |---|---|---|---|---|---|---|
-| HU-001 | RF-001 | CU-001 | Registro de administrador | — | — | Pendiente |
+| [HU-001](historias-usuario/HU-001.md) | [RF-001](requisitos-funcionales/RF-001.md) | [CU-001](casos-uso/CU-001.md) | Registro de administrador | `backend/app/cli.py` (`create-admin`), `app/services/users.py`, `app/services/audit.py`, `app/schemas/user.py`, `app/core/passwords.py`, `app/models/user.py`, `app/models/audit_log.py`, migraciones `633f6e19d008` y `925c4947c7a3` | `tests/unit/test_passwords.py`, `tests/unit/test_admin_schema.py`, `tests/integration/test_users_service.py`, `tests/integration/test_cli_create_admin.py`, `tests/integration/test_no_public_admin_registration.py`, `tests/integration/test_migrations.py`, `tests/integration/test_single_active_administrator.py` | Implementada |
 | HU-002 | RF-002 | CU-002 | Inicio de sesión del administrador | — | — | Pendiente |
 | HU-003 | RF-003 | CU-003 | Invitación de residente | — | — | Pendiente |
 | HU-004 | RF-004 | CU-004 | Registro de pagos | — | — | Pendiente |

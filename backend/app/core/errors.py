@@ -6,6 +6,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.exceptions import AppError
+from app.core.validation import error_details
+
 logger = logging.getLogger(__name__)
 
 # Stable machine-readable codes for the standard error format.
@@ -69,14 +72,11 @@ async def http_exception_handler(_request: Request, exc: StarletteHTTPException)
 
 
 async def validation_exception_handler(_request: Request, exc: RequestValidationError) -> JSONResponse:
-    details = [
-        {
-            "field": ".".join(str(part) for part in error["loc"] if part != "body"),
-            "message": error["msg"],
-        }
-        for error in exc.errors()
-    ]
-    return error_response(422, details=details)
+    return error_response(422, details=error_details(exc.errors()))
+
+
+async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
+    return error_response(exc.status_code, exc.message, code=exc.code)
 
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -87,4 +87,5 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, validation_exception_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(AppError, app_error_handler)  # type: ignore[arg-type]
     app.add_exception_handler(Exception, unhandled_exception_handler)
