@@ -1,0 +1,32 @@
+---
+interface Props {
+  csrfToken: string;
+}
+
+const { csrfToken } = Astro.props;
+---
+
+<button
+  type="button"
+  data-logout
+  data-csrf-token={csrfToken}
+  class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:opacity-60"
+>
+  Cerrar sesión
+</button>
+
+<script>
+  import { logout } from '../lib/api/auth';
+
+  document.querySelectorAll<HTMLButtonElement>('[data-logout]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        await logout(button.dataset.csrfToken ?? '');
+      } finally {
+        // Also when the session had already expired: the login page is next.
+        window.location.assign('/login');
+      }
+    });
+  });
+</script>

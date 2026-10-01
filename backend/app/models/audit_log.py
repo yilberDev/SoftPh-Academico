@@ -11,6 +11,10 @@ from app.db.base import Base
 
 class AuditAction(StrEnum):
     ADMIN_CREATED = "ADMIN_CREATED"
+    LOGIN_SUCCEEDED = "LOGIN_SUCCEEDED"
+    LOGIN_FAILED = "LOGIN_FAILED"
+    LOGIN_LOCKED = "LOGIN_LOCKED"
+    LOGOUT = "LOGOUT"
 
 
 class AuditLog(Base):

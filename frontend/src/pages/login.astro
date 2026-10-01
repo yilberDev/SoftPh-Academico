@@ -1,0 +1,115 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Iniciar sesión — SoftPh-Académico">
+  <main class="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-12">
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+      <p class="text-sm font-medium text-emerald-700">Urbanización San Joaquín</p>
+      <h1 class="mt-1 text-2xl font-semibold tracking-tight">Iniciar sesión</h1>
+
+      <div
+        id="login-alert"
+        role="alert"
+        aria-live="assertive"
+        class="mt-6 hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+      >
+      </div>
+
+      <form id="login-form" class="mt-6 space-y-5" novalidate>
+        <div>
+          <label for="email" class="block text-sm font-medium text-slate-700">Correo electrónico</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autocomplete="username"
+            required
+            maxlength="254"
+            class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
+          />
+          <p id="email-error" class="mt-1 hidden text-sm text-red-700"></p>
+        </div>
+        <div>
+          <label for="password" class="block text-sm font-medium text-slate-700">Contraseña</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+            maxlength="128"
+            class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"
+          />
+          <p id="password-error" class="mt-1 hidden text-sm text-red-700"></p>
+        </div>
+        <button
+          type="submit"
+          class="w-full rounded-lg bg-emerald-700 px-4 py-2.5 font-medium text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:opacity-60"
+        >
+          Ingresar
+        </button>
+      </form>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  import { homePathForRole, login } from '../lib/api/auth';
+  import { ApiError } from '../lib/api/errors';
+
+  const form = document.querySelector<HTMLFormElement>('#login-form')!;
+  const alertBox = document.querySelector<HTMLDivElement>('#login-alert')!;
+  const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+  const fields = ['email', 'password'] as const;
+
+  function showAlert(message: string | null): void {
+    alertBox.textContent = message ?? '';
+    alertBox.classList.toggle('hidden', !message);
+  }
+
+  function showFieldError(field: (typeof fields)[number], message: string | null): void {
+    const input = form.elements.namedItem(field) as HTMLInputElement;
+    const error = document.querySelector<HTMLParagraphElement>(`#${field}-error`)!;
+    error.textContent = message ?? '';
+    error.classList.toggle('hidden', !message);
+    input.setAttribute('aria-invalid', message ? 'true' : 'false');
+    if (message) {
+      input.setAttribute('aria-describedby', error.id);
+    } else {
+      input.removeAttribute('aria-describedby');
+    }
+  }
+
+  // Format checks only; the backend is the authority on credentials.
+  function validate(email: string, password: string): boolean {
+    const emailError = !email ? 'Ingresa tu correo electrónico.' : null;
+    const passwordError = !password ? 'Ingresa tu contraseña.' : null;
+    showFieldError('email', emailError);
+    showFieldError('password', passwordError);
+    const firstInvalid = emailError ? 'email' : passwordError ? 'password' : null;
+    if (firstInvalid) {
+      (form.elements.namedItem(firstInvalid) as HTMLInputElement).focus();
+    }
+    return !firstInvalid;
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    showAlert(null);
+    const email = (form.elements.namedItem('email') as HTMLInputElement).value.trim();
+    const password = (form.elements.namedItem('password') as HTMLInputElement).value;
+    if (!validate(email, password)) {
+      return;
+    }
+
+    submit.disabled = true;
+    try {
+      const session = await login(email, password);
+      window.location.assign(homePathForRole(session.user.role));
+    } catch (error) {
+      showAlert(error instanceof ApiError ? error.message : 'No fue posible conectar con el servidor. Intenta de nuevo.');
+      submit.disabled = false;
+    }
+  });
+</script>

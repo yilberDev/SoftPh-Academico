@@ -41,10 +41,15 @@ class User(Base):
         CheckConstraint(_in_list("status", UserStatus), name="status_valid"),
         # An active account always has a password.
         CheckConstraint("status <> 'ACTIVE' OR password_hash IS NOT NULL", name="active_has_password"),
+        # Extra defense for the canonical email (normalize_email() is the rule;
+        # TRIM() only removes U+0020 spaces). ASCII: one byte per character.
+        CheckConstraint("email = LOWER(email) AND email = TRIM(email)", name="email_canonical"),
+        CheckConstraint("CHAR_LENGTH(email) = LENGTH(email)", name="email_ascii"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    email: Mapped[str] = mapped_column(String(254), unique=True)
+    # Exact (binary, NO PAD) comparison: the same identity as the login throttle.
+    email: Mapped[str] = mapped_column(String(254, collation="utf8mb4_0900_bin"), unique=True)
     # NULL until the account is activated (residents are invited without a password).
     password_hash: Mapped[str | None] = mapped_column(String(255))
     full_name: Mapped[str] = mapped_column(String(150))

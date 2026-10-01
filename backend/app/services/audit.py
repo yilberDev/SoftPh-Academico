@@ -13,6 +13,7 @@ def record_audit(
     entity_id: int | None = None,
     actor_user_id: int | None = None,
     context: dict[str, Any] | None = None,
+    ip_address: str | None = None,
 ) -> AuditLog:
     """Adds an audit entry to the caller's transaction (it does not commit).
 
@@ -24,6 +25,7 @@ def record_audit(
         entity_id=entity_id,
         actor_user_id=actor_user_id,
         context=context,
+        ip_address=ip_address,
     )
     session.add(entry)
     return entry

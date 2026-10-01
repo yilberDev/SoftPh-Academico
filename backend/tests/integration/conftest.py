@@ -6,7 +6,7 @@ Each test gets a session inside a transaction that is rolled back afterwards;
 service commits only release a savepoint inside that transaction.
 """
 
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
 
@@ -19,8 +19,10 @@ from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import get_settings
+from app.core.passwords import hash_password
 from app.db.session import create_engine, get_db
 from app.main import app
+from app.models import User, UserRole, UserStatus
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -76,8 +78,8 @@ async def committed_session_factory(migrated_test_database: URL) -> AsyncIterato
         yield async_sessionmaker(engine, expire_on_commit=False)
     finally:
         async with engine.begin() as connection:
-            await connection.execute(text("DELETE FROM audit_logs"))
-            await connection.execute(text("DELETE FROM users"))
+            for table in ("sessions", "login_throttles", "audit_logs", "users"):
+                await connection.execute(text(f"DELETE FROM {table}"))
         await engine.dispose()
 
 
@@ -101,3 +103,42 @@ async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as http_client:
         yield http_client
     app.dependency_overrides.clear()
+
+
+PASSWORD = "correct horse battery"
+
+
+@pytest.fixture
+def origin_headers() -> dict[str, str]:
+    """Headers of a request coming from the single public origin."""
+    return {"Origin": get_settings().app_origin}
+
+
+@pytest.fixture
+def make_user(db_session: AsyncSession) -> Callable[..., Awaitable[User]]:
+    """Inserts a user (active administrator by default) in the test transaction."""
+
+    async def factory(
+        email: str = "admin@example.com",
+        *,
+        role: UserRole = UserRole.ADMINISTRADOR,
+        status: UserStatus = UserStatus.ACTIVE,
+        password: str | None = PASSWORD,
+        password_hash: str | None = None,
+        deleted: bool = False,
+    ) -> User:
+        user = User(
+            email=email,
+            full_name="Ana María Pérez",
+            role=role,
+            status=status,
+            password_hash=password_hash or (hash_password(password) if password else None),
+        )
+        db_session.add(user)
+        await db_session.flush()
+        if deleted:
+            await db_session.execute(text("UPDATE users SET deleted_at = UTC_TIMESTAMP(6) WHERE id = :id"), {"id": user.id})
+            await db_session.refresh(user)
+        return user
+
+    return factory

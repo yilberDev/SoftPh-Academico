@@ -7,7 +7,7 @@ from app.core.exceptions import (
     DocumentAlreadyRegisteredError,
     EmailAlreadyRegisteredError,
 )
-from app.core.passwords import hash_password
+from app.core.passwords import hash_password_async
 from app.models import AuditAction, User, UserRole, UserStatus
 from app.schemas.user import AdminCreate
 from app.services.audit import record_audit
@@ -41,9 +41,10 @@ async def create_first_administrator(session: AsyncSession, data: AdminCreate, *
     ):
         raise DocumentAlreadyRegisteredError()
 
+    password_hash = await hash_password_async(data.password.get_secret_value())
     user = User(
         email=data.email,
-        password_hash=hash_password(data.password.get_secret_value()),
+        password_hash=password_hash,
         full_name=data.full_name,
         document_number=data.document_number,
         phone=data.phone,

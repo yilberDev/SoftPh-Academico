@@ -73,6 +73,9 @@ def test_required_fields(field: str) -> None:
         ({"full_name": "Ana123"}, "full_name", "El nombre completo solo puede contener letras, espacios, apóstrofos y guiones."),
         ({"email": ""}, "email", "El correo electrónico es obligatorio."),
         ({"email": "no-es-un-correo"}, "email", "Ingresa un correo electrónico válido."),
+        ({"email": "josé@example.com"}, "email", "El correo electrónico no puede contener tildes, eñes ni otros caracteres especiales."),
+        ({"email": "ａｄｍｉｎ@example.com"}, "email", "El correo electrónico no puede contener tildes, eñes ni otros caracteres especiales."),
+        ({"email": "admin@exámple.com"}, "email", "El correo electrónico no puede contener tildes, eñes ni otros caracteres especiales."),
         ({"document_number": "12-34"}, "document_number", "El número de documento debe tener entre 5 y 20 letras o dígitos, sin espacios ni símbolos."),
         ({"phone": "12345"}, "phone", "El teléfono debe tener entre 7 y 15 dígitos, con un «+» inicial opcional."),
     ],
@@ -142,3 +145,13 @@ def test_password_is_not_exposed_in_repr() -> None:
 
 def test_user_read_has_no_password_hash_field() -> None:
     assert "password_hash" not in UserRead.model_fields
+
+
+@pytest.mark.parametrize("email", ["admin@example.com", "  ADMIN@Example.COM ", "Ana.Perez+admin@Sub.Example.co"])
+def test_stored_email_is_always_canonical_ascii(email: str) -> None:
+    from app.core.emails import normalize_email
+
+    stored = build(email=email).email
+
+    assert stored == normalize_email(stored)
+    assert stored.isascii()

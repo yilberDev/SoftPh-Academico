@@ -1,0 +1,13 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+Astro.response.status = 403;
+---
+
+<Layout title="Acceso no autorizado — SoftPh-Académico">
+  <main class="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-12 text-center">
+    <h1 class="text-2xl font-semibold tracking-tight">Acceso no autorizado</h1>
+    <p class="mt-3 text-slate-600">Tu cuenta no tiene permiso para ver esta página.</p>
+    <a href="/" class="mt-6 font-medium text-emerald-700 hover:underline">Volver al inicio</a>
+  </main>
+</Layout>

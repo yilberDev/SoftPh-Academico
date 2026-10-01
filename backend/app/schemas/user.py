@@ -5,6 +5,7 @@ from typing import Any
 from email_validator import EmailNotValidError, validate_email
 from pydantic import BaseModel, ConfigDict, EmailStr, SecretStr, ValidationInfo, field_validator
 
+from app.core.emails import normalize_email
 from app.core.validation import invalid
 
 PASSWORD_MIN_LENGTH = 12
@@ -55,14 +56,26 @@ class AdminCreate(BaseModel):
     def validate_email_address(cls, value: Any) -> Any:
         if not isinstance(value, str):
             return value
-        email = value.strip().lower()
+        email = normalize_email(value)
         if not email:
             raise invalid("email_required", "El correo electrónico es obligatorio.")
+        # New accounts use ASCII emails only (no Unicode look-alikes).
+        if not email.isascii():
+            raise invalid(
+                "email_ascii",
+                "El correo electrónico no puede contener tildes, eñes ni otros caracteres especiales.",
+            )
         try:
             validate_email(email, check_deliverability=False)
         except EmailNotValidError:
             raise invalid("email_format", "Ingresa un correo electrónico válido.") from None
         return email
+
+    @field_validator("email")
+    @classmethod
+    def keep_canonical_email(cls, value: str) -> str:
+        # EmailStr may rewrite the address; what is stored is always canonical.
+        return normalize_email(value)
 
     @field_validator("password")
     @classmethod

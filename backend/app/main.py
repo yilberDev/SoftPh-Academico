@@ -7,12 +7,15 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.db.session import engine
+from app.services.auth import dummy_password_hash
 
 API_PREFIX = "/api/v1"
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # Warm up the dummy Argon2 hash (off the event loop) before serving logins.
+    await dummy_password_hash()
     yield
     await engine.dispose()
 

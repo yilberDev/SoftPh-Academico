@@ -68,6 +68,11 @@ Edita `.env` y asigna una contraseña propia a `DB_PASSWORD`. Variables:
 | `DB_NAME` | Base de datos de desarrollo |
 | `DB_USER`, `DB_PASSWORD` | Usuario de la aplicación |
 | `TEST_DB_NAME` | Base de datos de pruebas; debe terminar en `_test` y ser distinta de `DB_NAME` |
+| `APP_ORIGIN` | Origen público único (frontend + API). Las solicitudes que modifican datos deben venir de él. Navega con ese host exacto: `http://127.0.0.1:4321` es otro origen que `http://localhost:4321` |
+| `SESSION_COOKIE_SECURE` | `false` solo con `APP_ENV` `development`/`test` y `APP_ORIGIN` en `http://localhost`, `http://127.0.0.1` o `http://[::1]`. Con `APP_ENV=production` debe ser `true`: si no, la API y `create-admin` no arrancan |
+| `SESSION_ABSOLUTE_TTL_MINUTES`, `SESSION_IDLE_TTL_MINUTES` | Duración máxima de la sesión (480) e inactividad permitida (30) |
+| `LOGIN_MAX_FAILED_ATTEMPTS`, `LOGIN_FAILURE_WINDOW_MINUTES`, `LOGIN_LOCKOUT_MINUTES` | Control de intentos fallidos: 5 fallos en 15 minutos bloquean 15 minutos |
+| `PASSWORD_HASH_MAX_CONCURRENCY` | Operaciones Argon2 simultáneas (64 MiB cada una), fuera del bucle de eventos. Por defecto 2, rango 1–4 |
 
 `.env` nunca se versiona.
 
@@ -101,9 +106,23 @@ cd backend
 .venv/bin/python -m app.cli create-admin
 ```
 
-- Obligatorios: nombre completo, correo electrónico y contraseña (12 a 128 caracteres). Opcionales: número de documento y teléfono.
+- Obligatorios: nombre completo, correo electrónico (solo caracteres ASCII) y contraseña (12 a 128 caracteres). Opcionales: número de documento y teléfono.
 - Si ya existe un administrador activo, el comando rechaza la operación.
 - Códigos de salida: `0` creado, `1` datos inválidos o conflicto, `2` sin terminal interactiva o sin conexión a la base de datos.
+
+## Inicio de sesión (HU-002)
+
+Con backend y frontend en marcha, abre `http://localhost:4321/login` e ingresa con el administrador creado con `create-admin`. El administrador llega al panel `/admin`; "Cerrar sesión" invalida la sesión.
+
+- La sesión se guarda en MySQL; la cookie `softph_session` (HttpOnly) solo contiene un identificador aleatorio.
+- Tras 5 intentos fallidos en 15 minutos, el acceso con ese correo se bloquea 15 minutos.
+- Pendiente: solicitar el restablecimiento de contraseña tras el bloqueo (criterio 3 de HU-002, ver `docs/historias-usuario/HU-002.md`).
+
+| Endpoint | Uso |
+|---|---|
+| `POST /api/v1/auth/login` | Inicio de sesión (requiere `Origin` del origen público) |
+| `GET /api/v1/auth/session` | Usuario actual y token CSRF |
+| `POST /api/v1/auth/logout` | Cierre de sesión (requiere `Origin` y cabecera `X-CSRF-Token`) |
 
 ## Ejecución del backend
 

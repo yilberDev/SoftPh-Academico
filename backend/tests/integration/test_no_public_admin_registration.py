@@ -1,20 +1,20 @@
 import pytest
-from fastapi.routing import APIRoute
 from httpx import AsyncClient
 
 from app.main import app
 
 pytestmark = pytest.mark.anyio
 
+WRITE_METHODS = {"post", "put", "patch"}
+
 
 def test_no_route_creates_users_or_administrators() -> None:
-    write_routes = [
-        route.path
-        for route in app.routes
-        if isinstance(route, APIRoute) and route.methods & {"POST", "PUT", "PATCH"}
-    ]
+    # The OpenAPI schema is the public list of every API route.
+    paths = app.openapi()["paths"]
+    write_paths = {path for path, operations in paths.items() if WRITE_METHODS & set(operations)}
 
-    assert write_routes == []
+    assert write_paths, "the schema should list the existing write routes (login/logout)"
+    assert not {path for path in write_paths if any(word in path for word in ("admin", "user", "register", "signup"))}
 
 
 @pytest.mark.parametrize(
