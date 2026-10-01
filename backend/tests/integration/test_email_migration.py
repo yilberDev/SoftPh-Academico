@@ -1,7 +1,8 @@
 """Migration 6236c5b88ac2 (A-1): both directions validate before any DDL.
 
 A failed validation must leave the structure exactly as it was. Only ever
-runs on the dedicated *_test database; the schema is restored to head.
+runs on the dedicated *_test database. Each test starts at this revision (later
+revisions are downgraded first) and the schema is restored to head afterwards.
 """
 
 import asyncio
@@ -9,6 +10,7 @@ from collections.abc import Iterator
 
 import pytest
 from alembic import command
+from alembic.script import ScriptDirectory
 from sqlalchemy import pool, text
 from sqlalchemy.engine import URL
 
@@ -50,20 +52,23 @@ def structure(url: URL) -> dict[str, object]:
     }
 
 
-HEAD_STRUCTURE = {"revision": REVISION, "collation": "utf8mb4_0900_bin", "checks": ["ck_users_email_ascii", "ck_users_email_canonical"]}
+REVISION_STRUCTURE = {"revision": REVISION, "collation": "utf8mb4_0900_bin", "checks": ["ck_users_email_ascii", "ck_users_email_canonical"]}
 PREVIOUS_STRUCTURE = {"revision": PREVIOUS, "collation": "utf8mb4_0900_ai_ci", "checks": []}
 
 
 @pytest.fixture
 def test_url(migrated_test_database: URL) -> Iterator[URL]:
     assert migrated_test_database.database is not None and migrated_test_database.database.endswith("_test")
+    config = alembic_config(migrated_test_database)
+    command.downgrade(config, REVISION)
     yield migrated_test_database
     # Always leave the test database empty and at head.
     sql(migrated_test_database, "DELETE FROM users")
     if structure(migrated_test_database)["revision"] == REVISION and "ck_users_email_ascii" not in structure(migrated_test_database)["checks"]:
         sql(migrated_test_database, "ALTER TABLE users ADD CONSTRAINT ck_users_email_ascii CHECK (CHAR_LENGTH(email) = LENGTH(email))")
-    command.upgrade(alembic_config(migrated_test_database), "head")
-    assert structure(migrated_test_database) == HEAD_STRUCTURE
+    command.upgrade(config, "head")
+    head = ScriptDirectory.from_config(config).get_current_head()
+    assert structure(migrated_test_database) == {**REVISION_STRUCTURE, "revision": head}
 
 
 def insert_user(url: URL, email: str) -> None:
@@ -71,13 +76,13 @@ def insert_user(url: URL, email: str) -> None:
 
 
 def test_clean_downgrade_and_upgrade(test_url: URL) -> None:
-    assert structure(test_url) == HEAD_STRUCTURE
+    assert structure(test_url) == REVISION_STRUCTURE
 
     command.downgrade(alembic_config(test_url), PREVIOUS)
     assert structure(test_url) == PREVIOUS_STRUCTURE
 
     command.upgrade(alembic_config(test_url), REVISION)
-    assert structure(test_url) == HEAD_STRUCTURE
+    assert structure(test_url) == REVISION_STRUCTURE
 
 
 @pytest.mark.parametrize("email", ["Admin@Example.com", " admin@example.com", "josé@example.com"], ids=["upper", "space", "non-ascii"])
@@ -104,7 +109,7 @@ def test_downgrade_aborts_on_future_duplicates_without_changes(test_url: URL) ->
         command.downgrade(alembic_config(test_url), PREVIOUS)
 
     # Validated first: the remaining CHECK and the collation are untouched.
-    assert structure(test_url) == before == {**HEAD_STRUCTURE, "checks": ["ck_users_email_canonical"]}
+    assert structure(test_url) == before == {**REVISION_STRUCTURE, "checks": ["ck_users_email_canonical"]}
 
 
 def test_downgrade_aborts_on_missing_check_without_changes(test_url: URL) -> None:

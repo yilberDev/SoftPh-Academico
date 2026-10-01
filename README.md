@@ -84,7 +84,7 @@ Crea las bases de desarrollo y de pruebas y el usuario de la aplicación a parti
 sudo bash database/scripts/create-local-databases.sh
 ```
 
-Después aplica las migraciones (hoy no hay ninguna; el esquema se crea con Alembic a medida que se implementan las HU):
+Después aplica las migraciones (el esquema se crea con Alembic a medida que se implementan las HU):
 
 ```bash
 cd backend
@@ -123,6 +123,26 @@ Con backend y frontend en marcha, abre `http://localhost:4321/login` e ingresa c
 | `POST /api/v1/auth/login` | Inicio de sesión (requiere `Origin` del origen público) |
 | `GET /api/v1/auth/session` | Usuario actual y token CSRF |
 | `POST /api/v1/auth/logout` | Cierre de sesión (requiere `Origin` y cabecera `X-CSRF-Token`) |
+
+## Unidades residenciales (HU-013)
+
+En el panel de administración, "Unidades residenciales" (`/admin/blocks`) gestiona la estructura **Bloque → Torre → Apartamento** con navegación jerárquica: `/admin/blocks` → `/admin/blocks/[blockId]` (torres) → `/admin/towers/[towerId]` (apartamentos).
+
+- Cada nivel guarda solo su número (entero positivo, sin máximo de negocio). El identificador oficial lo genera el backend: `B1-TO2-APTO-104`. No se almacena.
+- Un bloque activo por número, una torre activa por número dentro del bloque y un apartamento activo por número dentro de la torre.
+- Se puede corregir el número; no se puede mover una torre a otro bloque ni un apartamento a otra torre.
+- Borrado lógico. Un bloque con torres activas o una torre con apartamentos activos no se puede eliminar. Los números eliminados se pueden reutilizar.
+
+| Endpoint | Uso |
+|---|---|
+| `GET`, `POST /api/v1/blocks` | Bloques activos / registrar bloque `{number}` |
+| `GET`, `PATCH`, `DELETE /api/v1/blocks/{id}` | Consultar / renumerar `{number, version}` / eliminar `?version=` |
+| `GET`, `POST /api/v1/blocks/{block_id}/towers` | Torres del bloque / registrar torre |
+| `GET`, `PATCH`, `DELETE /api/v1/towers/{id}` | Consultar / renumerar / eliminar torre |
+| `GET`, `POST /api/v1/towers/{tower_id}/units` | Apartamentos de la torre / registrar apartamento |
+| `GET`, `PATCH`, `DELETE /api/v1/units/{id}` | Consultar / renumerar / eliminar apartamento |
+
+Todas exigen sesión de administrador; las que modifican datos exigen además `Origin` y la cabecera `X-CSRF-Token`.
 
 ## Ejecución del backend
 

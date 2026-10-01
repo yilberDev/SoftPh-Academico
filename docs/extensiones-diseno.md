@@ -9,7 +9,7 @@ Decisiones aprobadas que interpretan o precisan el documento académico y que a�
 | HU-004, HU-008, HU-011, HU-012, HU-014 | Las cuotas/cargos mensuales forman parte del modelo financiero; los saldos se calculan a partir de cargos y pagos. |
 | HU-010 | El "pago electrónico demo/sandbox" se implementa como una simulación interna del backend, sin pasarela externa. |
 | HU-017 y demás HU con notificaciones | Correo solo en los flujos definidos por los requisitos; Mailpit en desarrollo. |
-| HU-013 | Una única copropiedad (Urbanización San Joaquín); unidades únicas dentro de ella. |
+| HU-013 | Una única copropiedad (Urbanización San Joaquín) con la estructura física Bloque → Torre → Apartamento; la unidad residencial es el apartamento y su número es único dentro de su torre (ver detalle). |
 
 ## HU-001 — Registro de administrador (detalle)
 
@@ -48,6 +48,25 @@ Decisiones aprobadas que interpretan o precisan el documento académico y que a�
 | Migración `6236c5b88ac2` | Valida antes de modificar la estructura y aplica el cambio en una única sentencia `ALTER TABLE` (atómica en InnoDB). El `upgrade` aborta sin cambios si algún correo no es canónico o no es ASCII (no los reescribe, para no fusionar identidades). El `downgrade` aborta sin cambios si algún correo quedaría duplicado bajo `utf8mb4_0900_ai_ci` o si faltan las CHECK; solo después elimina las CHECK y restaura la colación, en la misma sentencia. |
 | Argon2 fuera del bucle de eventos (M-1) | Verificar y calcular hashes Argon2 (64 MiB y ~65 ms cada uno) se ejecuta en hilos (`anyio.to_thread.run_sync`) con un `CapacityLimiter` de `PASSWORD_HASH_MAX_CONCURRENCY` operaciones simultáneas (por defecto 2, rango 1–4). El hash ficticio del login se calcula al arrancar la API. El comportamiento funcional no cambia. |
 | Cookie `Secure` obligatoria fuera de local (M-2) | `SESSION_COOKIE_SECURE=false` solo se admite con `APP_ENV` `development` o `test` y `APP_ORIGIN` `http://localhost`, `http://127.0.0.1` o `http://[::1]`. En cualquier otro caso, y siempre con `APP_ENV=production`, la API y el comando `create-admin` no arrancan. El mensaje de error no muestra valores de configuración. |
+
+## HU-013 — Gestión de unidades residenciales (detalle)
+
+| Tema | Decisión |
+|---|---|
+| Estructura del dominio | La Urbanización San Joaquín se organiza en **Bloque → Torre → Apartamento**. Bloques y torres no aparecen en el documento académico: son la estructura necesaria para registrar correctamente las unidades. No se crean HU nuevas ni se cambian los criterios. La unidad residencial de HU-013 es el **apartamento** (tabla `units`; en la interfaz, "Apartamento"). |
+| Nomenclatura | Bloques `B1`, `B2`…; torres `TO1`, `TO2`…; apartamentos `APTO-1`, `APTO-104`… Identificador oficial completo: **`B1-TO2-APTO-104`**. |
+| Persistencia | Cada nivel guarda solo su número entero (`blocks.number`, `towers.number`, `units.number`). El identificador completo **no se almacena**: el backend lo deriva siempre de la jerarquía guardada (`app/core/unit_labels.py`) y la API lo devuelve en `label` (y el nombre del nivel en `name`). Todas las relaciones usan ids estables. |
+| Sin rangos de negocio | Los números son enteros positivos, sin máximo de dominio. La columna `INT UNSIGNED` tiene un límite técnico (4 294 967 295) que se informa como "demasiado grande para el sistema", no como regla del negocio. |
+| Unicidad | Un bloque activo por número; una torre activa por número dentro de su bloque (`TO2` puede existir en `B1` y en `B2`); un apartamento activo por número dentro de su torre. La garantía final son índices `UNIQUE` sobre columnas generadas `VIRTUAL` (`active_number_marker`: el número mientras no está eliminado, NULL después). |
+| Edición | Se puede corregir el número de un bloque, una torre o un apartamento; si el nuevo número ya existe en su contexto, se rechaza (409). `block_id` y `tower_id` son inmutables: no existe un flujo de traslado. Control optimista con `version` (también en el borrado). Al renumerar un padre no se reescribe ninguna fila: solo cambia el identificador derivado de sus descendientes (`B1-TO2-APTO-104` → `B4-TO2-APTO-104`). La interfaz lo advierte antes de confirmar. |
+| Borrado | Lógico (`deleted_at`), sin cascadas. Un bloque con torres activas o una torre con apartamentos activos no se puede eliminar (409). Una entidad eliminada no aparece en los listados y responde 404. Su número se puede reutilizar (nuevo registro con otro id). Restaurar queda fuera del alcance. Las claves foráneas usan `ON DELETE RESTRICT`. |
+| Concurrencia | Orden fijo de bloqueos bloque → torre → apartamento con lecturas con bloqueo. Crear un hijo bloquea el padre en modo compartido; eliminar un padre lo bloquea en exclusiva y busca hijos activos, de modo que nunca queda un hijo activo bajo un padre eliminado. Los duplicados simultáneos los rechaza el `UNIQUE`. |
+| Vista previa en formularios | La API entrega `child_label_prefix` (p. ej., `B1-TO2-APTO-`) y el formulario muestra ese prefijo + el número escrito. Es solo una vista previa: el identificador oficial es el `label` que devuelve el backend al guardar. |
+| Búsqueda y paginación | No forman parte de HU-013. La interfaz usa navegación jerárquica con migas de pan (`Bloques › B1 › TO2`). |
+| API | `GET`/`POST /api/v1/blocks`; `GET`/`PATCH`/`DELETE /api/v1/blocks/{id}`; `GET`/`POST /api/v1/blocks/{block_id}/towers`; `GET`/`PATCH`/`DELETE /api/v1/towers/{id}`; `GET`/`POST /api/v1/towers/{tower_id}/units`; `GET`/`PATCH`/`DELETE /api/v1/units/{id}`. Todas exigen sesión de ADMINISTRADOR; las modificaciones exigen además `Origin` y token CSRF. `DELETE` recibe `?version=`. |
+| Auditoría | `BLOCK_CREATED`/`BLOCK_UPDATED`/`BLOCK_DELETED`, `TOWER_*` y `UNIT_*` en `audit_logs`, en la misma transacción, con el número y el identificador (anterior y nuevo en las ediciones). |
+| Migración `522bf629af33` | Escrita a mano (Alembic no compara CHECK y solo maneja en parte las columnas generadas); la estructura real se verifica en `information_schema` en las pruebas. El `upgrade` aborta sin cambios si alguna de las tablas ya existe. El `downgrade` aborta sin cambios si hay filas (incluidas las eliminadas lógicamente) y luego borra las tres tablas en una sola sentencia atómica. |
+| Relación con HU futuras | HU-003 implementará la disponibilidad de unidades (`/units/available`) y el rechazo del borrado de un apartamento en uso. Residentes, cargos y pagos referencian `units.id`. Los documentos emitidos (p. ej., recibos) deberán guardar una copia del identificador vigente al emitirse; lo decidirá la HU correspondiente. |
 
 ## Desviaciones temporales del entorno
 

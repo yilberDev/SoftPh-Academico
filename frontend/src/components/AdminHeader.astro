@@ -1,0 +1,47 @@
+---
+import LogoutButton from './LogoutButton.astro';
+
+interface Props {
+  csrfToken: string;
+}
+
+const { csrfToken } = Astro.props;
+const path = Astro.url.pathname;
+const links = [
+  { href: '/admin', label: 'Inicio', active: path === '/admin' },
+  {
+    href: '/admin/blocks',
+    label: 'Unidades residenciales',
+    active: path.startsWith('/admin/blocks') || path.startsWith('/admin/towers')
+  }
+];
+---
+
+<header class="border-b border-slate-200 bg-white">
+  <div class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-3">
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+      <p class="font-semibold text-slate-900">SoftPh-Académico</p>
+      <nav aria-label="Principal">
+        <ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          {
+            links.map(({ href, label, active }) => (
+              <li>
+                <a
+                  href={href}
+                  aria-current={active ? 'page' : undefined}
+                  class:list={[
+                    'rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600',
+                    active ? 'font-medium text-emerald-800' : 'text-slate-600 hover:text-slate-900'
+                  ]}
+                >
+                  {label}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </nav>
+    </div>
+    <LogoutButton csrfToken={csrfToken} />
+  </div>
+</header>

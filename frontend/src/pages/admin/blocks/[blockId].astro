@@ -1,0 +1,53 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import AdminHeader from '../../../components/AdminHeader.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import StructureLevel from '../../../components/StructureLevel.astro';
+import StructureNotFound from '../../../components/StructureNotFound.astro';
+import { isValidId, listTowers, loadPage } from '../../../lib/api/structure-server';
+
+// HU-013: towers of a block.
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const { blockId } = Astro.params;
+const page = isValidId(blockId) ? await loadPage(() => listTowers(blockId, Astro.request)) : { notFound: true as const };
+if ('unauthenticated' in page) {
+  return Astro.redirect('/login');
+}
+const data = 'data' in page ? page.data : null;
+if (!data) {
+  Astro.response.status = 404;
+}
+---
+
+<Layout title={data ? `${data.block.label} — Torres — SoftPh-Académico` : 'Bloque no encontrado — SoftPh-Académico'}>
+  <AdminHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-5xl space-y-6 px-4 py-8">
+    {
+      data ? (
+        <>
+          <Breadcrumbs items={[{ label: 'Bloques', href: '/admin/blocks' }, { label: data.block.name }]} />
+          <div>
+            <h1 class="text-2xl font-semibold tracking-tight">
+              Torres de <span class="font-mono">{data.block.label}</span>
+            </h1>
+            <p class="mt-1 text-slate-600">Elige una torre para gestionar sus apartamentos.</p>
+          </div>
+          <StructureLevel
+            level="tower"
+            items={data.items.map((tower) => ({ ...tower, href: `/admin/towers/${tower.id}` }))}
+            collectionPath={`/blocks/${data.block.id}/towers`}
+            itemBasePath="/towers"
+            childLabelPrefix={data.child_label_prefix}
+            emptyMessage={`${data.block.label} no tiene torres registradas.`}
+            csrfToken={csrfToken}
+          />
+        </>
+      ) : (
+        <>
+          <Breadcrumbs items={[{ label: 'Bloques', href: '/admin/blocks' }, { label: 'No encontrado' }]} />
+          <StructureNotFound message="El bloque no existe o fue eliminado." />
+        </>
+      )
+    }
+  </main>
+</Layout>

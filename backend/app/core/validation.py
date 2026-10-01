@@ -12,6 +12,13 @@ _BUILTIN_MESSAGES = {
     "missing": "Este campo es obligatorio.",
     "string_type": "Debe ser un texto.",
     "json_invalid": "El cuerpo de la solicitud no es un JSON válido.",
+    "int_type": "Debe ser un número entero.",
+    "int_parsing": "Debe ser un número entero.",
+    "greater_than_equal": "El valor es menor que el mínimo permitido.",
+    "less_than_equal": "El valor es demasiado grande para el sistema.",
+    "extra_forbidden": "Este campo no está permitido.",
+    "model_type": "El cuerpo de la solicitud debe ser un objeto JSON.",
+    "model_attributes_type": "El cuerpo de la solicitud debe ser un objeto JSON.",
 }
 _FALLBACK_MESSAGE = "El valor no es válido."
 

@@ -1,0 +1,60 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import AdminHeader from '../../../components/AdminHeader.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import StructureLevel from '../../../components/StructureLevel.astro';
+import StructureNotFound from '../../../components/StructureNotFound.astro';
+import { isValidId, listUnits, loadPage } from '../../../lib/api/structure-server';
+
+// HU-013: apartments of a tower.
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const { towerId } = Astro.params;
+const page = isValidId(towerId) ? await loadPage(() => listUnits(towerId, Astro.request)) : { notFound: true as const };
+if ('unauthenticated' in page) {
+  return Astro.redirect('/login');
+}
+const data = 'data' in page ? page.data : null;
+if (!data) {
+  Astro.response.status = 404;
+}
+---
+
+<Layout
+  title={data ? `${data.tower.label} — Apartamentos — SoftPh-Académico` : 'Torre no encontrada — SoftPh-Académico'}
+>
+  <AdminHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-5xl space-y-6 px-4 py-8">
+    {
+      data ? (
+        <>
+          <Breadcrumbs
+            items={[
+              { label: 'Bloques', href: '/admin/blocks' },
+              { label: data.block.name, href: `/admin/blocks/${data.block.id}` },
+              { label: data.tower.name }
+            ]}
+          />
+          <div>
+            <h1 class="text-2xl font-semibold tracking-tight">
+              Apartamentos de <span class="font-mono">{data.tower.label}</span>
+            </h1>
+          </div>
+          <StructureLevel
+            level="unit"
+            items={data.items}
+            collectionPath={`/towers/${data.tower.id}/units`}
+            itemBasePath="/units"
+            childLabelPrefix={data.child_label_prefix}
+            emptyMessage={`${data.tower.label} no tiene apartamentos registrados.`}
+            csrfToken={csrfToken}
+          />
+        </>
+      ) : (
+        <>
+          <Breadcrumbs items={[{ label: 'Bloques', href: '/admin/blocks' }, { label: 'No encontrada' }]} />
+          <StructureNotFound message="La torre no existe o fue eliminada." />
+        </>
+      )
+    }
+  </main>
+</Layout>

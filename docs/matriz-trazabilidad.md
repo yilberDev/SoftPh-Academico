@@ -16,7 +16,7 @@ Cadena: HU → RF → CU → implementación → prueba. Se actualiza al complet
 | HU-010 | RF-010 | CU-010 | Pago electrónico demo/sandbox | — | — | Pendiente |
 | HU-011 | RF-011 | CU-011 | Estado de cuenta del residente para administrador | — | — | Pendiente |
 | HU-012 | RF-012 | CU-012 | Reportes financieros | — | — | Pendiente |
-| HU-013 | RF-013 | CU-013 | Gestión de unidades residenciales | — | — | Pendiente |
+| [HU-013](historias-usuario/HU-013.md) | [RF-013](requisitos-funcionales/RF-013.md) | [CU-013](casos-uso/CU-013.md) | Gestión de unidades residenciales | `backend/app/api/v1/structure.py`, `app/services/structure.py`, `app/schemas/structure.py`, `app/models/structure.py`, `app/core/unit_labels.py`, migración `522bf629af33`; `frontend/src/pages/admin/blocks/index.astro`, `src/pages/admin/blocks/[blockId].astro`, `src/pages/admin/towers/[towerId].astro`, `src/components/StructureLevel.astro`, `src/lib/api/structure.ts`, `src/lib/api/structure-server.ts` | `tests/unit/test_unit_labels.py`, `tests/unit/test_structure_schema.py`, `tests/integration/test_structure_api.py`, `tests/integration/test_structure_security.py`, `tests/integration/test_structure_concurrency.py`, `tests/integration/test_structure_database.py`, `tests/integration/test_structure_migration.py` | Implementada |
 | HU-014 | RF-014 | CU-014 | Estado de cuenta propio del residente | — | — | Pendiente |
 | HU-015 | RF-015 | CU-015 | Gestión de información del residente | — | — | Pendiente |
 | HU-016 | RF-016 | CU-016 | Restablecimiento de contraseña | — | — | Pendiente |

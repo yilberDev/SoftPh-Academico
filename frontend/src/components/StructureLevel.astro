@@ -1,0 +1,481 @@
+---
+/**
+ * One level of the physical structure (HU-013): the blocks, the towers of a
+ * block or the apartments of a tower. Lists the active items and lets the
+ * administrator register, renumber and delete them (with confirmation).
+ *
+ * Identifiers (name, label) come from the backend. The preview is only
+ * child_label_prefix + typed number; the official label is the one the API
+ * returns after saving.
+ */
+type Level = 'block' | 'tower' | 'unit';
+
+interface Item {
+  id: number;
+  name: string;
+  label: string;
+  number: number;
+  version: number;
+  active_towers?: number;
+  active_units?: number;
+  /** Page of the item's children (blocks and towers). */
+  href?: string;
+}
+
+interface Props {
+  level: Level;
+  items: Item[];
+  /** API collection where new items are created. */
+  collectionPath: string;
+  /** API base of an item: "/blocks", "/towers" or "/units". */
+  itemBasePath: string;
+  childLabelPrefix: string;
+  emptyMessage: string;
+  csrfToken: string;
+}
+
+const { level, items, collectionPath, itemBasePath, childLabelPrefix, emptyMessage, csrfToken } = Astro.props;
+
+// Fixed prefix shown next to the number field (decoration of the form only).
+const TEXTS = {
+  block: { fieldPrefix: 'B', noun: 'bloque', column: 'Bloque', add: 'Agregar bloque', fieldLabel: 'Número del bloque' },
+  tower: { fieldPrefix: 'TO', noun: 'torre', column: 'Torre', add: 'Agregar torre', fieldLabel: 'Número de la torre' },
+  unit: {
+    fieldPrefix: 'APTO',
+    noun: 'apartamento',
+    column: 'Apartamento',
+    add: 'Agregar apartamento',
+    fieldLabel: 'Número del apartamento'
+  }
+} as const;
+const text = TEXTS[level];
+const uid = `structure-${level}`;
+
+const inputClass =
+  'block w-full min-w-0 rounded-r-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30';
+const prefixClass =
+  'inline-flex items-center rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 px-3 font-mono text-sm text-slate-700';
+const primaryButton =
+  'rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:opacity-60';
+const secondaryButton =
+  'rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:opacity-60';
+const dangerButton =
+  'rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:opacity-60';
+const alertClass = 'hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800';
+---
+
+<section
+  data-structure-level={level}
+  data-csrf-token={csrfToken}
+  data-collection-path={collectionPath}
+  data-item-base-path={itemBasePath}
+  data-child-label-prefix={childLabelPrefix}
+  class="space-y-6"
+>
+  <form data-create-form class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5" novalidate>
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-end">
+      <div class="sm:w-64">
+        <label for={`${uid}-create-number`} class="block text-sm font-medium text-slate-700">{text.fieldLabel}</label>
+        <div class="mt-1 flex">
+          <span class={prefixClass} aria-hidden="true">{text.fieldPrefix}</span>
+          <input
+            id={`${uid}-create-number`}
+            name="number"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            required
+            class={inputClass}
+          />
+        </div>
+      </div>
+      <button type="submit" class={primaryButton}>{text.add}</button>
+    </div>
+    <p class="mt-3 text-sm text-slate-600" aria-live="polite">
+      Vista previa: <span data-preview class="font-mono font-medium text-slate-900">{childLabelPrefix}…</span>
+    </p>
+    <p data-field-error class="mt-1 hidden text-sm text-red-700"></p>
+    <div data-alert role="alert" class={`mt-3 ${alertClass}`}></div>
+  </form>
+
+  {
+    items.length === 0 ? (
+      <p class="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-slate-600">
+        {emptyMessage}
+      </p>
+    ) : (
+      <div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <table class="w-full text-left text-sm">
+          <thead class="border-b border-slate-200 bg-slate-50 text-slate-600">
+            <tr>
+              <th scope="col" class="px-4 py-3 font-medium">
+                {text.column}
+              </th>
+              {level !== 'block' && (
+                <th scope="col" class="px-4 py-3 font-medium">
+                  Identificador
+                </th>
+              )}
+              {level === 'block' && (
+                <th scope="col" class="px-4 py-3 font-medium">
+                  Torres
+                </th>
+              )}
+              {level !== 'unit' && (
+                <th scope="col" class="px-4 py-3 font-medium">
+                  Apartamentos
+                </th>
+              )}
+              <th scope="col" class="px-4 py-3 text-right font-medium">
+                Acciones
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            {items.map((item) => (
+              <tr
+                data-item
+                data-id={item.id}
+                data-name={item.name}
+                data-label={item.label}
+                data-number={item.number}
+                data-version={item.version}
+                data-active-towers={item.active_towers ?? 0}
+                data-active-units={item.active_units ?? 0}
+              >
+                <th scope="row" class="px-4 py-3 font-mono font-medium text-slate-900">
+                  {item.href ? (
+                    <a
+                      href={item.href}
+                      class="rounded text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+                    >
+                      {item.name}
+                    </a>
+                  ) : (
+                    item.name
+                  )}
+                </th>
+                {level !== 'block' && <td class="px-4 py-3 font-mono text-slate-700">{item.label}</td>}
+                {level === 'block' && <td class="px-4 py-3 text-slate-700">{item.active_towers}</td>}
+                {level !== 'unit' && <td class="px-4 py-3 text-slate-700">{item.active_units}</td>}
+                <td class="px-4 py-3">
+                  <div class="flex justify-end gap-2">
+                    <button type="button" data-edit class={secondaryButton} aria-label={`Editar ${item.label}`}>
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      data-delete
+                      class="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700"
+                      aria-label={`Eliminar ${item.label}`}
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
+  <dialog
+    data-edit-dialog
+    aria-labelledby={`${uid}-edit-title`}
+    class="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl p-0 shadow-xl backdrop:bg-slate-900/40"
+  >
+    <form data-edit-form class="space-y-4 p-6" novalidate>
+      <h2 id={`${uid}-edit-title`} class="text-lg font-semibold">
+        Editar <span data-edit-current class="font-mono"></span>
+      </h2>
+      <div>
+        <label for={`${uid}-edit-number`} class="block text-sm font-medium text-slate-700">{text.fieldLabel}</label>
+        <div class="mt-1 flex">
+          <span class={prefixClass} aria-hidden="true">{text.fieldPrefix}</span>
+          <input
+            id={`${uid}-edit-number`}
+            name="number"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            required
+            class={inputClass}
+          />
+        </div>
+        <p data-field-error class="mt-1 hidden text-sm text-red-700"></p>
+      </div>
+      <p class="text-sm text-slate-600" aria-live="polite">
+        Vista previa: <span data-preview class="font-mono font-medium text-slate-900"></span>
+      </p>
+      <p
+        data-renumber-warning
+        class="hidden rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        aria-live="polite"
+      >
+      </p>
+      <div data-alert role="alert" class={alertClass}></div>
+      <div class="flex justify-end gap-2">
+        <button type="button" data-cancel class={secondaryButton}>Cancelar</button>
+        <button type="submit" data-submit class={primaryButton}>Guardar cambios</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog
+    data-delete-dialog
+    aria-labelledby={`${uid}-delete-title`}
+    class="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl p-0 shadow-xl backdrop:bg-slate-900/40"
+  >
+    <form data-delete-form class="space-y-4 p-6">
+      <h2 id={`${uid}-delete-title`} data-delete-title class="text-lg font-semibold"></h2>
+      <p data-delete-description class="text-sm text-slate-600">
+        Dejará de aparecer en los listados. El registro y su historial se conservan, y el número podrá volver a usarse.
+      </p>
+      <!-- Informative state: the backend rejected the deletion (409). -->
+      <p
+        data-delete-reason
+        role="status"
+        class="hidden rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+      >
+      </p>
+      <div data-alert role="alert" class={alertClass}></div>
+      <div class="flex justify-end gap-2">
+        <button type="button" data-cancel class={secondaryButton}>Cancelar</button>
+        <button type="submit" data-submit class={dangerButton}>Eliminar</button>
+      </div>
+    </form>
+  </dialog>
+</section>
+
+<script>
+  import { ApiError } from '../lib/api/errors';
+  import { createStructureItem, deleteStructureItem, renumberStructureItem } from '../lib/api/structure';
+  import { CONNECTION_ERROR, createDeleteDialog } from '../lib/structure/delete-dialog';
+
+  const INVALID_NUMBER = 'Ingresa un número entero positivo (1 o mayor).';
+
+  /** Format check only (positive integer); the backend validates everything else. */
+  function parseNumber(raw: string): number | null {
+    const value = raw.trim();
+    if (!/^\d+$/.test(value)) {
+      return null;
+    }
+    const number = Number(value);
+    return Number.isSafeInteger(number) && number >= 1 ? number : null;
+  }
+
+  function plural(count: number, singular: string, pluralForm: string): string {
+    return `${count} ${count === 1 ? singular : pluralForm}`;
+  }
+
+  function show(element: HTMLElement, message: string | null): void {
+    element.textContent = message ?? '';
+    element.classList.toggle('hidden', !message);
+  }
+
+  function setFieldError(input: HTMLInputElement, error: HTMLElement, message: string | null): void {
+    show(error, message);
+    input.setAttribute('aria-invalid', message ? 'true' : 'false');
+    if (message) {
+      error.id ||= `${input.id}-error`;
+      input.setAttribute('aria-describedby', error.id);
+    } else {
+      input.removeAttribute('aria-describedby');
+    }
+  }
+
+  /** Shows an API error: field errors under the number field, the rest in the alert. */
+  function showApiError(error: unknown, input: HTMLInputElement, fieldError: HTMLElement, alert: HTMLElement): void {
+    if (!(error instanceof ApiError)) {
+      show(alert, CONNECTION_ERROR);
+      return;
+    }
+    const numberDetail = error.details.find((detail) => detail.field === 'number');
+    if (numberDetail) {
+      setFieldError(input, fieldError, numberDetail.message);
+      input.focus();
+      return;
+    }
+    show(alert, error.message);
+  }
+
+  function setupLevel(root: HTMLElement): void {
+    const { csrfToken = '', collectionPath = '', itemBasePath = '', childLabelPrefix = '' } = root.dataset;
+    const level = root.dataset.structureLevel;
+
+    // Preview only: backend prefix + typed number. Not the official identifier.
+    function preview(raw: string): string {
+      const number = parseNumber(raw);
+      return number === null ? `${childLabelPrefix}…` : `${childLabelPrefix}${number}`;
+    }
+
+    // --- Create ------------------------------------------------------------
+    const createForm = root.querySelector<HTMLFormElement>('[data-create-form]')!;
+    const createInput = createForm.querySelector<HTMLInputElement>('input[name="number"]')!;
+    const createPreview = createForm.querySelector<HTMLElement>('[data-preview]')!;
+    const createFieldError = createForm.querySelector<HTMLElement>('[data-field-error]')!;
+    const createAlert = createForm.querySelector<HTMLElement>('[data-alert]')!;
+    const createSubmit = createForm.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+
+    createInput.addEventListener('input', () => {
+      createPreview.textContent = preview(createInput.value);
+    });
+
+    createForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      show(createAlert, null);
+      const number = parseNumber(createInput.value);
+      setFieldError(createInput, createFieldError, number === null ? INVALID_NUMBER : null);
+      if (number === null) {
+        createInput.focus();
+        return;
+      }
+      createSubmit.disabled = true;
+      try {
+        await createStructureItem(collectionPath, number, csrfToken);
+        window.location.reload();
+      } catch (error) {
+        showApiError(error, createInput, createFieldError, createAlert);
+        createSubmit.disabled = false;
+      }
+    });
+
+    // --- Edit (renumber) -------------------------------------------------------
+    const editDialog = root.querySelector<HTMLDialogElement>('[data-edit-dialog]')!;
+    const editForm = editDialog.querySelector<HTMLFormElement>('[data-edit-form]')!;
+    const editInput = editForm.querySelector<HTMLInputElement>('input[name="number"]')!;
+    const editCurrent = editForm.querySelector<HTMLElement>('[data-edit-current]')!;
+    const editPreview = editForm.querySelector<HTMLElement>('[data-preview]')!;
+    const editWarning = editForm.querySelector<HTMLElement>('[data-renumber-warning]')!;
+    const editFieldError = editForm.querySelector<HTMLElement>('[data-field-error]')!;
+    const editAlert = editForm.querySelector<HTMLElement>('[data-alert]')!;
+    const editSubmit = editForm.querySelector<HTMLButtonElement>('[data-submit]')!;
+    let editing: DOMStringMap | null = null;
+
+    /** Warning before confirming a change that alters the identifiers of descendants. */
+    function renumberWarning(row: DOMStringMap, newLabel: string): string | null {
+      const towers = Number(row.activeTowers ?? 0);
+      const units = Number(row.activeUnits ?? 0);
+      let affected: string | null = null;
+      if (level === 'block' && towers + units > 0) {
+        affected = `${plural(towers, 'torre', 'torres')} y ${plural(units, 'apartamento', 'apartamentos')}`;
+      } else if (level === 'tower' && units > 0) {
+        affected = plural(units, 'apartamento', 'apartamentos');
+      }
+      if (!affected) {
+        return null;
+      }
+      return (
+        `Vas a cambiar ${row.label} por ${newLabel}. Los registros y sus relaciones no cambian, ` +
+        `pero el identificador visible de ${affected} pasará a mostrarse bajo ${newLabel}.`
+      );
+    }
+
+    function refreshEdit(): void {
+      if (!editing) {
+        return;
+      }
+      const number = parseNumber(editInput.value);
+      editPreview.textContent = preview(editInput.value);
+      const changed = number !== null && String(number) !== editing.number;
+      const warning = changed ? renumberWarning(editing, preview(editInput.value)) : null;
+      show(editWarning, warning);
+      editSubmit.textContent = warning ? 'Confirmar cambio' : 'Guardar cambios';
+    }
+
+    editInput.addEventListener('input', refreshEdit);
+
+    editForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!editing) {
+        return;
+      }
+      show(editAlert, null);
+      const number = parseNumber(editInput.value);
+      setFieldError(editInput, editFieldError, number === null ? INVALID_NUMBER : null);
+      if (number === null) {
+        editInput.focus();
+        return;
+      }
+      editSubmit.disabled = true;
+      try {
+        await renumberStructureItem(`${itemBasePath}/${editing.id}`, number, Number(editing.version), csrfToken);
+        window.location.reload();
+      } catch (error) {
+        showApiError(error, editInput, editFieldError, editAlert);
+        editSubmit.disabled = false;
+      }
+    });
+
+    // --- Delete ------------------------------------------------------------------
+    const deleteDialog = root.querySelector<HTMLDialogElement>('[data-delete-dialog]')!;
+    const deleteForm = deleteDialog.querySelector<HTMLFormElement>('[data-delete-form]')!;
+    const deleteTitle = deleteForm.querySelector<HTMLElement>('[data-delete-title]')!;
+    const deleteDescription = deleteForm.querySelector<HTMLElement>('[data-delete-description]')!;
+    const deleteReason = deleteForm.querySelector<HTMLElement>('[data-delete-reason]')!;
+    const deleteAlert = deleteForm.querySelector<HTMLElement>('[data-alert]')!;
+    const deleteCancel = deleteForm.querySelector<HTMLButtonElement>('[data-cancel]')!;
+    const deleteSubmit = deleteForm.querySelector<HTMLButtonElement>('[data-submit]')!;
+
+    const deletion = createDeleteDialog({
+      render(state) {
+        if (state.kind === 'closed') {
+          if (deleteDialog.open) {
+            deleteDialog.close();
+          }
+          return;
+        }
+        const blocked = state.kind === 'blocked';
+        deleteTitle.textContent = blocked ? `No se puede eliminar ${state.label}` : `¿Eliminar ${state.label}?`;
+        deleteDescription.hidden = blocked;
+        show(deleteReason, blocked ? state.reason : null);
+        show(deleteAlert, state.kind === 'confirm' ? state.error : null);
+        // Informative state: only "Cerrar" remains; no DELETE can be sent from it.
+        deleteSubmit.hidden = blocked;
+        deleteSubmit.disabled = blocked || state.submitting;
+        deleteCancel.textContent = blocked ? 'Cerrar' : 'Cancelar';
+        if (!deleteDialog.open) {
+          deleteDialog.showModal();
+        }
+        if (blocked) {
+          deleteCancel.focus();
+        }
+      },
+      onDeleted: () => window.location.reload()
+    });
+
+    deleteForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      void deletion.confirm();
+    });
+    deleteCancel.addEventListener('click', () => deletion.close());
+    // Escape or any other native close.
+    deleteDialog.addEventListener('close', () => deletion.close());
+
+    // --- Rows and dialogs -----------------------------------------------------------
+    root.querySelectorAll<HTMLTableRowElement>('[data-item]').forEach((row) => {
+      row.querySelector('[data-edit]')!.addEventListener('click', () => {
+        editing = row.dataset;
+        editCurrent.textContent = row.dataset.label ?? '';
+        editInput.value = row.dataset.number ?? '';
+        setFieldError(editInput, editFieldError, null);
+        show(editAlert, null);
+        editSubmit.disabled = false;
+        refreshEdit();
+        editDialog.showModal();
+        editInput.select();
+      });
+      row.querySelector('[data-delete]')!.addEventListener('click', () => {
+        const { id, version, label = '' } = row.dataset;
+        // Nothing is sent until "Eliminar" is confirmed; the backend validates the current state.
+        deletion.open(label, () => deleteStructureItem(`${itemBasePath}/${id}`, Number(version), csrfToken));
+      });
+    });
+
+    editDialog.querySelector('[data-cancel]')!.addEventListener('click', () => editDialog.close());
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-structure-level]').forEach(setupLevel);
+</script>

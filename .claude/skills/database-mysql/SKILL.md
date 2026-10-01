@@ -39,7 +39,7 @@ description: Guide MySQL 8.4 schema design, async SQLAlchemy models, Alembic mig
 ## Decisiones de modelo
 
 - **Copropiedad única:** el modelo representa solo la Urbanización San Joaquín. No agregar tablas ni columnas de copropiedad (`property_id`, `tenant_id`).
-- **Unidades:** el identificador de cada unidad es único en toda la base de datos (restricción `UNIQUE`).
+- **Unidades (HU-013):** estructura Bloque → Torre → Apartamento (`blocks` → `towers` → `units`). Cada nivel guarda solo su número; el identificador visible (`B1-TO2-APTO-104`) se deriva y no se almacena. Unicidad entre activos por contexto (bloque por número, torre por número dentro del bloque, apartamento por número dentro de la torre) con `UNIQUE` sobre columnas generadas. Las demás tablas referencian `units.id`.
 - **Roles:** `ADMINISTRADOR` y `RESIDENTE`.
 - **Sesiones:** se almacenan en una tabla propia (ver `security`).
 - **Modelo financiero:**
@@ -71,7 +71,7 @@ La integridad se protege en el backend (servicios) y en la base de datos (restri
 
 Ejemplos:
 - correo de usuario único;
-- unidad única dentro de la copropiedad;
+- unidad única dentro de su torre (y torre dentro de su bloque);
 - cargos y pagos con fechas, montos y estados válidos;
 - relaciones residente–unidad con claves foráneas definidas.
 

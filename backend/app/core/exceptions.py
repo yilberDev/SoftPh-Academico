@@ -71,3 +71,64 @@ class CsrfFailedError(AppError):
     status_code = 403
     code = "CSRF_FAILED"
     message = "No se pudo verificar la solicitud. Recarga la página e inténtalo de nuevo."
+
+
+class NotFoundError(AppError):
+    status_code = 404
+    code = "NOT_FOUND"
+    message = "El recurso solicitado no existe."
+
+
+# --- HU-013: physical structure (Bloque → Torre → Apartamento) ----------------
+
+
+class BlockNotFoundError(NotFoundError):
+    message = "El bloque no existe o fue eliminado."
+
+
+class TowerNotFoundError(NotFoundError):
+    message = "La torre no existe o fue eliminada."
+
+
+class UnitNotFoundError(NotFoundError):
+    message = "El apartamento no existe o fue eliminado."
+
+
+class VersionConflictError(ConflictError):
+    code = "VERSION_CONFLICT"
+    message = "El registro fue modificado por otra persona. Recarga la página e inténtalo de nuevo."
+
+
+class BlockNumberExistsError(ConflictError):
+    code = "BLOCK_NUMBER_EXISTS"
+
+    def __init__(self, label: str) -> None:
+        super().__init__(f"Ya existe el bloque {label}.")
+
+
+class TowerNumberExistsError(ConflictError):
+    code = "TOWER_NUMBER_EXISTS"
+
+    def __init__(self, tower: str, block: str) -> None:
+        super().__init__(f"Ya existe la torre {tower} en el bloque {block}.")
+
+
+class UnitNumberExistsError(ConflictError):
+    code = "UNIT_NUMBER_EXISTS"
+
+    def __init__(self, unit: str, tower: str) -> None:
+        super().__init__(f"Ya existe el apartamento {unit} en {tower}.")
+
+
+class BlockHasActiveTowersError(ConflictError):
+    code = "BLOCK_HAS_ACTIVE_TOWERS"
+
+    def __init__(self, label: str) -> None:
+        super().__init__(f"No se puede eliminar {label} porque tiene torres activas. Elimínalas primero.")
+
+
+class TowerHasActiveUnitsError(ConflictError):
+    code = "TOWER_HAS_ACTIVE_UNITS"
+
+    def __init__(self, label: str) -> None:
+        super().__init__(f"No se puede eliminar {label} porque tiene apartamentos activos. Elimínalos primero.")

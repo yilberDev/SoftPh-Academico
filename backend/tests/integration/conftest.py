@@ -18,11 +18,14 @@ from sqlalchemy import pool, text
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.clock import utc_now
 from app.core.config import get_settings
 from app.core.passwords import hash_password
+from app.core.sessions import CSRF_HEADER_NAME, SESSION_COOKIE_NAME, derive_csrf_token
 from app.db.session import create_engine, get_db
 from app.main import app
 from app.models import User, UserRole, UserStatus
+from app.services.sessions import create_session
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -78,7 +81,8 @@ async def committed_session_factory(migrated_test_database: URL) -> AsyncIterato
         yield async_sessionmaker(engine, expire_on_commit=False)
     finally:
         async with engine.begin() as connection:
-            for table in ("sessions", "login_throttles", "audit_logs", "users"):
+            # Children before parents (foreign keys).
+            for table in ("units", "towers", "blocks", "sessions", "login_throttles", "audit_logs", "users"):
                 await connection.execute(text(f"DELETE FROM {table}"))
         await engine.dispose()
 
@@ -142,3 +146,25 @@ def make_user(db_session: AsyncSession) -> Callable[..., Awaitable[User]]:
         return user
 
     return factory
+
+
+async def sign_in(client: AsyncClient, db: AsyncSession, user: User) -> dict[str, str]:
+    """Creates a session for the user directly (no Argon2) and returns the
+    headers of a state-changing request from the public origin.
+
+    The setup is committed so that a service rollback (which only rolls back
+    the current savepoint) cannot undo it.
+    """
+    token = await create_session(db, user, get_settings(), utc_now())
+    await db.commit()
+    client.cookies.set(SESSION_COOKIE_NAME, token)
+    return {"Origin": get_settings().app_origin, CSRF_HEADER_NAME: derive_csrf_token(token)}
+
+
+@pytest.fixture
+async def admin_headers(
+    client: AsyncClient, db_session: AsyncSession, make_user: Callable[..., Awaitable[User]]
+) -> dict[str, str]:
+    """Signed-in ADMINISTRADOR: Origin + CSRF headers for state-changing requests."""
+    admin = await make_user(password_hash="not-a-real-hash")
+    return await sign_in(client, db_session, admin)

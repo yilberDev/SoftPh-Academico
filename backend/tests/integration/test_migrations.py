@@ -7,8 +7,8 @@ from sqlalchemy.engine import URL
 from app.db.session import create_engine
 from tests.integration.conftest import alembic_config
 
-# HU-001: users, audit_logs. HU-002: sessions, login_throttles.
-APP_TABLES = {"users", "audit_logs", "sessions", "login_throttles"}
+# HU-001: users, audit_logs. HU-002: sessions, login_throttles. HU-013: blocks, towers, units.
+APP_TABLES = {"users", "audit_logs", "sessions", "login_throttles", "blocks", "towers", "units"}
 
 
 def table_names(url: URL) -> set[str]:

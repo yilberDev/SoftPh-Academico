@@ -1,0 +1,17 @@
+---
+interface Props {
+  message: string;
+}
+
+const { message } = Astro.props;
+---
+
+<div class="rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
+  <p class="text-slate-700">{message}</p>
+  <a
+    href="/admin/blocks"
+    class="mt-4 inline-block rounded text-sm font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+  >
+    Volver a los bloques
+  </a>
+</div>

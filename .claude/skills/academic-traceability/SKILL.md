@@ -67,7 +67,7 @@ Estas decisiones interpretan o precisan el documento académico y deben registra
 | HU-004, HU-008, HU-011, HU-012, HU-014 | Las cuotas/cargos mensuales forman parte del modelo financiero; los saldos se calculan a partir de cargos y pagos. |
 | HU-010 | El "pago electrónico demo/sandbox" se implementa como una **simulación interna** del backend, sin pasarela externa. |
 | HU-017 y demás HU con notificaciones | Correo solo en los flujos definidos por los requisitos; Mailpit en desarrollo. La lista exacta de correos sale de las HU/RF/CU al documentarlas en `docs/`. |
-| HU-013 | Una única copropiedad (Urbanización San Joaquín); unidades únicas dentro de ella. |
+| HU-013 | Una única copropiedad (Urbanización San Joaquín) con estructura Bloque → Torre → Apartamento; la unidad residencial es el apartamento (ver `docs/extensiones-diseno.md`). |
 
 ## Reglas
 
