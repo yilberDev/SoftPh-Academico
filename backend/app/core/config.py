@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     # Simultaneous Argon2 operations (64 MiB each), run outside the event loop.
     password_hash_max_concurrency: int = Field(default=2, ge=1, le=4)
 
+    # Outgoing email (HU-003). Development uses Mailpit (SMTP 127.0.0.1:1025,
+    # web UI http://localhost:8025); real mail is never sent from development.
+    smtp_host: str = "127.0.0.1"
+    smtp_port: int = Field(default=1025, ge=1, le=65535)
+    smtp_from: str = "SoftPh-Académico <no-reply@softph.local>"
+    smtp_timeout_seconds: float = Field(default=10, gt=0, le=60)
+
     @model_validator(mode="after")
     def require_secure_cookie_outside_local_http(self) -> Self:
         """SESSION_COOKIE_SECURE=false is only allowed for local HTTP development."""

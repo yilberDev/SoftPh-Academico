@@ -6,6 +6,7 @@ Each test gets a session inside a transaction that is rolled back afterwards;
 service commits only release a savepoint inside that transaction.
 """
 
+import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
@@ -25,6 +26,7 @@ from app.core.sessions import CSRF_HEADER_NAME, SESSION_COOKIE_NAME, derive_csrf
 from app.db.session import create_engine, get_db
 from app.main import app
 from app.models import User, UserRole, UserStatus
+from app.services.mail import OutgoingEmail, get_mail_sender
 from app.services.sessions import create_session
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -82,7 +84,10 @@ async def committed_session_factory(migrated_test_database: URL) -> AsyncIterato
     finally:
         async with engine.begin() as connection:
             # Children before parents (foreign keys).
-            for table in ("units", "towers", "blocks", "sessions", "login_throttles", "audit_logs", "users"):
+            for table in (
+                "resident_units", "resident_invitations", "units", "towers", "blocks",
+                "sessions", "login_throttles", "audit_logs", "users",
+            ):
                 await connection.execute(text(f"DELETE FROM {table}"))
         await engine.dispose()
 
@@ -98,12 +103,35 @@ def session_factory(db_session: AsyncSession) -> Callable[[], AbstractAsyncConte
     return factory
 
 
+class FakeMailSender:
+    """Captures emails instead of sending them. Tests can make it fail or wait."""
+
+    def __init__(self) -> None:
+        self.sent: list[OutgoingEmail] = []
+        self.fail_with: Exception | None = None
+        self.gate: asyncio.Event | None = None
+
+    async def send(self, email: OutgoingEmail) -> None:
+        if self.gate is not None:
+            await self.gate.wait()
+        if self.fail_with is not None:
+            raise self.fail_with
+        self.sent.append(email)
+
+
 @pytest.fixture
-async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
+def mailer() -> FakeMailSender:
+    return FakeMailSender()
+
+
+@pytest.fixture
+async def client(db_session: AsyncSession, mailer: FakeMailSender) -> AsyncIterator[AsyncClient]:
     async def override_get_db() -> AsyncIterator[AsyncSession]:
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
+    # API tests never reach a real SMTP server (not even Mailpit).
+    app.dependency_overrides[get_mail_sender] = lambda: mailer
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as http_client:
         yield http_client
     app.dependency_overrides.clear()

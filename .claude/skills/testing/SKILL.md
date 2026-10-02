@@ -11,7 +11,7 @@ description: Define the verification workflow for SoftPh-Academico (pytest + htt
 | Backend (Python 3.13) | `pytest` + `httpx` (`AsyncClient` con `ASGITransport` contra la app FastAPI) |
 | Pruebas async | plugin `anyio` de pytest (ya incluido con FastAPI/Starlette) |
 | Base de datos de pruebas | MySQL 8.4 local, base de datos dedicada |
-| Frontend (Node.js 24 LTS) | `astro check` + `npm run build` (build SSR con `@astrojs/node`) |
+| Frontend (Node.js 24 LTS) | `npm test` (lógica pura en `frontend/tests/`, con `node --test`, sin dependencias) + `astro check` + `npm run build` (build SSR con `@astrojs/node`) |
 
 Agregar herramientas específicas (p. ej., pruebas end-to-end o de componentes) solo cuando una HU lo justifique y con aprobación.
 
@@ -28,7 +28,7 @@ Agregar herramientas específicas (p. ej., pruebas end-to-end o de componentes) 
 Una tarea funcional está terminada cuando:
 
 1. **Backend:** la aplicación importa y arranca sin errores y las migraciones se aplican sobre una base limpia.
-2. **Frontend:** `astro check` no reporta errores y `npm run build` termina correctamente.
+2. **Frontend:** `npm test` pasa, `astro check` no reporta errores y `npm run build` termina correctamente.
 3. Los tests relevantes pasan.
 4. Los flujos principales fueron verificados manualmente (correos revisados en Mailpit cuando aplique).
 5. No quedan errores conocidos sin registrar.

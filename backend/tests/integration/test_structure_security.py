@@ -54,6 +54,7 @@ def test_every_structure_route_is_covered() -> None:
         (method.upper(), path.removeprefix("/api/v1"))
         for path, operations in app.openapi()["paths"].items()
         if path.startswith(("/api/v1/blocks", "/api/v1/towers", "/api/v1/units"))
+        and path != "/api/v1/units/available"  # HU-003 (tests in test_invitation_security.py)
         for method in operations
     }
     covered = {("GET", _template(path)) for path in READS} | {(method, _template(path)) for method, path, _ in WRITES}

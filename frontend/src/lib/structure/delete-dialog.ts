@@ -13,7 +13,9 @@ import { ApiError } from '../api/errors.ts';
 /** 409 codes that mean "the current state does not allow deleting it", with the reason shown. */
 export const BLOCKED_DELETE_REASONS: ReadonlyMap<string, string> = new Map([
   ['BLOCK_HAS_ACTIVE_TOWERS', 'El bloque tiene torres activas. Elimínalas primero.'],
-  ['TOWER_HAS_ACTIVE_UNITS', 'La torre tiene apartamentos activos. Elimínalos primero.']
+  ['TOWER_HAS_ACTIVE_UNITS', 'La torre tiene apartamentos activos. Elimínalos primero.'],
+  // HU-003: an apartment with a resident or a pending invitation is in use.
+  ['UNIT_IN_USE', 'El apartamento tiene un residente o una invitación pendiente.']
 ]);
 
 export const CONNECTION_ERROR = 'No fue posible conectar con el servidor. Intenta de nuevo.';

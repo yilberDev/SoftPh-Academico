@@ -28,7 +28,7 @@ SoftPh-Academico/
 - Node.js 24 LTS y npm
 - Python 3.13
 - MySQL 8.4 LTS en local
-- Mailpit (opcional por ahora; se usará con los flujos de correo)
+- Mailpit (SMTP en `127.0.0.1:1025`, interfaz en `http://localhost:8025`) para ver los correos de invitación
 
 Si el sistema no trae Python 3.13, se puede obtener solo el intérprete con [uv](https://docs.astral.sh/uv/) (`uv python install 3.13`) y seguir usando `venv` + `pip`.
 
@@ -73,6 +73,7 @@ Edita `.env` y asigna una contraseña propia a `DB_PASSWORD`. Variables:
 | `SESSION_ABSOLUTE_TTL_MINUTES`, `SESSION_IDLE_TTL_MINUTES` | Duración máxima de la sesión (480) e inactividad permitida (30) |
 | `LOGIN_MAX_FAILED_ATTEMPTS`, `LOGIN_FAILURE_WINDOW_MINUTES`, `LOGIN_LOCKOUT_MINUTES` | Control de intentos fallidos: 5 fallos en 15 minutos bloquean 15 minutos |
 | `PASSWORD_HASH_MAX_CONCURRENCY` | Operaciones Argon2 simultáneas (64 MiB cada una), fuera del bucle de eventos. Por defecto 2, rango 1–4 |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, `SMTP_TIMEOUT_SECONDS` | Correo saliente (HU-003). Por defecto, Mailpit en `127.0.0.1:1025` (ver [Invitación de residentes](#invitación-de-residentes-hu-003)) |
 
 `.env` nunca se versiona.
 
@@ -131,7 +132,7 @@ En el panel de administración, "Unidades residenciales" (`/admin/blocks`) gesti
 - Cada nivel guarda solo su número (entero positivo, sin máximo de negocio). El identificador oficial lo genera el backend: `B1-TO2-APTO-104`. No se almacena.
 - Un bloque activo por número, una torre activa por número dentro del bloque y un apartamento activo por número dentro de la torre.
 - Se puede corregir el número; no se puede mover una torre a otro bloque ni un apartamento a otra torre.
-- Borrado lógico. Un bloque con torres activas o una torre con apartamentos activos no se puede eliminar. Los números eliminados se pueden reutilizar.
+- Borrado lógico. Un bloque con torres activas, una torre con apartamentos activos o un apartamento con residente o invitación vigente (HU-003) no se puede eliminar. Los números eliminados se pueden reutilizar.
 
 | Endpoint | Uso |
 |---|---|
@@ -143,6 +144,37 @@ En el panel de administración, "Unidades residenciales" (`/admin/blocks`) gesti
 | `GET`, `PATCH`, `DELETE /api/v1/units/{id}` | Consultar / renumerar / eliminar apartamento |
 
 Todas exigen sesión de administrador; las que modifican datos exigen además `Origin` y la cabecera `X-CSRF-Token`.
+
+## Invitación de residentes (HU-003)
+
+En el panel de administración, "Invitar residente" (`/admin/residents/invite`) registra a un residente, le asigna un apartamento disponible y le envía por correo un enlace para activar su cuenta. **La activación (crear la contraseña) es HU-019 y aún no está implementada**: el enlace apunta a `/activate-account`, que por ahora responde 404.
+
+- Datos: correo electrónico (mismas reglas que HU-001), nombre completo, apartamento (solo los disponibles) y vigencia de 1 a 30 días (7 por defecto).
+- Se crea un usuario RESIDENTE pendiente de activación, sin contraseña, y una invitación que reserva el apartamento. Un apartamento con residente activo o invitación vigente no se ofrece ni se puede eliminar.
+- Un correo ya registrado o con una invitación vigente se rechaza. Si la invitación anterior venció, se reinvita al mismo residente.
+- El enlace lleva el token en el fragmento (`/activate-account#token=…`); en la base de datos solo se guarda su SHA-256.
+- Si el correo falla, la invitación se conserva y se puede **reenviar** (desde la confirmación o la lista de invitaciones pendientes). Reenviar genera un enlace nuevo, invalida el anterior y no amplía la vigencia.
+
+### Correo en desarrollo (Mailpit)
+
+El backend envía los correos por SMTP a [Mailpit](https://mailpit.axllent.org/), que los captura sin entregarlos. Ábrelo en `http://localhost:8025` para ver las invitaciones. Nunca se envía correo real desde desarrollo.
+
+| Variable | Uso (valor por defecto) |
+|---|---|
+| `SMTP_HOST`, `SMTP_PORT` | Servidor SMTP (`127.0.0.1`, `1025`: Mailpit) |
+| `SMTP_FROM` | Remitente (`SoftPh-Académico <no-reply@softph.local>`) |
+| `SMTP_TIMEOUT_SECONDS` | Tiempo límite de cada operación SMTP (10) |
+
+TLS y credenciales para un servidor SMTP de producción no están configurados (se definirán en el despliegue).
+
+| Endpoint | Uso |
+|---|---|
+| `GET /api/v1/units/available` | Apartamentos disponibles para invitar `{items: [{unit_id, label, …}]}` |
+| `POST /api/v1/resident-invitations` | Invitar `{email, full_name, unit_id, validity_days}` |
+| `GET /api/v1/resident-invitations?status=PENDING` | Invitaciones vigentes (para reenviar) |
+| `POST /api/v1/resident-invitations/{id}/resend` | Reenviar con un enlace nuevo |
+
+Todos exigen sesión de administrador; los `POST` exigen además `Origin` y la cabecera `X-CSRF-Token`.
 
 ## Ejecución del backend
 
@@ -181,10 +213,13 @@ cd backend
 .venv/bin/pytest                     # todas
 ```
 
+Las pruebas nunca envían correo: sustituyen el emisor SMTP por uno falso. La única excepción es `tests/integration/test_mailpit.py`, que envía un correo de prueba a Mailpit, lo verifica y lo borra (se omite si Mailpit no está en marcha).
+
 ### Frontend
 
 ```bash
 cd frontend
+npm test        # lógica pura (node --test, sin dependencias)
 npm run check   # astro check
 ```
 

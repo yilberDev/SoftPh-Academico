@@ -1,6 +1,7 @@
 """HU-013 migration (522bf629af33): upgrade, protected downgrade and pre-checks.
 
-Only ever runs on the dedicated *_test database, and always leaves it at head.
+Only ever runs on the dedicated *_test database. Each test starts at this
+revision (later revisions are downgraded first) and always leaves it at head.
 """
 
 import asyncio
@@ -53,6 +54,8 @@ def database(migrated_test_database: URL) -> Iterator[URL]:
     assert migrated_test_database.database is not None
     assert migrated_test_database.database.endswith("_test")
     config = alembic_config(migrated_test_database)
+    # Later revisions (HU-003) are downgraded first: each test starts at this revision.
+    command.downgrade(config, REVISION)
     try:
         yield migrated_test_database
     finally:
@@ -64,7 +67,7 @@ def database(migrated_test_database: URL) -> Iterator[URL]:
             for table in ("units", "towers", "blocks"):
                 if table in structure_tables(migrated_test_database):
                     run_sql(migrated_test_database, f"DROP TABLE {table}")
-            command.upgrade(config, "head")
+        command.upgrade(config, "head")
 
 
 def test_downgrade_and_upgrade(database: URL) -> None:

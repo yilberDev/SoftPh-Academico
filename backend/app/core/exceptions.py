@@ -132,3 +132,41 @@ class TowerHasActiveUnitsError(ConflictError):
 
     def __init__(self, label: str) -> None:
         super().__init__(f"No se puede eliminar {label} porque tiene apartamentos activos. Elimínalos primero.")
+
+
+class UnitInUseError(ConflictError):
+    code = "UNIT_IN_USE"
+
+    def __init__(self, label: str) -> None:
+        super().__init__(
+            f"No se puede eliminar {label} porque tiene un residente o una invitación pendiente."
+        )
+
+
+# --- HU-003: resident invitations ----------------------------------------------
+
+
+class UnitNotAvailableError(ConflictError):
+    code = "UNIT_NOT_AVAILABLE"
+    message = "El apartamento seleccionado no está disponible. Actualiza la lista y elige otro."
+
+
+class InvitationAlreadyPendingError(ConflictError):
+    code = "INVITATION_ALREADY_PENDING"
+    message = (
+        "Este correo ya tiene una invitación vigente. Puedes reenviarla desde la lista de "
+        "invitaciones pendientes."
+    )
+
+
+class InvitationNotFoundError(NotFoundError):
+    message = "La invitación no existe."
+
+
+class InvitationNotPendingError(ConflictError):
+    code = "INVITATION_NOT_PENDING"
+    message = "La invitación ya fue utilizada y no se puede reenviar."
+
+
+class InvitationExpiredError(InvitationNotPendingError):
+    message = "La invitación venció y no se puede reenviar. Para invitar de nuevo, crea una nueva invitación."

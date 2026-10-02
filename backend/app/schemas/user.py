@@ -24,6 +24,43 @@ def _optional_text(value: Any) -> Any:
     return value
 
 
+# --- Rules shared by every form that creates an account (HU-001, HU-003) -------
+
+
+def clean_full_name(value: Any) -> Any:
+    """Collapses whitespace and validates a full name (Pydantic "before" validator)."""
+    if not isinstance(value, str):
+        return value
+    name = " ".join(value.split())
+    if not name:
+        raise invalid("full_name_required", "El nombre completo es obligatorio.")
+    if not 3 <= len(name) <= 150:
+        raise invalid("full_name_length", "El nombre completo debe tener entre 3 y 150 caracteres.")
+    if not _FULL_NAME_RE.match(name):
+        raise invalid("full_name_format", "El nombre completo solo puede contener letras, espacios, apóstrofos y guiones.")
+    return name
+
+
+def clean_new_account_email(value: Any) -> Any:
+    """Canonical (normalize_email), ASCII-only and well-formed email of a new account."""
+    if not isinstance(value, str):
+        return value
+    email = normalize_email(value)
+    if not email:
+        raise invalid("email_required", "El correo electrónico es obligatorio.")
+    # New accounts use ASCII emails only (no Unicode look-alikes).
+    if not email.isascii():
+        raise invalid(
+            "email_ascii",
+            "El correo electrónico no puede contener tildes, eñes ni otros caracteres especiales.",
+        )
+    try:
+        validate_email(email, check_deliverability=False)
+    except EmailNotValidError:
+        raise invalid("email_format", "Ingresa un correo electrónico válido.") from None
+    return email
+
+
 class AdminCreate(BaseModel):
     """Input for creating the first administrator (HU-001)."""
 
@@ -40,36 +77,12 @@ class AdminCreate(BaseModel):
     @field_validator("full_name", mode="before")
     @classmethod
     def validate_full_name(cls, value: Any) -> Any:
-        if not isinstance(value, str):
-            return value
-        name = " ".join(value.split())
-        if not name:
-            raise invalid("full_name_required", "El nombre completo es obligatorio.")
-        if not 3 <= len(name) <= 150:
-            raise invalid("full_name_length", "El nombre completo debe tener entre 3 y 150 caracteres.")
-        if not _FULL_NAME_RE.match(name):
-            raise invalid("full_name_format", "El nombre completo solo puede contener letras, espacios, apóstrofos y guiones.")
-        return name
+        return clean_full_name(value)
 
     @field_validator("email", mode="before")
     @classmethod
     def validate_email_address(cls, value: Any) -> Any:
-        if not isinstance(value, str):
-            return value
-        email = normalize_email(value)
-        if not email:
-            raise invalid("email_required", "El correo electrónico es obligatorio.")
-        # New accounts use ASCII emails only (no Unicode look-alikes).
-        if not email.isascii():
-            raise invalid(
-                "email_ascii",
-                "El correo electrónico no puede contener tildes, eñes ni otros caracteres especiales.",
-            )
-        try:
-            validate_email(email, check_deliverability=False)
-        except EmailNotValidError:
-            raise invalid("email_format", "Ingresa un correo electrónico válido.") from None
-        return email
+        return clean_new_account_email(value)
 
     @field_validator("email")
     @classmethod

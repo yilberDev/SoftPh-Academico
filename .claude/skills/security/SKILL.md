@@ -60,6 +60,7 @@ Las llamadas servidor a servidor desde Astro (SSR, middleware) son solo de lectu
 - Generados con un generador aleatorio criptográficamente seguro; en base de datos solo se guarda su hash.
 - Con expiración y de un solo uso. Se invalidan al usarse o al emitirse uno nuevo del mismo tipo.
 - Se envían únicamente por correo (Mailpit en desarrollo) y nunca aparecen en logs.
+- En el enlace, el token va en el **fragmento** (`/ruta#token=…`), nunca en la query (`?token=`): el navegador no envía el fragmento al servidor. La API lo recibe solo en el cuerpo de un POST.
 
 ## Entrada y datos
 

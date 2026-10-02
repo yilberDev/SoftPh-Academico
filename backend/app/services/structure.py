@@ -33,6 +33,7 @@ from app.core.exceptions import (
     TowerHasActiveUnitsError,
     TowerNotFoundError,
     TowerNumberExistsError,
+    UnitInUseError,
     UnitNotFoundError,
     UnitNumberExistsError,
     VersionConflictError,
@@ -47,7 +48,7 @@ from app.core.unit_labels import (
     unit_label_prefix,
     unit_name,
 )
-from app.models import AuditAction, Block, Tower, Unit
+from app.models import AuditAction, Block, InvitationStatus, ResidentInvitation, ResidentUnit, Tower, Unit
 from app.schemas.structure import (
     BlockList,
     BlockRead,
@@ -499,12 +500,34 @@ async def update_unit(db: AsyncSession, unit_id: int, number: int, version: int,
     return await get_unit(db, unit_id)
 
 
+async def _unit_in_use(db: AsyncSession, unit_id: int) -> bool:
+    """Active residence or valid PENDING invitation (HU-003).
+
+    Locking reads on the UNIQUE marker indexes, under the unit lock: they see
+    the latest committed data. An expired PENDING invitation does not reserve.
+    """
+    if await db.scalar(
+        select(ResidentUnit.id).where(ResidentUnit.active_unit_marker == unit_id).with_for_update(read=True)
+    ) is not None:
+        return True
+    expires_at = await db.scalar(
+        select(ResidentInvitation.expires_at)
+        .where(
+            ResidentInvitation.pending_unit_marker == unit_id,
+            ResidentInvitation.status == InvitationStatus.PENDING,
+        )
+        .with_for_update(read=True)
+    )
+    return expires_at is not None and expires_at > utc_now()
+
+
 async def delete_unit(db: AsyncSession, unit_id: int, version: int, actor: Actor) -> None:
-    # HU-003 will reject deleting an apartment with an active resident or a
-    # pending invitation (UNIT_IN_USE); HU-013 has no such relations yet.
     block, tower, unit = await _lock_unit_path(db, unit_id)
     _check_version(unit, version)
     label = unit_label(block.number, tower.number, unit.number)
+    # HU-003: an apartment with a resident or a pending invitation is in use.
+    if await _unit_in_use(db, unit_id):
+        raise UnitInUseError(label)
     unit.deleted_at = utc_now()
     unit.version = version + 1
     await db.flush()

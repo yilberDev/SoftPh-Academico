@@ -111,7 +111,7 @@ describe('delete dialog', () => {
     });
   });
 
-  for (const code of ['BLOCK_HAS_ACTIVE_TOWERS', 'TOWER_HAS_ACTIVE_UNITS']) {
+  for (const code of ['BLOCK_HAS_ACTIVE_TOWERS', 'TOWER_HAS_ACTIVE_UNITS', 'UNIT_IN_USE']) {
     it(`${code}: no further DELETE can be sent from the informative state`, async () => {
       const t = setup(apiError(409, code));
       t.dialog.open('B4', t.remove);
@@ -124,6 +124,19 @@ describe('delete dialog', () => {
       assert.equal(t.dialog.state.kind, 'blocked');
     });
   }
+
+  it('409 UNIT_IN_USE (HU-003): informative state with the reason', async () => {
+    const t = setup(apiError(409, 'UNIT_IN_USE'));
+    t.dialog.open('B1-TO2-APTO-104', t.remove);
+
+    await t.dialog.confirm();
+
+    assert.deepEqual(t.dialog.state, {
+      kind: 'blocked',
+      label: 'B1-TO2-APTO-104',
+      reason: 'El apartamento tiene un residente o una invitación pendiente.'
+    });
+  });
 
   it('closing the informative state sends nothing', async () => {
     const t = setup(apiError(409, 'BLOCK_HAS_ACTIVE_TOWERS'));
