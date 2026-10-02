@@ -20,7 +20,6 @@ audited as INVITATION_REJECTED with a safe reason only; the token, its hash
 and the password are never logged, audited or returned.
 """
 
-import re
 from datetime import UTC
 from typing import Any, NoReturn
 
@@ -39,7 +38,7 @@ from app.core.exceptions import (
     UnitNotAvailableError,
 )
 from app.core.passwords import hash_password_async
-from app.core.sessions import hash_token
+from app.core.sessions import hash_well_formed_token
 from app.core.unit_labels import unit_label
 from app.models import (
     AuditAction,
@@ -58,13 +57,9 @@ from app.schemas.user import PASSWORD_EQUALS_EMAIL_MESSAGE, password_equals_emai
 from app.services.audit import record_audit
 from app.services.invitations import expire_invitation, is_expired, lock_invitation
 
-# generate_session_token(): 32 random bytes as URL-safe base64, 43 characters.
-TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_-]{43}")
-
-
 def _token_hash(token: str) -> str | None:
     """SHA-256 of a well-formed token; None for anything else (answered like an unknown token)."""
-    return hash_token(token) if TOKEN_PATTERN.fullmatch(token) else None
+    return hash_well_formed_token(token)
 
 
 def is_pending_resident(user: User | None) -> bool:

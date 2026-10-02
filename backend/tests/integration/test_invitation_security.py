@@ -180,6 +180,10 @@ async def test_no_anonymous_endpoint_creates_or_changes_data(client: AsyncClient
         ("POST", f"{API}/auth/logout"),
         ("POST", f"{API}/resident-invitations/verify"),
         ("POST", f"{API}/resident-invitations/activate"),
+        # HU-016 password reset (Origin + one-time token; never creates users).
+        ("POST", f"{API}/auth/password-reset/request"),
+        ("POST", f"{API}/auth/password-reset/verify"),
+        ("POST", f"{API}/auth/password-reset/confirm"),
     }
     for path, operations in app.openapi()["paths"].items():
         for method in operations:

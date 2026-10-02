@@ -9,6 +9,22 @@ from app.schemas.user import PASSWORD_MAX_LENGTH
 EMAIL_MAX_LENGTH = 254
 
 
+def clean_login_email(value: Any) -> Any:
+    """Canonical email of a login-like form: required and within the length limit.
+
+    No registration rules (format, ASCII): an address that matches no account
+    simply matches nothing.
+    """
+    if not isinstance(value, str):
+        return value
+    email = normalize_email(value)
+    if not email:
+        raise invalid("email_required", "El correo electrónico es obligatorio.")
+    if len(email) > EMAIL_MAX_LENGTH:
+        raise invalid("email_too_long", f"El correo electrónico no puede superar {EMAIL_MAX_LENGTH} caracteres.")
+    return email
+
+
 class LoginRequest(BaseModel):
     """Single login form for every role (HU-002).
 
@@ -24,14 +40,7 @@ class LoginRequest(BaseModel):
     @field_validator("email", mode="before")
     @classmethod
     def validate_email(cls, value: Any) -> Any:
-        if not isinstance(value, str):
-            return value
-        email = normalize_email(value)
-        if not email:
-            raise invalid("email_required", "El correo electrónico es obligatorio.")
-        if len(email) > EMAIL_MAX_LENGTH:
-            raise invalid("email_too_long", f"El correo electrónico no puede superar {EMAIL_MAX_LENGTH} caracteres.")
-        return email
+        return clean_login_email(value)
 
     @field_validator("password")
     @classmethod

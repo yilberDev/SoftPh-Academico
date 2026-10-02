@@ -94,7 +94,17 @@ async def authenticate(
         await db.commit()
         raise LoginTemporarilyLockedError(math.ceil(remaining.total_seconds()))
 
-    user = await db.scalar(select(User).where(User.email == data.email))
+    # The account row is locked (by primary key, never a gap lock on a missing
+    # email) for the rest of the login: a concurrent password reset (HU-016)
+    # either revokes the session created here or this login sees the new hash.
+    user_id = await db.scalar(select(User.id).where(User.email == data.email))
+    user = (
+        await db.scalar(
+            select(User).where(User.id == user_id).with_for_update().execution_options(populate_existing=True)
+        )
+        if user_id is not None
+        else None
+    )
     password = data.password.get_secret_value()
     stored_hash = user.password_hash if user is not None and user.password_hash else await dummy_password_hash()
     password_ok = await verify_password_async(stored_hash, password)

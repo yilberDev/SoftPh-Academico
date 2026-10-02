@@ -23,7 +23,7 @@ from app.core.clock import utc_now
 from app.core.config import get_settings
 from app.core.passwords import hash_password
 from app.core.sessions import CSRF_HEADER_NAME, SESSION_COOKIE_NAME, derive_csrf_token
-from app.db.session import create_engine, get_db
+from app.db.session import create_engine, get_db, get_session_factory
 from app.main import app
 from app.models import User, UserRole, UserStatus
 from app.services.mail import OutgoingEmail, get_mail_sender
@@ -85,7 +85,7 @@ async def committed_session_factory(migrated_test_database: URL) -> AsyncIterato
         async with engine.begin() as connection:
             # Children before parents (foreign keys).
             for table in (
-                "resident_units", "resident_invitations", "units", "towers", "blocks",
+                "password_reset_tokens", "resident_units", "resident_invitations", "units", "towers", "blocks",
                 "sessions", "login_throttles", "audit_logs", "users",
             ):
                 await connection.execute(text(f"DELETE FROM {table}"))
@@ -125,11 +125,17 @@ def mailer() -> FakeMailSender:
 
 
 @pytest.fixture
-async def client(db_session: AsyncSession, mailer: FakeMailSender) -> AsyncIterator[AsyncClient]:
+async def client(
+    db_session: AsyncSession,
+    mailer: FakeMailSender,
+    session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]],
+) -> AsyncIterator[AsyncClient]:
     async def override_get_db() -> AsyncIterator[AsyncSession]:
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
+    # Background work (e.g. HU-016 email delivery) uses the same test transaction.
+    app.dependency_overrides[get_session_factory] = lambda: session_factory
     # API tests never reach a real SMTP server (not even Mailpit).
     app.dependency_overrides[get_mail_sender] = lambda: mailer
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as http_client:

@@ -20,8 +20,13 @@ _MONTHS = (
 )
 
 
+def token_link(app_origin: str, path: str, token: str) -> str:
+    """Link with the one-time token in the URL fragment, never in the query string."""
+    return f"{app_origin.rstrip('/')}{path}#token={token}"
+
+
 def activation_link(app_origin: str, token: str) -> str:
-    return f"{app_origin.rstrip('/')}{ACTIVATION_PATH}#token={token}"
+    return token_link(app_origin, ACTIVATION_PATH, token)
 
 
 def format_bogota(moment_utc: datetime) -> str:

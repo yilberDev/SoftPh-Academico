@@ -210,3 +210,28 @@ class InvitationUsedError(GoneError):
 class InvitationLinkExpiredError(GoneError):
     code = "INVITATION_EXPIRED"
     message = "La invitación ya no se encuentra vigente. Solicita a la administración una nueva invitación."
+
+
+# --- HU-016: password reset of residents ----------------------------------------------
+# Only the holder of a 256-bit token can see these answers; the request step
+# itself always answers the same (no enumeration).
+
+
+class PasswordResetInvalidError(NotFoundError):
+    code = "PASSWORD_RESET_INVALID"
+    message = "El enlace para restablecer la contraseña no es válido. Solicita uno nuevo."
+
+
+class PasswordResetExpiredError(GoneError):
+    code = "PASSWORD_RESET_EXPIRED"
+    message = "El enlace para restablecer la contraseña venció. Solicita uno nuevo."
+
+
+class PasswordResetUsedError(GoneError):
+    code = "PASSWORD_RESET_USED"
+    message = "Este enlace ya fue utilizado. Si necesitas cambiar tu contraseña otra vez, solicita uno nuevo."
+
+
+class PasswordResetRevokedError(GoneError):
+    code = "PASSWORD_RESET_REVOKED"
+    message = "Este enlace fue reemplazado por uno más reciente. Usa el último correo que recibiste o solicita uno nuevo."

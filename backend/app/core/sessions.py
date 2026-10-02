@@ -7,6 +7,7 @@ extra is stored.
 
 import hashlib
 import hmac
+import re
 import secrets
 from datetime import datetime, timedelta
 from typing import Any
@@ -25,6 +26,20 @@ def hash_token(token: str) -> str:
     # A fast hash is enough: the token has 256 bits of entropy (no brute force),
     # and a deterministic hash allows an indexed lookup.
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+# generate_session_token(): 32 random bytes as URL-safe base64, 43 characters.
+# Also the shape of the one-time tokens sent by email (HU-003 invitation,
+# HU-016 password reset), which reuse the same generator.
+_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_-]{43}")
+
+
+def hash_well_formed_token(token: str) -> str | None:
+    """SHA-256 of a well-formed one-time token; None for anything else.
+
+    A malformed token is answered exactly like an unknown one, without a lookup.
+    """
+    return hash_token(token) if _TOKEN_PATTERN.fullmatch(token) else None
 
 
 def derive_csrf_token(session_token: str) -> str:

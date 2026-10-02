@@ -8,6 +8,7 @@ from app.db.base import Base
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.invitation import DeliveryStatus, InvitationStatus, ResidentInvitation, ResidentUnit
 from app.models.login_throttle import LoginThrottle
+from app.models.password_reset import PasswordResetToken
 from app.models.session import UserSession
 from app.models.structure import Block, Tower, Unit
 from app.models.user import User, UserRole, UserStatus
@@ -20,6 +21,7 @@ __all__ = [
     "DeliveryStatus",
     "InvitationStatus",
     "LoginThrottle",
+    "PasswordResetToken",
     "ResidentInvitation",
     "ResidentUnit",
     "Tower",

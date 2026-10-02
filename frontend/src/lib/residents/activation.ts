@@ -1,5 +1,10 @@
 import { ApiError } from '../api/errors.ts';
 import type { ActivationPayload, InvitationPreview } from '../api/activation.ts';
+import { readToken } from '../auth/fragment-token.ts';
+import { validateNewPassword } from '../auth/password-policy.ts';
+
+export { readToken };
+export { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../auth/password-policy.ts';
 
 /**
  * /activate-account (HU-019), without DOM.
@@ -10,11 +15,8 @@ import type { ActivationPayload, InvitationPreview } from '../api/activation.ts'
  * improve the experience; the backend decides everything else.
  */
 
-const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const DOCUMENT_PATTERN = /^[A-Za-z0-9]{5,20}$/;
 const PHONE_PATTERN = /^\+?\d{7,15}$/;
-export const PASSWORD_MIN_LENGTH = 12;
-export const PASSWORD_MAX_LENGTH = 128;
 export const CONNECTION_ERROR = 'No fue posible conectar con el servidor. Intenta de nuevo.';
 
 export type ActivationField = 'document_number' | 'phone' | 'password' | 'password_confirmation';
@@ -39,12 +41,6 @@ export type ActivationState =
   | { kind: 'activated' }
   | { kind: 'error'; message: string };
 
-/** The token of "#token=..." if it looks like one; null otherwise. */
-export function readToken(hash: string): string | null {
-  const token = new URLSearchParams(hash.replace(/^#/, '')).get('token');
-  return token !== null && TOKEN_PATTERN.test(token) ? token : null;
-}
-
 /** Format checks only. Returns the errors and, if there are none, the data to send (without token). */
 export function validateActivationForm(values: ActivationFormValues): {
   errors: FieldErrors;
@@ -62,18 +58,7 @@ export function validateActivationForm(values: ActivationFormValues): {
   if (phone && !PHONE_PATTERN.test(phone)) {
     errors.phone = 'El teléfono debe tener entre 7 y 15 dígitos, con un «+» inicial opcional.';
   }
-  if (!values.password) {
-    errors.password = 'Crea una contraseña.';
-  } else if (values.password.length < PASSWORD_MIN_LENGTH || values.password.length > PASSWORD_MAX_LENGTH) {
-    errors.password = `La contraseña debe tener entre ${PASSWORD_MIN_LENGTH} y ${PASSWORD_MAX_LENGTH} caracteres.`;
-  } else if (!values.password.trim()) {
-    errors.password = 'La contraseña no puede estar formada solo por espacios.';
-  }
-  if (!values.passwordConfirmation) {
-    errors.password_confirmation = 'Confirma tu contraseña.';
-  } else if (values.passwordConfirmation !== values.password) {
-    errors.password_confirmation = 'La confirmación no coincide con la contraseña.';
-  }
+  Object.assign(errors, validateNewPassword(values.password, values.passwordConfirmation));
 
   if (Object.keys(errors).length > 0) {
     return { errors, payload: null };

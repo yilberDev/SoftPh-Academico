@@ -62,6 +62,8 @@ Las llamadas servidor a servidor desde Astro (SSR, middleware) son solo de lectu
 - Se envían únicamente por correo (Mailpit en desarrollo) y nunca aparecen en logs.
 - En el enlace, el token va en el **fragmento** (`/ruta#token=…`), nunca en la query (`?token=`): el navegador no envía el fragmento al servidor. La API lo recibe solo en el cuerpo de un POST.
 - La página que lo recibe (p. ej., `/activate-account`, HU-019) lo retira de la URL con `history.replaceState` al leerlo, lo mantiene solo en memoria (nunca en `localStorage`, `sessionStorage` ni cookies) y se sirve con `Cache-Control: no-store` y `Referrer-Policy: no-referrer`. Un token inexistente, alterado, mal formado o ya rotado recibe la misma respuesta (404), sin pistas.
+- Solicitudes anónimas que envían correo (p. ej., recuperación de contraseña, HU-016): misma respuesta, código y cabeceras exista o no la cuenta; el correo se envía en segundo plano (después de responder) para que el tiempo de respuesta no delate la cuenta; el límite de abuso es silencioso (no 429) y por cuenta.
+- El login bloquea la fila del usuario (por clave primaria) antes de verificar la contraseña, y cualquier cambio de contraseña bloquea la misma fila y revoca las sesiones: así ninguna sesión creada con la contraseña anterior sobrevive.
 
 ## Entrada y datos
 

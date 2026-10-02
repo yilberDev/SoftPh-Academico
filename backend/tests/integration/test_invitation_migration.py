@@ -68,6 +68,7 @@ def database(migrated_test_database: URL) -> Iterator[URL]:
     assert migrated_test_database.database is not None
     assert migrated_test_database.database.endswith("_test")
     config = alembic_config(migrated_test_database)
+    command.downgrade(config, REVISION)  # later revisions (HU-016) first
     try:
         yield migrated_test_database
     finally:

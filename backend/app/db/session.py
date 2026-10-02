@@ -1,4 +1,5 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager
 
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
@@ -24,3 +25,11 @@ SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 async def get_db() -> AsyncIterator[AsyncSession]:
     async with SessionLocal() as session:
         yield session
+
+
+SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+
+
+def get_session_factory() -> SessionFactory:
+    """For work that outlives the request session (e.g. background email delivery)."""
+    return SessionLocal

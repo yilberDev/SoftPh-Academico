@@ -123,7 +123,7 @@ Cada área solo admite su rol (con otro rol se muestra "Acceso no autorizado"), 
 - La sesión se guarda en MySQL; la cookie `softph_session` (HttpOnly) solo contiene un identificador aleatorio.
 - Tras 5 intentos fallidos en 15 minutos, el acceso con ese correo se bloquea 15 minutos.
 - Credenciales incorrectas o cuentas no activas reciben siempre el mismo mensaje genérico.
-- "¿Olvidaste tu contraseña?" lleva a `/forgot-password`, que por ahora solo informa: la recuperación de contraseña es HU-016 (pendiente; también cubrirá el criterio 3 de HU-002).
+- "¿Olvidaste tu contraseña?" lleva a la recuperación de contraseña de residentes (HU-016, ver abajo). La recuperación del administrador no existe todavía (criterio 3 de HU-002, pendiente).
 
 | Endpoint | Uso |
 |---|---|
@@ -203,6 +203,21 @@ Estados de la página: verificando, válida (formulario), inválida, vencida, ut
 Son públicos (sin sesión ni token CSRF): exigen `Origin` del origen público y el token en el cuerpo, nunca en la URL.
 
 **Prueba local:** con el backend y el frontend en marcha, invita a un residente desde `/admin/residents/invite`, abre el correo en Mailpit (`http://localhost:8025`) y sigue el enlace. Navega con el mismo host de `APP_ORIGIN` (p. ej., `http://localhost:4321`), o la API rechazará la solicitud por `Origin`.
+
+## Recuperación de contraseña del residente (HU-016)
+
+1. En `/login`, "¿Olvidaste tu contraseña?" lleva a `/forgot-password`: el residente ingresa su correo.
+2. La respuesta es siempre la misma, exista o no la cuenta. Si el correo es de un residente activo, recibe un enlace `/reset-password#token=…` (Mailpit en desarrollo: `http://localhost:8025`).
+3. El enlace vale **1 hora y una sola vez**; pedir otro invalida el anterior. Máximo 3 enlaces por residente por hora (los demás se ignoran en silencio).
+4. En `/reset-password` crea su contraseña nueva (12 a 128 caracteres). Se cierran todas sus sesiones abiertas y vuelve a iniciar sesión con la contraseña nueva.
+
+| Endpoint | Uso |
+|---|---|
+| `POST /api/v1/auth/password-reset/request` | `{email}` → 202 `{"status": "ACCEPTED"}` (siempre igual) |
+| `POST /api/v1/auth/password-reset/verify` | `{token}` → `{expires_at}`. 404 `PASSWORD_RESET_INVALID`, 410 `PASSWORD_RESET_EXPIRED` / `_USED` / `_REVOKED` |
+| `POST /api/v1/auth/password-reset/confirm` | `{token, password, password_confirmation}` → `{"status": "PASSWORD_UPDATED"}`. También 422 |
+
+Son públicos (sin sesión ni token CSRF): exigen `Origin` del origen público y el token en el cuerpo, nunca en la URL. Solo para residentes.
 
 ## Ejecución del backend
 

@@ -6,17 +6,15 @@ never echoed in validation errors (token, password).
 """
 
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, SecretStr, StringConstraints, ValidationInfo, field_validator
+from pydantic import BaseModel, ConfigDict, SecretStr, ValidationInfo, field_validator
 
 from app.core.validation import invalid
+from app.schemas.tokens import OneTimeToken
 from app.schemas.user import check_password, check_password_confirmation, clean_document_number, clean_phone
 
-# A real token has 43 characters; the cap only stops absurd payloads (422).
-# The format itself is checked by the service, which answers a malformed token
-# exactly like an unknown one (404 INVITATION_INVALID).
-InvitationToken = Annotated[str, StringConstraints(strict=True, max_length=512)]
+InvitationToken = OneTimeToken
 
 
 class InvitationTokenRequest(BaseModel):

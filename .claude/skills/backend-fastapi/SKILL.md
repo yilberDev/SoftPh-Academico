@@ -81,7 +81,7 @@ Aplicar las reglas de la skill `security`. En resumen:
 - Se envían correos **únicamente en los flujos que definen los requisitos** (HU/RF/CU). No agregar notificaciones por iniciativa propia; un correo nuevo requiere que un requisito lo defina o una extensión de diseño aprobada.
 - El envío de correo se encapsula en un servicio en `services/`; las rutas no construyen correos directamente.
 - Un fallo de correo no debe dejar datos inconsistentes; registrar el error en el servidor sin datos sensibles.
-- Patrón aprobado (E-1, HU-003): confirmar los datos (COMMIT) **antes** de enviar; nunca enviar SMTP dentro de una transacción ni con bloqueos abiertos; registrar el resultado (`SENT`/`FAILED`) en otra transacción y permitir el reenvío. Usar `MailSender` de `services/mail.py` (dependencia `get_mail_sender`, que las pruebas sustituyen por un emisor falso).
+- Patrón aprobado (E-1, HU-003): confirmar los datos (COMMIT) **antes** de enviar; nunca enviar SMTP dentro de una transacción ni con bloqueos abiertos; registrar el resultado (`SENT`/`FAILED`) en otra transacción y permitir el reenvío. Usar `MailSender` de `services/mail.py` (dependencia `get_mail_sender`, que las pruebas sustituyen por un emisor falso). En endpoints anónimos donde el tiempo de respuesta podría revelar si una cuenta existe (HU-016), el envío y su registro van en `BackgroundTasks`, con su propia sesión (`get_session_factory`).
 
 ## Pago electrónico simulado (HU-010)
 
