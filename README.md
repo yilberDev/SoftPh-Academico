@@ -118,7 +118,7 @@ Con backend y frontend en marcha, abre `http://localhost:4321/login`. Es el mism
 - el administrador (creado con `create-admin`) llega al panel `/admin`;
 - el residente (con la cuenta activada en HU-019) llega a su panel `/resident`.
 
-Cada área solo admite su rol (con otro rol se muestra "Acceso no autorizado"), y la API rechaza con 403 las operaciones de otro rol. "Cerrar sesión" invalida la sesión.
+Cada área solo admite su rol (con otro rol se muestra "Acceso no autorizado"), y la API rechaza con 403 las operaciones de otro rol, aunque se invoquen directamente (HU-018). Sin sesión, la API responde 401 y las páginas protegidas llevan al login. El rol siempre sale de la sesión del servidor, nunca de un dato enviado por el navegador. "Cerrar sesión" invalida la sesión.
 
 - La sesión se guarda en MySQL; la cookie `softph_session` (HttpOnly) solo contiene un identificador aleatorio.
 - Tras 5 intentos fallidos en 15 minutos, el acceso con ese correo se bloquea 15 minutos.

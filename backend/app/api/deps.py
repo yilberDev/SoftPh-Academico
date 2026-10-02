@@ -1,4 +1,4 @@
-"""Reusable request dependencies: session, roles and CSRF (HU-002, base for HU-018)."""
+"""Reusable request dependencies: session, roles and CSRF (HU-002; role-based access control of HU-018)."""
 
 from collections.abc import Awaitable, Callable
 from typing import Annotated

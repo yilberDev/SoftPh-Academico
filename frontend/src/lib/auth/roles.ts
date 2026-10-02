@@ -1,5 +1,5 @@
 /**
- * Roles and their pages (HU-002 administrator, HU-007 resident). Pure module.
+ * Roles and their pages (HU-002 administrator, HU-007 resident; HU-018 decision in page-access.ts). Pure module.
  *
  * The role always comes from the backend (login or session); it is only used
  * here to choose the home page and to improve navigation. The backend

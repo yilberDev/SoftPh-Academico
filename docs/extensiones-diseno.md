@@ -6,6 +6,7 @@ Decisiones aprobadas que interpretan o precisan el documento académico y que a�
 |---|---|
 | HU-001 | No hay registro público de administradores; el primer administrador se crea con un mecanismo controlado del backend. |
 | HU-002, HU-007, HU-018 | Una única interfaz de login; el backend determina el rol (`ADMINISTRADOR` / `RESIDENTE`). Ambas HU se cumplen con el mismo flujo. |
+| HU-018 | El control de acceso reutiliza la sesión y las dependencias de HU-002/HU-007 (sin tablas de permisos ni roles nuevos) y declara la política de cada endpoint. Ver detalle. |
 | HU-004, HU-008, HU-011, HU-012, HU-014 | Las cuotas/cargos mensuales forman parte del modelo financiero; los saldos se calculan a partir de cargos y pagos. |
 | HU-010 | El "pago electrónico demo/sandbox" se implementa como una simulación interna del backend, sin pasarela externa. |
 | HU-017 y demás HU con notificaciones | Correo solo en los flujos definidos por los requisitos; Mailpit en desarrollo. |
@@ -36,7 +37,7 @@ Decisiones aprobadas que interpretan o precisan el documento académico y que a�
 | Control de intentos (criterio 3) | 5 fallos en 15 minutos bloquean el correo normalizado durante 15 minutos (configurable). El contador se guarda por hash del correo, exista o no la cuenta, así el bloqueo no revela qué correos están registrados. Los intentos del mismo correo se serializan con un bloqueo de fila, de modo que los intentos concurrentes se cuentan todos. Consecuencia aceptada: un tercero que conozca el correo puede bloquear temporalmente el acceso. |
 | **Criterio 3 — pendiente** | **"Solicitará el restablecimiento de la contraseña" no está implementado.** No existe un flujo de restablecimiento para el administrador (HU-016 es del residente) y su implementación está aplazada. HU-002 no se considera completamente satisfecha hasta cubrirlo. |
 | Panel principal | `/admin` es un panel mínimo de validación (saludo y cierre de sesión), sin funcionalidades de administración. |
-| Protección de rutas (base de HU-018) | `get_current_auth` y `require_roles` (FastAPI) y el middleware SSR de Astro protegen `/admin`. HU-018 los ampliará. |
+| Protección de rutas (base de HU-018) | `get_current_auth` y `require_roles` (FastAPI) y el middleware SSR de Astro protegen `/admin`. HU-018 los reutiliza sin cambios y declara la política de cada ruta (ver HU-018). |
 | IP en auditoría | Se registra `request.client.host`; no se confía en `X-Forwarded-For` hasta definir el proxy de producción. Detrás del proxy de desarrollo la IP registrada es `127.0.0.1`. |
 
 ## Correcciones de seguridad de HU-002 (A-1, M-1, M-2)
@@ -137,6 +138,19 @@ Decisiones aprobadas que interpretan o precisan el documento académico y que a�
 | Auditoría | `PASSWORD_RESET_REQUESTED` (`{reset_id}`), `PASSWORD_RESET_EMAIL_FAILED` (`{reset_id, error}`), `PASSWORD_RESET_REJECTED` (motivo seguro: `not_eligible`, `rate_limited`, `invalid`, `expired`, `used`, `revoked`, `user_not_eligible`) y `PASSWORD_RESET_COMPLETED` (`{reset_id, sessions_revoked}`). Nunca el token, su hash ni contraseñas. Los correos desconocidos no se auditan. |
 | Página `/reset-password` | Pública, `Cache-Control: no-store` y `Referrer-Policy: no-referrer`. Lee `#token=` del fragmento (solo de un fragmento, nunca de la consulta), lo retira de inmediato con `history.replaceState` y lo mantiene solo en memoria. Estados: verificando, válido (formulario), inválido, vencido, utilizado, reemplazado, actualizando, completado y error. |
 | Migración `b1b38cfb7fe2` | Crea `password_reset_tokens` (FK `RESTRICT` a `users`, índice `(user_id, created_at)` para la FK y el límite, CHECK `expires_at > created_at` y "usado o revocado, no ambos"). Escrita a mano; verificada en `information_schema`. El `downgrade` aborta si hay filas. |
+
+## HU-018 — Control de acceso según rol (detalle)
+
+| Tema | Decisión |
+|---|---|
+| Auditoría inicial | Se revisaron todas las rutas de la API (28), las dependencias, el middleware y las páginas. Los 19 endpoints de administración (HU-013, HU-003) ya usaban `require_roles(ADMINISTRADOR)`; los 8 públicos (login, logout, salud, HU-016, HU-019) no aceptan identidad ni rol del cliente; `GET /auth/session` devuelve solo los datos propios. **No había ningún endpoint privado sin autorización en el backend** ni endpoints de residente con identificadores (sin superficie IDOR). El middleware resiste variantes de ruta (`/%61dmin`, `//admin`, `/./admin`, `/x/../admin`, `/admin/index.html`). |
+| Reutilización | Sin migración, sin tablas `roles`/`permissions`, sin endpoints nuevos y sin un segundo mecanismo: la sesión (HU-002), `get_current_auth` (401) y `require_roles(...)` (403) siguen siendo el único control. Solo dos roles: `ADMINISTRADOR` y `RESIDENTE`. |
+| Política declarada | Cada ruta publicada tiene su nivel (público, cualquier rol autenticado, ADMINISTRADOR, RESIDENTE) en `ACCESS_POLICY` (`backend/tests/integration/test_access_control.py`); las pruebas lo comparan con las rutas reales y comprueban el comportamiento de cada una. Una ruta nueva sin clasificar hace fallar las pruebas. Es la matriz de [HU-018](historias-usuario/HU-018.md). |
+| Rol en cada petición | El rol se lee de la base de datos en cada petición (cookie → sesión → usuario → estado → rol): un cambio de rol o de estado de la cuenta se aplica de inmediato a las sesiones abiertas. Nada enviado por el cliente (`role`, `user_role`, `user_id`, cabeceras, cookies) lo sustituye. |
+| 401 / 403 | Sin el contrato cambiado: 401 `NOT_AUTHENTICATED` sin sesión válida (inexistente, mal formada, revocada, vencida o de una cuenta inactiva); 403 `FORBIDDEN` con sesión válida y otro rol; el 403 se decide antes de leer o validar el recurso, así que no revela si un identificador existe. Un JSON sintácticamente roto recibe 422 antes de la autenticación (comportamiento de FastAPI; no se ejecuta nada). |
+| Administrador en funciones de residente | Política: 403 (`require_roles(RESIDENTE)`). Hoy no existe ningún endpoint exclusivo de residente; las HU del residente (HU-008, HU-009, HU-010, HU-014) los añadirán con esa dependencia y comprobando la propiedad del recurso desde la sesión. |
+| Frontend | La decisión del middleware se extrajo a `frontend/src/lib/auth/page-access.ts` (función pura, probada con `node --test`, con el mismo comportamiento). Sin sesión → `/login`; otro rol → "Acceso no autorizado" (403, ahora también con `Cache-Control: no-store`), sin la página ni sus datos; el login lleva al área del rol; si la sesión no se puede comprobar → 503. Es solo una ayuda de navegación: la autorización real es la del backend. |
+| Accesos denegados en la auditoría | No se registran en `audit_logs`: un 403 no cambia datos, se decide solo con la sesión y registrarlo permitiría llenar la tabla con peticiones repetidas. No se añadió ninguna acción de auditoría. |
 
 ## Desviaciones temporales del entorno
 
