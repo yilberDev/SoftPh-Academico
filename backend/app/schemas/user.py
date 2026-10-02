@@ -41,6 +41,56 @@ def clean_full_name(value: Any) -> Any:
     return name
 
 
+PASSWORD_EQUALS_EMAIL_MESSAGE = "La contraseña no puede ser igual al correo electrónico."
+
+
+def check_password(value: SecretStr, email: str | None) -> None:
+    """Password policy (HU-001): 12-128 characters, not only spaces, different from the email."""
+    password = value.get_secret_value()
+    if not password:
+        raise invalid("password_required", "La contraseña es obligatoria.")
+    if not PASSWORD_MIN_LENGTH <= len(password) <= PASSWORD_MAX_LENGTH:
+        raise invalid(
+            "password_length",
+            f"La contraseña debe tener entre {PASSWORD_MIN_LENGTH} y {PASSWORD_MAX_LENGTH} caracteres.",
+        )
+    if not password.strip():
+        raise invalid("password_blank", "La contraseña no puede estar formada solo por espacios.")
+    if email and password_equals_email(value, email):
+        raise invalid("password_equals_email", PASSWORD_EQUALS_EMAIL_MESSAGE)
+
+
+def password_equals_email(value: SecretStr, email: str) -> bool:
+    return value.get_secret_value().strip().lower() == email
+
+
+def check_password_confirmation(value: SecretStr, password: SecretStr | None) -> None:
+    if password is not None and value.get_secret_value() != password.get_secret_value():
+        raise invalid("password_mismatch", "La confirmación no coincide con la contraseña.")
+
+
+def clean_document_number(value: Any) -> Any:
+    """Optional document: stripped, uppercase, 5-20 letters or digits (None when empty)."""
+    value = _optional_text(value)
+    if value is None or not isinstance(value, str):
+        return value
+    document = value.upper()
+    if not _DOCUMENT_RE.match(document):
+        raise invalid("document_number_format", "El número de documento debe tener entre 5 y 20 letras o dígitos, sin espacios ni símbolos.")
+    return document
+
+
+def clean_phone(value: Any) -> Any:
+    """Optional phone: spaces and hyphens removed, 7-15 digits with an optional leading '+'."""
+    value = _optional_text(value)
+    if value is None or not isinstance(value, str):
+        return value
+    phone = re.sub(r"[\s\-]", "", value)
+    if not _PHONE_RE.match(phone):
+        raise invalid("phone_format", "El teléfono debe tener entre 7 y 15 dígitos, con un «+» inicial opcional.")
+    return phone
+
+
 def clean_new_account_email(value: Any) -> Any:
     """Canonical (normalize_email), ASCII-only and well-formed email of a new account."""
     if not isinstance(value, str):
@@ -93,50 +143,24 @@ class AdminCreate(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password(cls, value: SecretStr, info: ValidationInfo) -> SecretStr:
-        password = value.get_secret_value()
-        if not password:
-            raise invalid("password_required", "La contraseña es obligatoria.")
-        if not PASSWORD_MIN_LENGTH <= len(password) <= PASSWORD_MAX_LENGTH:
-            raise invalid(
-                "password_length",
-                f"La contraseña debe tener entre {PASSWORD_MIN_LENGTH} y {PASSWORD_MAX_LENGTH} caracteres.",
-            )
-        if not password.strip():
-            raise invalid("password_blank", "La contraseña no puede estar formada solo por espacios.")
-        email = info.data.get("email")
-        if email and password.strip().lower() == email:
-            raise invalid("password_equals_email", "La contraseña no puede ser igual al correo electrónico.")
+        check_password(value, info.data.get("email"))
         return value
 
     @field_validator("password_confirmation")
     @classmethod
     def validate_password_confirmation(cls, value: SecretStr, info: ValidationInfo) -> SecretStr:
-        password = info.data.get("password")
-        if password is not None and value.get_secret_value() != password.get_secret_value():
-            raise invalid("password_mismatch", "La confirmación no coincide con la contraseña.")
+        check_password_confirmation(value, info.data.get("password"))
         return value
 
     @field_validator("document_number", mode="before")
     @classmethod
     def validate_document_number(cls, value: Any) -> Any:
-        value = _optional_text(value)
-        if value is None or not isinstance(value, str):
-            return value
-        document = value.upper()
-        if not _DOCUMENT_RE.match(document):
-            raise invalid("document_number_format", "El número de documento debe tener entre 5 y 20 letras o dígitos, sin espacios ni símbolos.")
-        return document
+        return clean_document_number(value)
 
     @field_validator("phone", mode="before")
     @classmethod
     def validate_phone(cls, value: Any) -> Any:
-        value = _optional_text(value)
-        if value is None or not isinstance(value, str):
-            return value
-        phone = re.sub(r"[\s\-]", "", value)
-        if not _PHONE_RE.match(phone):
-            raise invalid("phone_format", "El teléfono debe tener entre 7 y 15 dígitos, con un «+» inicial opcional.")
-        return phone
+        return clean_phone(value)
 
 
 class UserRead(BaseModel):

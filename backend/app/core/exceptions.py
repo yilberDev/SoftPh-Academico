@@ -5,6 +5,8 @@ class AppError(Exception):
     status_code = 400
     code = "BAD_REQUEST"
     message = "La solicitud no es válida."
+    # Optional per-field errors ([{"field", "message"}]) of the standard format.
+    details: list[dict[str, str]] | None = None
 
     def __init__(self, message: str | None = None, headers: dict[str, str] | None = None) -> None:
         if message is not None:
@@ -170,3 +172,41 @@ class InvitationNotPendingError(ConflictError):
 
 class InvitationExpiredError(InvitationNotPendingError):
     message = "La invitación venció y no se puede reenviar. Para invitar de nuevo, crea una nueva invitación."
+
+
+class FieldValidationError(AppError):
+    """422 for a rule that needs data the schema does not have (e.g. the invitation email)."""
+
+    status_code = 422
+    code = "VALIDATION_ERROR"
+    message = "Los datos enviados no son válidos."
+
+    def __init__(self, field: str, message: str) -> None:
+        super().__init__()
+        self.details = [{"field": field, "message": message}]
+
+
+class GoneError(AppError):
+    status_code = 410
+    code = "GONE"
+    message = "El recurso ya no está disponible."
+
+
+# --- HU-019: account activation by the resident ------------------------------------
+# The same answers for every caller: an anonymous user only learns something
+# about an invitation by holding its 256-bit token.
+
+
+class InvitationInvalidError(NotFoundError):
+    code = "INVITATION_INVALID"
+    message = "El enlace de invitación no es válido. Revisa que lo copiaste completo o solicita una nueva invitación."
+
+
+class InvitationUsedError(GoneError):
+    code = "INVITATION_USED"
+    message = "Este enlace ya fue utilizado. Tu cuenta ya fue activada."
+
+
+class InvitationLinkExpiredError(GoneError):
+    code = "INVITATION_EXPIRED"
+    message = "La invitación ya no se encuentra vigente. Solicita a la administración una nueva invitación."

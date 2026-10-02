@@ -10,7 +10,7 @@ Cadena: HU → RF → CU → implementación → prueba. Se actualiza al complet
 | HU-004 | RF-004 | CU-004 | Registro de pagos | — | — | Pendiente |
 | HU-005 | RF-005 | CU-005 | Gestión de feedback | — | — | Pendiente |
 | HU-006 | RF-006 | CU-006 | Visualización de residentes | — | — | Pendiente |
-| HU-007 | RF-007 | CU-007 | Inicio de sesión del residente | — | — | Pendiente |
+| HU-007 | RF-007 | CU-007 | Inicio de sesión del residente | — | — | Pendiente (de ella depende el criterio 6.2 de HU-019) |
 | HU-008 | RF-008 | CU-008 | Historial de pagos del residente | — | — | Pendiente |
 | HU-009 | RF-009 | CU-009 | Registro y consulta de feedback | — | — | Pendiente |
 | HU-010 | RF-010 | CU-010 | Pago electrónico demo/sandbox | — | — | Pendiente |
@@ -22,4 +22,4 @@ Cadena: HU → RF → CU → implementación → prueba. Se actualiza al complet
 | HU-016 | RF-016 | CU-016 | Restablecimiento de contraseña | — | — | Pendiente |
 | HU-017 | RF-017 | CU-017 | Notificaciones al residente | — | — | Pendiente |
 | HU-018 | RF-018 | CU-018 | Control de acceso según rol | — | — | Pendiente |
-| HU-019 | RF-019 | CU-019 | Activación de cuenta de residente | — | — | Pendiente |
+| [HU-019](historias-usuario/HU-019.md) | [RF-019](requisitos-funcionales/RF-019.md) | [CU-019](casos-uso/CU-019.md) | Invitación y activación de cuenta del residente | Criterios 1–3: implementación de HU-003. Activación: `backend/app/api/v1/activation.py`, `app/services/activation.py`, `app/schemas/activation.py`, validadores compartidos en `app/schemas/user.py`, `app/core/exceptions.py` (410, detalle por campo); `frontend/src/pages/activate-account.astro`, `src/lib/residents/activation.ts`, `src/lib/api/activation.ts` (sin migración: usa `resident_invitations` y `resident_units` de `4cfaeb7a0be8`) | `tests/unit/test_activation.py`, `tests/integration/test_activation_api.py`, `tests/integration/test_activation_security.py`, `tests/integration/test_activation_concurrency.py`; `frontend/tests/activation.test.ts` | **Parcial**: criterios 1–5, 7 y 8 cumplidos (1–3 con HU-003); criterio 6 cumplido en la activación, **pendiente de HU-007** "permitirle iniciar sesión" |

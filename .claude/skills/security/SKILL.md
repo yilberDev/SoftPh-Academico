@@ -61,6 +61,7 @@ Las llamadas servidor a servidor desde Astro (SSR, middleware) son solo de lectu
 - Con expiración y de un solo uso. Se invalidan al usarse o al emitirse uno nuevo del mismo tipo.
 - Se envían únicamente por correo (Mailpit en desarrollo) y nunca aparecen en logs.
 - En el enlace, el token va en el **fragmento** (`/ruta#token=…`), nunca en la query (`?token=`): el navegador no envía el fragmento al servidor. La API lo recibe solo en el cuerpo de un POST.
+- La página que lo recibe (p. ej., `/activate-account`, HU-019) lo retira de la URL con `history.replaceState` al leerlo, lo mantiene solo en memoria (nunca en `localStorage`, `sessionStorage` ni cookies) y se sirve con `Cache-Control: no-store` y `Referrer-Policy: no-referrer`. Un token inexistente, alterado, mal formado o ya rotado recibe la misma respuesta (404), sin pistas.
 
 ## Entrada y datos
 

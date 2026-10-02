@@ -1,0 +1,206 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+// HU-019. Public page: the token travels in the URL fragment (#token=...),
+// which the browser never sends to the server, so this HTML never contains it.
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('Referrer-Policy', 'no-referrer');
+
+const inputClass =
+  'mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30';
+const labelClass = 'block text-sm font-medium text-slate-700';
+const errorClass = 'mt-1 hidden text-sm text-red-700';
+const noticeTitle = 'text-lg font-semibold text-slate-900';
+---
+
+<Layout title="Activar cuenta — SoftPh-Académico">
+  <main class="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-4 py-10">
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8" data-activation>
+      <p class="text-sm font-medium text-emerald-700">Urbanización San Joaquín</p>
+      <h1 class="mt-1 text-2xl font-semibold tracking-tight">Activa tu cuenta</h1>
+
+      <div aria-live="polite">
+        <div data-view="verifying" class="mt-6 flex items-center gap-3 text-slate-600">
+          <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" aria-hidden="true"></span>
+          <p>Verificando tu invitación…</p>
+        </div>
+
+        <div data-view="invalid" class="mt-6 hidden space-y-2" role="alert">
+          <p class={noticeTitle}>El enlace de invitación no es válido</p>
+          <p class="text-slate-600">
+            Revisa que abriste el enlace completo del correo. Si el problema continúa, solicita una nueva invitación a la
+            administración.
+          </p>
+        </div>
+
+        <div data-view="expired" class="mt-6 hidden space-y-2" role="alert">
+          <p class={noticeTitle}>La invitación ya no se encuentra vigente</p>
+          <p class="text-slate-600">El plazo para activar tu cuenta terminó. Solicita a la administración una nueva invitación.</p>
+        </div>
+
+        <div data-view="used" class="mt-6 hidden space-y-2" role="alert">
+          <p class={noticeTitle}>Este enlace ya fue utilizado</p>
+          <p class="text-slate-600">Tu cuenta ya fue activada con esta invitación. El enlace no puede usarse de nuevo.</p>
+        </div>
+
+        <div data-view="error" class="mt-6 hidden space-y-2" role="alert">
+          <p class={noticeTitle}>No pudimos completar la activación</p>
+          <p data-error-message class="text-slate-600"></p>
+        </div>
+
+        <div data-view="activated" class="mt-6 hidden space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4" role="status">
+          <p class="text-lg font-semibold text-emerald-900">¡Tu cuenta está activa!</p>
+          <p class="text-emerald-900">
+            Tu contraseña quedó guardada y tu cuenta está asociada a tu apartamento. El ingreso para residentes estará
+            disponible próximamente. Ya puedes cerrar esta página.
+          </p>
+        </div>
+      </div>
+
+      <div data-view="ready" class="mt-6 hidden">
+        <dl class="grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
+          <div>
+            <dt class="text-slate-500">Nombre completo</dt>
+            <dd data-field="full_name" class="font-medium text-slate-900"></dd>
+          </div>
+          <div>
+            <dt class="text-slate-500">Correo electrónico</dt>
+            <dd data-field="email" class="break-all font-medium text-slate-900"></dd>
+          </div>
+          <div>
+            <dt class="text-slate-500">Apartamento</dt>
+            <dd data-field="unit_code" class="font-mono font-medium text-slate-900"></dd>
+          </div>
+          <div>
+            <dt class="text-slate-500">La invitación vence</dt>
+            <dd data-field="expires_at" class="font-medium text-slate-900"></dd>
+          </div>
+        </dl>
+
+        <form data-activation-form class="mt-6 space-y-5" novalidate>
+          <div data-form-alert role="alert" class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"></div>
+          <div>
+            <label for="document_number" class={labelClass}>Número de documento</label>
+            <input id="document_number" name="document_number" type="text" autocomplete="off" required maxlength="20" class={inputClass} />
+            <p id="document_number-error" data-error-for="document_number" class={errorClass}></p>
+          </div>
+          <div>
+            <label for="phone" class={labelClass}>Teléfono <span class="font-normal text-slate-500">(opcional)</span></label>
+            <input id="phone" name="phone" type="tel" autocomplete="tel" maxlength="25" class={inputClass} />
+            <p id="phone-error" data-error-for="phone" class={errorClass}></p>
+          </div>
+          <div>
+            <label for="password" class={labelClass}>Contraseña</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="new-password"
+              required
+              maxlength="128"
+              aria-describedby="password-hint"
+              class={inputClass}
+            />
+            <p id="password-hint" class="mt-1 text-sm text-slate-500">Entre 12 y 128 caracteres. Puedes usar una frase.</p>
+            <p id="password-error" data-error-for="password" class={errorClass}></p>
+          </div>
+          <div>
+            <label for="password_confirmation" class={labelClass}>Confirmar contraseña</label>
+            <input
+              id="password_confirmation"
+              name="password_confirmation"
+              type="password"
+              autocomplete="new-password"
+              required
+              maxlength="128"
+              class={inputClass}
+            />
+            <p id="password_confirmation-error" data-error-for="password_confirmation" class={errorClass}></p>
+          </div>
+          <button
+            type="submit"
+            class="w-full rounded-lg bg-emerald-700 px-4 py-2.5 font-medium text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:opacity-60"
+          >
+            Activar mi cuenta
+          </button>
+        </form>
+      </div>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  import { activateAccount, verifyInvitation } from '../lib/api/activation';
+  import { formatBogota } from '../lib/residents/invitation-form';
+  import { createActivationFlow, type ActivationField, type ActivationState } from '../lib/residents/activation';
+
+  const FIELDS: ActivationField[] = ['document_number', 'phone', 'password', 'password_confirmation'];
+  const root = document.querySelector<HTMLElement>('[data-activation]')!;
+  const form = root.querySelector<HTMLFormElement>('[data-activation-form]')!;
+  const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+  const formAlert = form.querySelector<HTMLElement>('[data-form-alert]')!;
+
+  function show(element: HTMLElement, message: string | null): void {
+    element.textContent = message ?? '';
+    element.classList.toggle('hidden', !message);
+  }
+
+  function render(state: ActivationState): void {
+    const view = state.kind === 'activating' ? 'ready' : state.kind;
+    root.querySelectorAll<HTMLElement>('[data-view]').forEach((element) => {
+      element.classList.toggle('hidden', element.dataset.view !== view);
+    });
+    if (state.kind === 'error') {
+      root.querySelector<HTMLElement>('[data-error-message]')!.textContent = state.message;
+    }
+    if (state.kind === 'ready' || state.kind === 'activating') {
+      const { invitation } = state;
+      root.querySelector<HTMLElement>('[data-field="full_name"]')!.textContent = invitation.full_name;
+      root.querySelector<HTMLElement>('[data-field="email"]')!.textContent = invitation.email;
+      root.querySelector<HTMLElement>('[data-field="unit_code"]')!.textContent = invitation.unit_code;
+      root.querySelector<HTMLElement>('[data-field="expires_at"]')!.textContent = formatBogota(invitation.expires_at);
+    }
+    const activating = state.kind === 'activating';
+    submit.disabled = activating;
+    submit.textContent = activating ? 'Activando…' : 'Activar mi cuenta';
+    form.setAttribute('aria-busy', activating ? 'true' : 'false');
+    if (state.kind === 'ready') {
+      show(formAlert, state.alert);
+      let first: HTMLInputElement | null = null;
+      for (const field of FIELDS) {
+        const input = form.elements.namedItem(field) as HTMLInputElement;
+        const error = form.querySelector<HTMLElement>(`[data-error-for="${field}"]`)!;
+        const message = state.errors[field] ?? null;
+        show(error, message);
+        input.setAttribute('aria-invalid', message ? 'true' : 'false');
+        const hint = field === 'password' ? 'password-hint' : '';
+        input.setAttribute('aria-describedby', [hint, message ? error.id : ''].filter(Boolean).join(' '));
+        if (message) {
+          first ??= input;
+        }
+      }
+      first?.focus();
+    }
+  }
+
+  const flow = createActivationFlow({
+    verify: verifyInvitation,
+    activate: activateAccount,
+    // Remove the token from the address bar (and history) before anything else.
+    clearToken: () => history.replaceState(null, '', window.location.pathname + window.location.search),
+    render
+  });
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const value = (name: string) => (form.elements.namedItem(name) as HTMLInputElement).value;
+    void flow.submit({
+      documentNumber: value('document_number'),
+      phone: value('phone'),
+      password: value('password'),
+      passwordConfirmation: value('password_confirmation')
+    });
+  });
+
+  void flow.start(window.location.hash);
+</script>

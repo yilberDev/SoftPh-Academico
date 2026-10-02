@@ -182,7 +182,7 @@ class _ConcurrentNewUser(Exception):
     """Another transaction created a user with the same email first (uq_users_email)."""
 
 
-async def _expire(db: AsyncSession, invitation_id: int, now: datetime) -> bool:
+async def expire_invitation(db: AsyncSession, invitation_id: int, now: datetime) -> bool:
     """PENDING → EXPIRED, only if it is still pending and already expired."""
     result = await db.execute(
         update(ResidentInvitation)
@@ -221,7 +221,7 @@ async def _lock_available_unit(db: AsyncSession, unit_id: int, now: datetime) ->
     pending = await _pending_invitation(db, unit_id=unit_id)
     if pending is None:
         return []
-    if not is_expired(pending.expires_at, now) or not await _expire(db, pending.id, now):
+    if not is_expired(pending.expires_at, now) or not await expire_invitation(db, pending.id, now):
         raise UnitNotAvailableError()
     return [pending.id]
 
@@ -271,7 +271,7 @@ async def _reserve(db: AsyncSession, data: InvitationCreate, actor: Actor, token
             raise EmailAlreadyRegisteredError()
         previous = await _pending_invitation(db, user_id=user.id)
         if previous is not None:
-            if not is_expired(previous.expires_at, now) or not await _expire(db, previous.id, now):
+            if not is_expired(previous.expires_at, now) or not await expire_invitation(db, previous.id, now):
                 raise InvitationAlreadyPendingError()
             expired_ids.append(previous.id)
         if user.full_name != data.full_name:
@@ -327,7 +327,7 @@ async def _reserve(db: AsyncSession, data: InvitationCreate, actor: Actor, token
 # --- SMTP and T2: deliver and record the result -----------------------------------------
 
 
-async def _lock_invitation(db: AsyncSession, invitation_id: int) -> ResidentInvitation | None:
+async def lock_invitation(db: AsyncSession, invitation_id: int) -> ResidentInvitation | None:
     return await db.scalar(
         select(ResidentInvitation)
         .where(ResidentInvitation.id == invitation_id)
@@ -339,7 +339,7 @@ async def _lock_invitation(db: AsyncSession, invitation_id: int) -> ResidentInvi
 async def _record_delivery(
     db: AsyncSession, invitation_id: int, token_hash: str, error: str | None, actor: Actor
 ) -> None:
-    invitation = await _lock_invitation(db, invitation_id)
+    invitation = await lock_invitation(db, invitation_id)
     if invitation is None:
         return
     attempt = invitation.send_attempts + 1
@@ -426,7 +426,7 @@ async def resend_invitation(
     await db.commit()
     now = utc_now()
     # Concurrent resends of the same invitation run one after the other here.
-    invitation = await _lock_invitation(db, invitation_id)
+    invitation = await lock_invitation(db, invitation_id)
     if invitation is None:
         raise InvitationNotFoundError()
     if invitation.status == InvitationStatus.EXPIRED:
@@ -434,7 +434,7 @@ async def resend_invitation(
     if invitation.status != InvitationStatus.PENDING:
         raise InvitationNotPendingError()
     if is_expired(invitation.expires_at, now):
-        await _expire(db, invitation_id, now)
+        await expire_invitation(db, invitation_id, now)
         await db.commit()
         raise InvitationExpiredError()
 

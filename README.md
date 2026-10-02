@@ -147,7 +147,7 @@ Todas exigen sesión de administrador; las que modifican datos exigen además `O
 
 ## Invitación de residentes (HU-003)
 
-En el panel de administración, "Invitar residente" (`/admin/residents/invite`) registra a un residente, le asigna un apartamento disponible y le envía por correo un enlace para activar su cuenta. **La activación (crear la contraseña) es HU-019 y aún no está implementada**: el enlace apunta a `/activate-account`, que por ahora responde 404.
+En el panel de administración, "Invitar residente" (`/admin/residents/invite`) registra a un residente, le asigna un apartamento disponible y le envía por correo un enlace para activar su cuenta en `/activate-account` (HU-019, ver la sección siguiente).
 
 - Datos: correo electrónico (mismas reglas que HU-001), nombre completo, apartamento (solo los disponibles) y vigencia de 1 a 30 días (7 por defecto).
 - Se crea un usuario RESIDENTE pendiente de activación, sin contraseña, y una invitación que reserva el apartamento. Un apartamento con residente activo o invitación vigente no se ofrece ni se puede eliminar.
@@ -175,6 +175,28 @@ TLS y credenciales para un servidor SMTP de producción no están configurados (
 | `POST /api/v1/resident-invitations/{id}/resend` | Reenviar con un enlace nuevo |
 
 Todos exigen sesión de administrador; los `POST` exigen además `Origin` y la cabecera `X-CSRF-Token`.
+
+## Activación de la cuenta del residente (HU-019)
+
+El residente abre el enlace del correo (`/activate-account#token=…`). La página es pública:
+
+1. Lee el código del enlace, lo retira de la barra de direcciones y lo guarda solo en memoria (nunca en el almacenamiento del navegador ni en cookies).
+2. Verifica la invitación y muestra el nombre, el correo, el apartamento y el vencimiento (no editables).
+3. El residente ingresa su documento (obligatorio), teléfono (opcional) y contraseña (12 a 128 caracteres) con su confirmación.
+4. Al confirmar, la cuenta queda **activa**, asociada al apartamento, y la invitación queda **utilizada**: el mismo enlace ya no sirve.
+
+Estados de la página: verificando, válida (formulario), inválida, vencida, utilizada, activando, activada y error. Un enlace vencido no permite activar; la administración puede enviar una nueva invitación.
+
+**La activación no inicia sesión.** El inicio de sesión de residentes es HU-007 y aún no está implementado: hasta entonces el login solo admite administradores.
+
+| Endpoint | Uso |
+|---|---|
+| `POST /api/v1/resident-invitations/verify` | `{token}` → datos de la invitación. 404 `INVITATION_INVALID`, 410 `INVITATION_EXPIRED` / `INVITATION_USED` |
+| `POST /api/v1/resident-invitations/activate` | `{token, document_number, phone, password, password_confirmation}` → `{"status": "ACTIVATED"}`. También 409 `DOCUMENT_ALREADY_REGISTERED` / `UNIT_NOT_AVAILABLE` y 422 |
+
+Son públicos (sin sesión ni token CSRF): exigen `Origin` del origen público y el token en el cuerpo, nunca en la URL.
+
+**Prueba local:** con el backend y el frontend en marcha, invita a un residente desde `/admin/residents/invite`, abre el correo en Mailpit (`http://localhost:8025`) y sigue el enlace. Navega con el mismo host de `APP_ORIGIN` (p. ej., `http://localhost:4321`), o la API rechazará la solicitud por `Origin`.
 
 ## Ejecución del backend
 

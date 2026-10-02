@@ -19,6 +19,7 @@ STATUS_CODES: dict[int, str] = {
     404: "NOT_FOUND",
     405: "METHOD_NOT_ALLOWED",
     409: "CONFLICT",
+    410: "GONE",
     422: "VALIDATION_ERROR",
     429: "TOO_MANY_REQUESTS",
     500: "INTERNAL_ERROR",
@@ -32,6 +33,7 @@ DEFAULT_MESSAGES: dict[int, str] = {
     404: "El recurso solicitado no existe.",
     405: "Método no permitido para este recurso.",
     409: "La operación entra en conflicto con el estado actual.",
+    410: "El recurso ya no está disponible.",
     422: "Los datos enviados no son válidos.",
     429: "Demasiadas solicitudes. Intenta de nuevo más tarde.",
     500: "Ocurrió un error interno. Intenta de nuevo más tarde.",
@@ -78,7 +80,7 @@ async def validation_exception_handler(_request: Request, exc: RequestValidation
 
 
 async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
-    response = error_response(exc.status_code, exc.message, code=exc.code)
+    response = error_response(exc.status_code, exc.message, exc.details, code=exc.code)
     if exc.headers:
         response.headers.update(exc.headers)
     return response

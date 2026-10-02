@@ -159,6 +159,8 @@ def test_every_invitation_route_is_covered() -> None:
         (method.upper(), path.removeprefix(API))
         for path, operations in app.openapi()["paths"].items()
         if path.startswith((f"{API}/resident-invitations", f"{API}/units/available"))
+        # HU-019 public activation routes: tested in test_activation_security.py.
+        and path not in (f"{API}/resident-invitations/verify", f"{API}/resident-invitations/activate")
         for method in operations
     }
     assert published == {
@@ -170,8 +172,15 @@ def test_every_invitation_route_is_covered() -> None:
 
 
 async def test_no_anonymous_endpoint_creates_or_changes_data(client: AsyncClient, origin_headers: dict[str, str]) -> None:
-    # Every state-changing route except login/logout needs a session: none can create residents anonymously.
-    anonymous_ok = {("POST", f"{API}/auth/login"), ("POST", f"{API}/auth/logout")}
+    # Every state-changing route needs a session except login/logout and the HU-019
+    # activation routes (Origin + one-time token; they never create users): none can
+    # create residents anonymously.
+    anonymous_ok = {
+        ("POST", f"{API}/auth/login"),
+        ("POST", f"{API}/auth/logout"),
+        ("POST", f"{API}/resident-invitations/verify"),
+        ("POST", f"{API}/resident-invitations/activate"),
+    }
     for path, operations in app.openapi()["paths"].items():
         for method in operations:
             if method.upper() in {"GET", "HEAD", "OPTIONS"} or (method.upper(), path) in anonymous_ok:

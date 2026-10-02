@@ -177,7 +177,7 @@ async def test_two_resends_are_serialized_and_only_the_last_token_is_valid(
             locked.set()
             await asyncio.sleep(HOLD_SECONDS)  # the first resend keeps the row locked
 
-    wrap(monkeypatch, service, "_lock_invitation", after=hold_first_lock)
+    wrap(monkeypatch, service, "lock_invitation", after=hold_first_lock)
 
     async def second() -> tuple[Any, float]:
         await locked.wait()
