@@ -1,5 +1,8 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import { FORGOT_PASSWORD_PATH } from '../lib/auth/roles';
+
+// Single login for administrators (HU-002) and residents (HU-007).
 ---
 
 <Layout title="Iniciar sesión — SoftPh-Académico">
@@ -50,25 +53,33 @@ import Layout from '../layouts/Layout.astro';
           Ingresar
         </button>
       </form>
+      <p class="mt-6 text-center text-sm">
+        <a
+          href={FORGOT_PASSWORD_PATH}
+          class="rounded font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+        >
+          ¿Olvidaste tu contraseña?
+        </a>
+      </p>
     </div>
   </main>
 </Layout>
 
 <script>
-  import { homePathForRole, login } from '../lib/api/auth';
-  import { ApiError } from '../lib/api/errors';
+  import { login } from '../lib/api/auth';
+  import { createLoginFlow, type LoginField, type LoginState } from '../lib/auth/login-form';
 
   const form = document.querySelector<HTMLFormElement>('#login-form')!;
   const alertBox = document.querySelector<HTMLDivElement>('#login-alert')!;
   const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
-  const fields = ['email', 'password'] as const;
+  const fields: LoginField[] = ['email', 'password'];
 
   function showAlert(message: string | null): void {
     alertBox.textContent = message ?? '';
     alertBox.classList.toggle('hidden', !message);
   }
 
-  function showFieldError(field: (typeof fields)[number], message: string | null): void {
+  function showFieldError(field: LoginField, message: string | null): void {
     const input = form.elements.namedItem(field) as HTMLInputElement;
     const error = document.querySelector<HTMLParagraphElement>(`#${field}-error`)!;
     error.textContent = message ?? '';
@@ -81,35 +92,31 @@ import Layout from '../layouts/Layout.astro';
     }
   }
 
-  // Format checks only; the backend is the authority on credentials.
-  function validate(email: string, password: string): boolean {
-    const emailError = !email ? 'Ingresa tu correo electrónico.' : null;
-    const passwordError = !password ? 'Ingresa tu contraseña.' : null;
-    showFieldError('email', emailError);
-    showFieldError('password', passwordError);
-    const firstInvalid = emailError ? 'email' : passwordError ? 'password' : null;
+  function render(state: LoginState): void {
+    const busy = state.kind === 'loading' || state.kind === 'success';
+    submit.disabled = busy;
+    submit.textContent = busy ? 'Ingresando…' : 'Ingresar';
+    form.setAttribute('aria-busy', busy ? 'true' : 'false');
+    const errors = state.kind === 'idle' ? state.errors : {};
+    fields.forEach((field) => showFieldError(field, errors[field] ?? null));
+    const firstInvalid = fields.find((field) => errors[field]);
     if (firstInvalid) {
       (form.elements.namedItem(firstInvalid) as HTMLInputElement).focus();
     }
-    return !firstInvalid;
+    const failed = state.kind === 'invalid' || state.kind === 'locked' || state.kind === 'error';
+    showAlert(failed ? state.message : null);
+    if (failed) {
+      // Never keep the password in the form after a failed attempt.
+      (form.elements.namedItem('password') as HTMLInputElement).value = '';
+    }
   }
 
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    showAlert(null);
-    const email = (form.elements.namedItem('email') as HTMLInputElement).value.trim();
-    const password = (form.elements.namedItem('password') as HTMLInputElement).value;
-    if (!validate(email, password)) {
-      return;
-    }
+  const flow = createLoginFlow({ login, navigate: (path) => window.location.assign(path), render });
 
-    submit.disabled = true;
-    try {
-      const session = await login(email, password);
-      window.location.assign(homePathForRole(session.user.role));
-    } catch (error) {
-      showAlert(error instanceof ApiError ? error.message : 'No fue posible conectar con el servidor. Intenta de nuevo.');
-      submit.disabled = false;
-    }
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const email = (form.elements.namedItem('email') as HTMLInputElement).value;
+    const password = (form.elements.namedItem('password') as HTMLInputElement).value;
+    void flow.submit(email, password);
   });
 </script>

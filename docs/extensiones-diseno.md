@@ -9,7 +9,7 @@ Decisiones aprobadas que interpretan o precisan el documento académico y que a�
 | HU-004, HU-008, HU-011, HU-012, HU-014 | Las cuotas/cargos mensuales forman parte del modelo financiero; los saldos se calculan a partir de cargos y pagos. |
 | HU-010 | El "pago electrónico demo/sandbox" se implementa como una simulación interna del backend, sin pasarela externa. |
 | HU-017 y demás HU con notificaciones | Correo solo en los flujos definidos por los requisitos; Mailpit en desarrollo. |
-| HU-003, HU-019, HU-007 | El administrador registra e invita (HU-003); el residente activa su cuenta con el enlace (HU-019); el residente inicia sesión en HU-007. Ver detalle. |
+| HU-003, HU-019, HU-007 | El administrador registra e invita (HU-003); el residente activa su cuenta con el enlace (HU-019); el residente inicia sesión con el login único (HU-007). Ver detalle. |
 | HU-013 | Una única copropiedad (Urbanización San Joaquín) con la estructura física Bloque → Torre → Apartamento; la unidad residencial es el apartamento y su número es único dentro de su torre (ver detalle). |
 
 ## HU-001 — Registro de administrador (detalle)
@@ -29,7 +29,7 @@ Decisiones aprobadas que interpretan o precisan el documento académico y que a�
 
 | Tema | Decisión |
 |---|---|
-| Login único | `POST /api/v1/auth/login` es el único inicio de sesión para todos los roles y el backend determina el rol. Mientras HU-007 no esté implementada, solo el rol ADMINISTRADOR obtiene sesión; un residente recibe la misma respuesta genérica que cualquier fallo. |
+| Login único | `POST /api/v1/auth/login` es el único inicio de sesión para todos los roles y el backend determina el rol. Desde HU-007 admite ADMINISTRADOR y RESIDENTE (ver HU-007). |
 | Respuesta indistinguible | Correo inexistente, contraseña incorrecta, cuenta deshabilitada, pendiente de activación o eliminada, y rol no permitido responden igual: 401 "Correo electrónico o contraseña no válidos.". Si el correo no existe se verifica contra un hash ficticio para igualar el tiempo de respuesta. El motivo real solo queda en `audit_logs`. |
 | Sesión | Guardada en la tabla `sessions`. La cookie `softph_session` (HttpOnly, SameSite=Lax, Path=/, Secure configurable) contiene solo un token aleatorio de 256 bits; la base de datos guarda solo su SHA-256. Vence a las 8 horas o tras 30 minutos de inactividad (configurable en `.env`). Un nuevo login revoca la sesión previa de la cookie. Deshabilitar o eliminar la cuenta invalida sus sesiones. |
 | CSRF | Token derivado: HMAC-SHA256 del token de sesión (no se almacena). Se exige junto con la comprobación de `Origin` en las modificaciones con sesión (hoy, el logout). El login solo exige `Origin`. |
@@ -97,7 +97,7 @@ Decisiones aprobadas que interpretan o precisan el documento académico y que a�
 | Tema | Decisión |
 |---|---|
 | Reparto (T-1) | **HU-003 = invitación** (administrador), **HU-019 = activación** (residente), **HU-007 = inicio de sesión del residente**. Los criterios 1 a 3 de HU-019 (formulario, validación y enlace único) describen la parte del administrador y se cumplen con HU-003. HU-019 no crea invitaciones, no envía correos y no crea usuarios. |
-| Criterio 6 y HU-007 (L-1) | La activación deja la cuenta `ACTIVE`, pero **no crea sesión** ni amplía el login: `LOGIN_ALLOWED_ROLES` sigue solo con ADMINISTRADOR hasta HU-007. La pantalla final dice "Tu cuenta está activa" sin enlace al login. "Permitirle iniciar sesión" (6.2) queda pendiente de HU-007 y así consta en la matriz. |
+| Criterio 6 y HU-007 (L-1) | La activación deja la cuenta `ACTIVE` y **no crea sesión**: el residente inicia sesión con el login único, habilitado para residentes en HU-007. Así, "permitirle iniciar sesión" (6.2) se cumple con HU-007; la pantalla final de la activación enlaza al login. |
 | Sin migración | `resident_invitations`, `resident_units` y `users` (migraciones `633f6e19d008` y `4cfaeb7a0be8`) ya tienen todo lo necesario (`used_at`, CHECK `USED ⇔ used_at`, `document_number` UNIQUE, CHECK `active_has_password`, marcadores de residencia activa). Las acciones de auditoría nuevas no cambian el esquema (`audit_logs.action` es texto libre). |
 | Página `/activate-account` | Pública. Lee `#token=` del fragmento, lo **retira de inmediato** de la barra de direcciones con `history.replaceState` (también si es inválido) y lo conserva solo en memoria: nunca en `localStorage`, `sessionStorage`, cookies ni en el HTML (el servidor nunca lo recibe en la URL). Cabeceras `Cache-Control: no-store` y `Referrer-Policy: no-referrer`. Estados: verificando, válida (datos de la invitación no editables + formulario), inválida, vencida, utilizada, activando, activada y error. |
 | Endpoints públicos | `POST /api/v1/resident-invitations/verify {token}` y `POST /api/v1/resident-invitations/activate {token, document_number, phone, password, password_confirmation}`. Sin sesión y sin token CSRF (no hay sesión): exigen `Origin` (todo el router) y el token de un solo uso **solo en el cuerpo**. `extra="forbid"`: no aceptan `user_id`, `unit_id`, `invitation_id` ni `email`; usuario y apartamento salen siempre de la invitación encontrada por `SHA-256(token)`. Respuestas con `no-store`; `verify` devuelve solo `email`, `full_name`, `unit_code` y `expires_at`. |
@@ -107,6 +107,18 @@ Decisiones aprobadas que interpretan o precisan el documento académico y que a�
 | Vencimiento | Al detectarlo en `verify` o `activate`, una invitación `PENDING` vencida pasa a `EXPIRED` (nunca vuelve a `PENDING`) y se audita `INVITATION_EXPIRED` (sin actor). La administración puede reinvitar (HU-003). |
 | Auditoría | `RESIDENT_ACTIVATED` (actor y entidad: el residente; `{invitation_id, unit_id}`), `INVITATION_EXPIRED` (`{invitation_id}`) e `INVITATION_REJECTED` en `activate` con un motivo seguro: `invalid`, `expired`, `used`, `user_not_pending` o `unit_not_available`. Nunca el token, su hash, la contraseña ni su hash. `verify` no registra rechazos (solo lee). |
 | Correo | HU-019 no envía correos: el enlace lo envió HU-003. |
+
+## HU-007 — Inicio de sesión del residente (detalle)
+
+| Tema | Decisión |
+|---|---|
+| Reutilización de HU-002 | El residente usa el **mismo** login: `POST /api/v1/auth/login`, `GET /api/v1/auth/session` y `POST /api/v1/auth/logout`; la misma tabla `sessions` y cookie `softph_session` (HttpOnly, SameSite=Lax, Secure según configuración, 8 h absolutas y 30 min de inactividad); `normalize_email`; Argon2id fuera del bucle de eventos (`verify_password_async`) con hash ficticio para correos inexistentes; el control de intentos `login_throttles` (5 fallos en 15 min → 15 min de bloqueo, por correo y sin distinguir el rol); y las acciones de auditoría `LOGIN_SUCCEEDED`, `LOGIN_FAILED`, `LOGIN_LOCKED` y `LOGOUT` (el rol se deduce del usuario auditado). No hay endpoint, tabla, migración ni mecanismo nuevo. |
+| Cambio en el backend | `LOGIN_ALLOWED_ROLES` pasa a `{ADMINISTRADOR, RESIDENTE}`. Solo inician sesión cuentas `ACTIVE`, no eliminadas y con contraseña; un residente es `ACTIVE` únicamente tras activar su cuenta (HU-019). No se exige además una residencia activa: HU-019 crea la cuenta activa y la residencia en la misma transacción, y aún no existe ningún flujo que termine una residencia (HU-015); si en el futuro se requiere, se decidirá en esa HU. |
+| Respuesta genérica | Correo inexistente, contraseña incorrecta, pendiente de activación, deshabilitado o eliminado: 401 `INVALID_CREDENTIALS` "Correo electrónico o contraseña no válidos." (el mensaje existente de HU-002, equivalente a "las credenciales ingresadas no son válidas"). El motivo real solo queda en `audit_logs`. |
+| Rol y destino | El rol lo decide siempre el backend (el login ignora cualquier `role` enviado por el cliente). El frontend elige el destino con el rol devuelto: ADMINISTRADOR → `/admin`, RESIDENTE → `/resident` (`frontend/src/lib/auth/roles.ts`). El middleware SSR protege `/admin` para ADMINISTRADOR y `/resident` para RESIDENTE; con otro rol muestra "Acceso no autorizado" (403). La autorización real sigue en el backend (`require_roles`): un residente recibe 403 en todos los endpoints de administración. |
+| Panel del residente | `/resident` es un panel principal mínimo (saludo y cierre de sesión), igual que el `/admin` de HU-002. Sus funciones (estado de cuenta, pagos, feedback) las añaden sus propias HU. |
+| Recuperación (dependencia de HU-016) | El login (para ambos roles) enlaza "¿Olvidaste tu contraseña?" a `/forgot-password`, una página informativa: no pide datos, no genera tokens, no envía correos ni cambia contraseñas. El proceso completo es HU-016; también cubrirá la parte pendiente del criterio 3 de HU-002. |
+| Formulario | Mismo diseño que el login de HU-002, con estado de carga ("Ingresando…"), envío doble bloqueado y el campo de contraseña vaciado tras un fallo. La contraseña nunca se guarda en el estado ni en el almacenamiento del navegador; la sesión la gestiona solo la cookie HttpOnly. |
 
 ## Desviaciones temporales del entorno
 

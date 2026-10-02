@@ -39,6 +39,7 @@ frontend/src/
 ## Autenticación y páginas protegidas
 
 - Existe una única página de login para todos los roles. Tras autenticarse, la redirección depende del rol que devuelve el backend.
+- Áreas por rol (HU-007): `/admin/*` solo ADMINISTRADOR y `/resident/*` solo RESIDENTE. Los destinos y las áreas protegidas se definen en un único lugar (`src/lib/auth/roles.ts`), que usan el login y el middleware; las páginas nuevas de cada rol van bajo su área.
 - El middleware valida la sesión consultando al backend en cada petición a una página protegida; si no es válida, redirige al login.
 - La restricción de páginas por rol en el middleware mejora la navegación, pero la autorización real la aplica el backend en cada endpoint.
 - La sesión vive en una cookie HttpOnly gestionada por el backend. No leer ni guardar tokens de sesión en JavaScript, `localStorage` ni `sessionStorage`.

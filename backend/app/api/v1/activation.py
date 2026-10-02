@@ -3,7 +3,7 @@
 Both routes are anonymous state-changing requests: they require a valid
 Origin (checked for the whole router) and the one-time invitation token in
 the JSON body (never in the URL). There is no session, so there is no CSRF
-token. No session is created on activation (login is HU-007).
+token. No session is created on activation: the resident then logs in (HU-007).
 """
 
 from fastapi import APIRouter, Depends, Request, Response

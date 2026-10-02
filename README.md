@@ -111,13 +111,19 @@ cd backend
 - Si ya existe un administrador activo, el comando rechaza la operación.
 - Códigos de salida: `0` creado, `1` datos inválidos o conflicto, `2` sin terminal interactiva o sin conexión a la base de datos.
 
-## Inicio de sesión (HU-002)
+## Inicio de sesión (HU-002, HU-007)
 
-Con backend y frontend en marcha, abre `http://localhost:4321/login` e ingresa con el administrador creado con `create-admin`. El administrador llega al panel `/admin`; "Cerrar sesión" invalida la sesión.
+Con backend y frontend en marcha, abre `http://localhost:4321/login`. Es el mismo formulario para todos los roles y el backend decide el rol:
+
+- el administrador (creado con `create-admin`) llega al panel `/admin`;
+- el residente (con la cuenta activada en HU-019) llega a su panel `/resident`.
+
+Cada área solo admite su rol (con otro rol se muestra "Acceso no autorizado"), y la API rechaza con 403 las operaciones de otro rol. "Cerrar sesión" invalida la sesión.
 
 - La sesión se guarda en MySQL; la cookie `softph_session` (HttpOnly) solo contiene un identificador aleatorio.
 - Tras 5 intentos fallidos en 15 minutos, el acceso con ese correo se bloquea 15 minutos.
-- Pendiente: solicitar el restablecimiento de contraseña tras el bloqueo (criterio 3 de HU-002, ver `docs/historias-usuario/HU-002.md`).
+- Credenciales incorrectas o cuentas no activas reciben siempre el mismo mensaje genérico.
+- "¿Olvidaste tu contraseña?" lleva a `/forgot-password`, que por ahora solo informa: la recuperación de contraseña es HU-016 (pendiente; también cubrirá el criterio 3 de HU-002).
 
 | Endpoint | Uso |
 |---|---|
@@ -187,7 +193,7 @@ El residente abre el enlace del correo (`/activate-account#token=…`). La pági
 
 Estados de la página: verificando, válida (formulario), inválida, vencida, utilizada, activando, activada y error. Un enlace vencido no permite activar; la administración puede enviar una nueva invitación.
 
-**La activación no inicia sesión.** El inicio de sesión de residentes es HU-007 y aún no está implementado: hasta entonces el login solo admite administradores.
+**La activación no inicia sesión:** al terminar, el residente entra con su correo y su nueva contraseña en `/login` (HU-007).
 
 | Endpoint | Uso |
 |---|---|

@@ -99,7 +99,9 @@ FAILURE_CASES: list[tuple[str, dict[str, Any], dict[str, Any], str]] = [
     ("disabled", {"status": UserStatus.DISABLED}, {}, "inactive"),
     ("pending-activation", {"status": UserStatus.PENDING_ACTIVATION, "password": None}, {}, "inactive"),
     ("soft-deleted", {"deleted": True, "status": UserStatus.DISABLED}, {}, "deleted"),
-    ("resident", {"role": UserRole.RESIDENTE}, {}, "role_not_allowed"),
+    # Until HU-007 an ACTIVE resident with the right password was rejected here
+    # ("role_not_allowed"). HU-007 allows residents: see test_resident_login.py.
+    ("pending-resident", {"role": UserRole.RESIDENTE, "status": UserStatus.PENDING_ACTIVATION, "password": None}, {}, "inactive"),
 ]
 
 

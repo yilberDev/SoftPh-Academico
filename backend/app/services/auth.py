@@ -1,4 +1,9 @@
-"""Login and logout (HU-002)."""
+"""Login and logout (HU-002 administrator, HU-007 resident).
+
+One login for every role: the backend decides the role and the frontend only
+uses it to choose the home page. Every failure (unknown email, wrong password,
+pending activation, disabled, deleted) gives the same answer.
+"""
 
 import math
 from dataclasses import dataclass
@@ -26,8 +31,10 @@ from app.services.login_throttle import (
 )
 from app.services.sessions import AuthContext, create_session, revoke_session_token
 
-# Roles that may obtain a session. RESIDENTE is added with HU-007.
-LOGIN_ALLOWED_ROLES = frozenset({UserRole.ADMINISTRADOR})
+# Roles that may obtain a session (HU-002: ADMINISTRADOR; HU-007: RESIDENTE).
+# Only ACTIVE, non-deleted accounts with a password log in: a resident becomes
+# ACTIVE when the account is activated (HU-019), together with the residence.
+LOGIN_ALLOWED_ROLES = frozenset({UserRole.ADMINISTRADOR, UserRole.RESIDENTE})
 
 
 @dataclass(frozen=True)

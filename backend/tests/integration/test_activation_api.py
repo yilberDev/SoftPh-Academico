@@ -439,11 +439,17 @@ async def test_activated_unit_is_occupied_and_email_is_registered(flow: Flow) ->
     assert [i["id"] for i in (await client.get(f"{API}/resident-invitations", params={"status": "PENDING"})).json()["items"]] == []
 
 
-async def test_resident_still_cannot_log_in(flow: Flow) -> None:
-    # Resident login is HU-007: LOGIN_ALLOWED_ROLES is unchanged.
+async def test_resident_logs_in_only_after_activation(flow: Flow) -> None:
+    # HU-019 activates the account; HU-007 lets the resident log in with it.
+    # (Before HU-007 this test asserted a 401 even after the activation.)
+    body = {"email": EMAIL, "password": PASSWORD}
+    error(await flow.client.post(f"{API}/auth/login", json=body, headers=flow.origin), 401, "INVALID_CREDENTIALS")
+
     await flow.activate()
-    response = await flow.client.post(f"{API}/auth/login", json={"email": EMAIL, "password": PASSWORD}, headers=flow.origin)
-    error(response, 401, "INVALID_CREDENTIALS")
+    response = await flow.client.post(f"{API}/auth/login", json=body, headers=flow.origin)
+
+    assert response.status_code == 200
+    assert response.json()["user"]["role"] == "RESIDENTE"
 
 
 def sha256(value: str) -> str:

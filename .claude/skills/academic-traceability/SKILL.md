@@ -64,7 +64,7 @@ Estas decisiones interpretan o precisan el documento académico y deben registra
 |---|---|
 | HU-001 | No hay registro público de administradores; el primer administrador se crea con un mecanismo controlado del backend. |
 | HU-002, HU-007, HU-018 | Una única interfaz de login; el backend determina el rol (`ADMINISTRADOR` / `RESIDENTE`). Ambas HU se cumplen con el mismo flujo. |
-| HU-003, HU-019, HU-007 | HU-003 = invitación (administrador); HU-019 = activación de la cuenta (residente, sin crear sesión); HU-007 = inicio de sesión del residente. Los criterios 1–3 de HU-019 se cumplen con HU-003, y su criterio 6.2 ("permitirle iniciar sesión") queda pendiente de HU-007. |
+| HU-003, HU-019, HU-007 | HU-003 = invitación (administrador); HU-019 = activación de la cuenta (residente, sin crear sesión); HU-007 = inicio de sesión del residente con el login único. Los criterios 1–3 de HU-019 se cumplen con HU-003 y su criterio 6.2 con HU-007. La recuperación de contraseña (criterio 3 de HU-007 y de HU-002) es HU-016. |
 | HU-004, HU-008, HU-011, HU-012, HU-014 | Las cuotas/cargos mensuales forman parte del modelo financiero; los saldos se calculan a partir de cargos y pagos. |
 | HU-010 | El "pago electrónico demo/sandbox" se implementa como una **simulación interna** del backend, sin pasarela externa. |
 | HU-017 y demás HU con notificaciones | Correo solo en los flujos definidos por los requisitos; Mailpit en desarrollo. La lista exacta de correos sale de las HU/RF/CU al documentarlas en `docs/`. |

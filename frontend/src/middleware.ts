@@ -1,19 +1,15 @@
 import { defineMiddleware } from 'astro:middleware';
-import { homePathForRole, type UserRole } from './lib/api/auth';
 import { getSession } from './lib/api/session';
+import { homePathForRole, isLoginPage as isLogin, protectedRule } from './lib/auth/roles';
 
-// Protected page prefixes and the roles allowed on them. This only improves
-// navigation: the backend authorizes every API request on its own.
-const PROTECTED_PAGES: { prefix: string; roles: UserRole[] }[] = [{ prefix: '/admin', roles: ['ADMINISTRADOR'] }];
-
-function isUnder(path: string, prefix: string): boolean {
-  return path === prefix || path.startsWith(`${prefix}/`);
-}
+// Protected pages (/admin: ADMINISTRADOR, /resident: RESIDENTE) are defined in
+// lib/auth/roles.ts. This only improves navigation: the backend authorizes
+// every API request on its own.
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const path = context.url.pathname;
-  const rule = PROTECTED_PAGES.find(({ prefix }) => isUnder(path, prefix));
-  const isLoginPage = isUnder(path, '/login');
+  const rule = protectedRule(path);
+  const isLoginPage = isLogin(path);
 
   if (!rule && !isLoginPage) {
     return next();

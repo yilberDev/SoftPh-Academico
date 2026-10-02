@@ -15,7 +15,7 @@ found by SHA-256(token), never from the request.
                  resident_units row + invitation USED + RESIDENT_ACTIVATED.
                  Any failure rolls back everything.
 
-No session is created: the resident logs in with HU-007. Rejections are
+No session is created: the resident then logs in with the single login (HU-007). Rejections are
 audited as INVITATION_REJECTED with a safe reason only; the token, its hash
 and the password are never logged, audited or returned.
 """

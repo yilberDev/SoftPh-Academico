@@ -76,6 +76,6 @@ class ResidentActivation(BaseModel):
 
 
 class ActivationResult(BaseModel):
-    """The account is ACTIVE. No session is created (login is HU-007)."""
+    """The account is ACTIVE. No session is created: the resident then logs in (HU-007)."""
 
     status: Literal["ACTIVATED"] = "ACTIVATED"

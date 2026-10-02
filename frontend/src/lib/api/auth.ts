@@ -1,6 +1,7 @@
 import { apiFetch } from './client';
+import type { UserRole } from '../auth/roles';
 
-export type UserRole = 'ADMINISTRADOR' | 'RESIDENTE';
+export { homePathForRole, type UserRole } from '../auth/roles';
 
 export interface AuthenticatedUser {
   id: number;
@@ -14,16 +15,7 @@ export interface SessionInfo {
   csrf_token: string;
 }
 
-/** Home page for each role. RESIDENTE is added with HU-007. */
-const HOME_BY_ROLE: Partial<Record<UserRole, string>> = {
-  ADMINISTRADOR: '/admin'
-};
-
-export function homePathForRole(role: UserRole): string {
-  return HOME_BY_ROLE[role] ?? '/';
-}
-
-/** Single login for every role; the backend decides the role (HU-002). */
+/** Single login for every role; the backend decides the role (HU-002, HU-007). */
 export function login(email: string, password: string): Promise<SessionInfo> {
   return apiFetch<SessionInfo>('/auth/login', {
     method: 'POST',
