@@ -62,6 +62,8 @@ ACCESS_POLICY: dict[tuple[str, str], Access] = {
     ("GET", "/resident-invitations"): Access.ADMINISTRADOR,
     ("POST", "/resident-invitations"): Access.ADMINISTRADOR,
     ("POST", "/resident-invitations/{invitation_id}/resend"): Access.ADMINISTRADOR,
+    # HU-006: registered residents (read-only).
+    ("GET", "/admin/residents"): Access.ADMINISTRADOR,
     # HU-013: physical structure.
     ("GET", "/blocks"): Access.ADMINISTRADOR,
     ("POST", "/blocks"): Access.ADMINISTRADOR,
@@ -228,6 +230,7 @@ async def test_administrator_reaches_every_administrator_route(
     })
     await ok("GET", "/resident-invitations", "/resident-invitations?status=PENDING", 200)
     await ok("POST", "/resident-invitations/{invitation_id}/resend", f"/resident-invitations/{invitation['id']}/resend", 200)
+    await ok("GET", "/admin/residents", "/admin/residents?search=Laura&status=ACTIVE&sort_by=unit&page=1&page_size=10", 200)
     spare = await ok("POST", "/towers/{tower_id}/units", f"/towers/{tower['id']}/units", 201, {"number": 103})
     await ok("DELETE", "/units/{unit_id}", f"/units/{spare['id']}?version={spare['version']}", 204)
     other_block = await ok("POST", "/blocks", "/blocks", 201, {"number": 9})

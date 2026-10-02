@@ -1,0 +1,277 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import AdminHeader from '../../../components/AdminHeader.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import {
+  LOADING_MESSAGE,
+  PAGE_SIZES,
+  SEARCH_MAX_LENGTH,
+  STATUS_LABELS,
+  parseQuery
+} from '../../../lib/residents/residents-list';
+
+// HU-006. The middleware only renders /admin pages for a valid ADMINISTRADOR
+// session; the data is loaded by the browser from GET /api/v1/admin/residents,
+// which authorizes the request on its own (HU-018).
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const initial = parseQuery(Astro.url.searchParams);
+
+const columns = [
+  { field: 'name', label: 'Nombre' },
+  { field: 'document', label: 'Documento' },
+  { field: 'unit', label: 'Unidad' },
+  { field: 'phone', label: 'Teléfono' },
+  { field: 'email', label: 'Correo' },
+  { field: 'status', label: 'Estado' }
+] as const;
+
+const inputClass =
+  'mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30';
+const labelClass = 'block text-sm font-medium text-slate-700';
+const secondaryButton =
+  'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-50';
+---
+
+<Layout title="Residentes — SoftPh-Académico">
+  <AdminHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-5xl space-y-6 px-4 py-8" data-residents-page>
+    <div class="flex flex-wrap items-end justify-between gap-4">
+      <div class="space-y-2">
+        <Breadcrumbs items={[{ label: 'Residentes' }]} />
+        <h1 class="text-2xl font-semibold tracking-tight">Residentes</h1>
+        <p class="text-slate-600">Residentes registrados en la Urbanización San Joaquín.</p>
+      </div>
+      <a
+        href="/admin/residents/invite"
+        class="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+      >
+        Invitar residente
+      </a>
+    </div>
+
+    <form data-filters class="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-[1fr_12rem]" role="search">
+      <div>
+        <label for="residents-search" class={labelClass}>Buscar por nombre o documento</label>
+        <input
+          id="residents-search"
+          name="search"
+          type="search"
+          autocomplete="off"
+          maxlength={SEARCH_MAX_LENGTH}
+          value={initial.search}
+          placeholder="Ej.: Laura o 1012345678"
+          class={inputClass}
+        />
+      </div>
+      <div>
+        <label for="residents-status" class={labelClass}>Estado</label>
+        <select id="residents-status" name="status" class={inputClass}>
+          <option value="" selected={initial.status === ''}>Todos</option>
+          <option value="ACTIVE" selected={initial.status === 'ACTIVE'}>{STATUS_LABELS.ACTIVE}</option>
+          <option value="INACTIVE" selected={initial.status === 'INACTIVE'}>{STATUS_LABELS.INACTIVE}</option>
+        </select>
+      </div>
+    </form>
+
+    <div data-alert role="alert" class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+      <p data-alert-message></p>
+      <button type="button" data-retry class={`mt-3 ${secondaryButton}`}>Reintentar</button>
+    </div>
+
+    <section aria-labelledby="residents-table-title" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <h2 id="residents-table-title" class="sr-only">Listado de residentes</h2>
+      <p data-status-line class="border-b border-slate-200 px-4 py-3 text-sm text-slate-600" aria-live="polite">
+        {LOADING_MESSAGE}
+      </p>
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[56rem] divide-y divide-slate-200 text-left text-sm" data-table aria-busy="true">
+          <thead class="bg-slate-50 text-slate-700">
+            <tr>
+              {
+                columns.map(({ field, label }) => (
+                  <th scope="col" class="whitespace-nowrap px-4 py-2 font-medium" data-sort-header={field} aria-sort="none">
+                    <button
+                      type="button"
+                      data-sort={field}
+                      class="inline-flex items-center gap-1 rounded hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+                    >
+                      {label}
+                      <span data-sort-icon aria-hidden="true" class="text-slate-400">↕</span>
+                    </button>
+                  </th>
+                ))
+              }
+            </tr>
+          </thead>
+          <tbody data-rows class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+      <p data-message class="hidden px-4 py-10 text-center text-slate-600"></p>
+      <div data-loading class="space-y-3 px-4 py-6" aria-hidden="true">
+        <div class="h-4 w-3/4 animate-pulse rounded bg-slate-100"></div>
+        <div class="h-4 w-2/3 animate-pulse rounded bg-slate-100"></div>
+        <div class="h-4 w-1/2 animate-pulse rounded bg-slate-100"></div>
+      </div>
+      <nav
+        data-pagination
+        aria-label="Paginación de residentes"
+        class="hidden flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-sm"
+      >
+        <div class="flex items-center gap-2">
+          <label for="residents-page-size" class="text-slate-600">Por página</label>
+          <select id="residents-page-size" data-page-size class="rounded-lg border border-slate-300 bg-white px-2 py-1">
+            {PAGE_SIZES.map((size) => <option value={size} selected={initial.pageSize === size}>{size}</option>)}
+          </select>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" data-page="prev" class={secondaryButton}>Anterior</button>
+          <span data-page-info class="whitespace-nowrap text-slate-600"></span>
+          <button type="button" data-page="next" class={secondaryButton}>Siguiente</button>
+        </div>
+      </nav>
+    </section>
+  </main>
+</Layout>
+
+<script>
+  import { listResidents, type Resident, type ResidentSortField, type ResidentStatus } from '../../../lib/api/residents';
+  import {
+    EMPTY_MESSAGE,
+    LOADING_MESSAGE,
+    NO_RESULTS_MESSAGE,
+    STATUS_LABELS,
+    createResidentsList,
+    parseQuery,
+    rangeText,
+    type ListState
+  } from '../../../lib/residents/residents-list';
+
+  const page = document.querySelector<HTMLElement>('[data-residents-page]')!;
+  const form = page.querySelector<HTMLFormElement>('[data-filters]')!;
+  const searchInput = form.querySelector<HTMLInputElement>('input[name="search"]')!;
+  const statusSelect = form.querySelector<HTMLSelectElement>('select[name="status"]')!;
+  const table = page.querySelector<HTMLTableElement>('[data-table]')!;
+  const rows = page.querySelector<HTMLElement>('[data-rows]')!;
+  const statusLine = page.querySelector<HTMLElement>('[data-status-line]')!;
+  const message = page.querySelector<HTMLElement>('[data-message]')!;
+  const loading = page.querySelector<HTMLElement>('[data-loading]')!;
+  const alert = page.querySelector<HTMLElement>('[data-alert]')!;
+  const pagination = page.querySelector<HTMLElement>('[data-pagination]')!;
+  const pageInfo = page.querySelector<HTMLElement>('[data-page-info]')!;
+  const prev = page.querySelector<HTMLButtonElement>('[data-page="prev"]')!;
+  const next = page.querySelector<HTMLButtonElement>('[data-page="next"]')!;
+  const pageSize = page.querySelector<HTMLSelectElement>('[data-page-size]')!;
+
+  const BADGE = {
+    ACTIVE: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
+    INACTIVE: 'bg-slate-100 text-slate-700 ring-slate-300'
+  } as const;
+
+  function cell(text: string, className: string, header = false): HTMLElement {
+    const element = document.createElement(header ? 'th' : 'td');
+    if (header) element.setAttribute('scope', 'row');
+    element.className = className;
+    element.textContent = text;
+    return element;
+  }
+
+  function row(resident: Resident): HTMLTableRowElement {
+    const tr = document.createElement('tr');
+    tr.append(
+      cell(resident.full_name, 'min-w-[12rem] px-4 py-3 font-medium text-slate-900', true),
+      cell(resident.document_number ?? '—', 'whitespace-nowrap px-4 py-3 font-mono text-slate-700'),
+      cell(resident.unit.label, 'whitespace-nowrap px-4 py-3 font-mono text-slate-700'),
+      cell(resident.phone ?? '—', 'whitespace-nowrap px-4 py-3 text-slate-700'),
+      cell(resident.email, 'whitespace-nowrap px-4 py-3 text-slate-700')
+    );
+    const status = document.createElement('td');
+    status.className = 'px-4 py-3';
+    const badge = document.createElement('span');
+    badge.className = `inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${BADGE[resident.status]}`;
+    badge.textContent = STATUS_LABELS[resident.status];
+    status.append(badge);
+    tr.append(status);
+    return tr;
+  }
+
+  function show(element: HTMLElement, visible: boolean): void {
+    element.classList.toggle('hidden', !visible);
+  }
+
+  function showPagination(visible: boolean): void {
+    pagination.classList.toggle('hidden', !visible);
+    pagination.classList.toggle('flex', visible);
+  }
+
+  function render(state: ListState): void {
+    const { query } = state;
+    page.querySelectorAll<HTMLElement>('[data-sort-header]').forEach((header) => {
+      const active = header.dataset.sortHeader === query.sortBy;
+      header.setAttribute('aria-sort', active ? (query.sortOrder === 'asc' ? 'ascending' : 'descending') : 'none');
+      header.querySelector('[data-sort-icon]')!.textContent = active ? (query.sortOrder === 'asc' ? '↑' : '↓') : '↕';
+    });
+    table.setAttribute('aria-busy', String(state.kind === 'loading'));
+    show(loading, state.kind === 'loading');
+    show(alert, state.kind === 'error');
+    show(message, state.kind === 'empty' || state.kind === 'no-results');
+    if (state.kind !== 'loading') rows.replaceChildren();
+
+    switch (state.kind) {
+      case 'loading':
+        statusLine.textContent = LOADING_MESSAGE;
+        rows.replaceChildren();
+        showPagination(false);
+        break;
+      case 'results': {
+        const { page: result } = state;
+        rows.replaceChildren(...result.items.map(row));
+        statusLine.textContent = rangeText(result);
+        pageInfo.textContent = `Página ${result.page} de ${result.total_pages}`;
+        prev.disabled = result.page <= 1;
+        next.disabled = result.page >= result.total_pages;
+        pageSize.value = String(result.page_size);
+        showPagination(true);
+        break;
+      }
+      case 'empty':
+      case 'no-results':
+        statusLine.textContent = '0 residentes';
+        message.textContent = state.kind === 'empty' ? EMPTY_MESSAGE : NO_RESULTS_MESSAGE;
+        showPagination(false);
+        break;
+      case 'error':
+        statusLine.textContent = 'No se pudo cargar el listado.';
+        alert.querySelector('[data-alert-message]')!.textContent = state.message;
+        showPagination(false);
+        break;
+    }
+  }
+
+  const list = createResidentsList(parseQuery(new URLSearchParams(window.location.search)), {
+    load: listResidents,
+    render,
+    remember: (queryString) =>
+      history.replaceState(null, '', queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname),
+    navigate: (path) => window.location.assign(path)
+  });
+
+  form.addEventListener('submit', (event) => event.preventDefault());
+  searchInput.addEventListener('input', () => list.search(searchInput.value));
+  statusSelect.addEventListener('change', () => list.filter(statusSelect.value as ResidentStatus | ''));
+  page.querySelectorAll<HTMLButtonElement>('[data-sort]').forEach((button) => {
+    button.addEventListener('click', () => list.sort(button.dataset.sort as ResidentSortField));
+  });
+  prev.addEventListener('click', () => list.goToPage(list.query.page - 1));
+  next.addEventListener('click', () => list.goToPage(list.query.page + 1));
+  pageSize.addEventListener('change', () => list.setPageSize(Number(pageSize.value)));
+  page.querySelector('[data-retry]')!.addEventListener('click', () => list.refresh());
+  // Criterion 4: coming back to the tab (or to the page from history) shows the latest data.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void list.refresh();
+  });
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) void list.refresh();
+  });
+
+  void list.start();
+</script>

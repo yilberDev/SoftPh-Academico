@@ -14,7 +14,8 @@ const links = [
     label: 'Unidades residenciales',
     active: path.startsWith('/admin/blocks') || path.startsWith('/admin/towers')
   },
-  { href: '/admin/residents/invite', label: 'Invitar residente', active: path.startsWith('/admin/residents') }
+  { href: '/admin/residents', label: 'Residentes', active: path === '/admin/residents' || path === '/admin/residents/' },
+  { href: '/admin/residents/invite', label: 'Invitar residente', active: path.startsWith('/admin/residents/invite') }
 ];
 ---
 

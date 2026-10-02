@@ -52,7 +52,7 @@ const badgeClass = {
   <AdminHeader csrfToken={csrfToken} />
   <main class="mx-auto max-w-5xl space-y-8 px-4 py-8" data-invite-page data-csrf-token={csrfToken}>
     <div class="space-y-2">
-      <Breadcrumbs items={[{ label: 'Residentes' }, { label: 'Invitar residente' }]} />
+      <Breadcrumbs items={[{ label: 'Residentes', href: '/admin/residents' }, { label: 'Invitar residente' }]} />
       <h1 class="text-2xl font-semibold tracking-tight">Invitar residente</h1>
       <p class="text-slate-600">
         Registra al residente y asígnale un apartamento disponible. Recibirá un enlace en su correo para activar su

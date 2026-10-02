@@ -32,7 +32,7 @@ async function access(path: string, answer: SessionInfo | ApiError | Error): Pro
   return decidePageAccess(path, endpoint(answer).loadSession);
 }
 
-const ADMIN_PAGES = ['/admin', '/admin/', '/admin/blocks', '/admin/blocks/3', '/admin/towers/9', '/admin/residents/invite'];
+const ADMIN_PAGES = ['/admin', '/admin/', '/admin/residents', '/admin/blocks', '/admin/blocks/3', '/admin/towers/9', '/admin/residents/invite'];
 const RESIDENT_PAGES = ['/resident', '/resident/', '/resident/anything'];
 const ALLOWED = (role: UserRole): PageAccess => ({ kind: 'allowed', session: session(role) });
 const TO_LOGIN: PageAccess = { kind: 'redirect', location: '/login' };
