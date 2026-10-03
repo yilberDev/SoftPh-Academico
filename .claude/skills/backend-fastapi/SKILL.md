@@ -83,6 +83,13 @@ Aplicar las reglas de la skill `security`. En resumen:
 - Un fallo de correo no debe dejar datos inconsistentes; registrar el error en el servidor sin datos sensibles.
 - Patrón aprobado (E-1, HU-003): confirmar los datos (COMMIT) **antes** de enviar; nunca enviar SMTP dentro de una transacción ni con bloqueos abiertos; registrar el resultado (`SENT`/`FAILED`) en otra transacción y permitir el reenvío. Usar `MailSender` de `services/mail.py` (dependencia `get_mail_sender`, que las pruebas sustituyen por un emisor falso). En endpoints anónimos donde el tiempo de respuesta podría revelar si una cuenta existe (HU-016), el envío y su registro van en `BackgroundTasks`, con su propia sesión (`get_session_factory`).
 
+## Recibos y pagos (HU-004)
+
+- Los PDF se generan en el servidor con reportlab (`app/services/receipts.py`), a partir de los datos guardados con el pago (snapshots), fuera del bucle de eventos y **después** del COMMIT; un fallo de PDF o correo nunca deshace el pago.
+- `OutgoingEmail` admite adjuntos (`Attachment`); el contenido nunca se registra.
+- Dinero: `Decimal` y `app/core/money.py` (`format_cop`); los montos con más de 2 decimales se rechazan, nunca se redondean.
+- Fechas de calendario del usuario: `app/core/clock.bogota_today()`.
+
 ## Pago electrónico simulado (HU-010)
 
 - Es una simulación interna implementada en `services/`: no llama a ninguna pasarela externa ni a su sandbox, ni usa SDK o credenciales de terceros.

@@ -16,10 +16,18 @@ from app.core.config import Settings, get_settings
 
 
 @dataclass(frozen=True)
+class Attachment:
+    filename: str
+    content_type: str  # e.g. "application/pdf"
+    data: bytes
+
+
+@dataclass(frozen=True)
 class OutgoingEmail:
     to: str
     subject: str
     body: str  # plain text
+    attachments: tuple[Attachment, ...] = ()
 
 
 class MailSender(Protocol):
@@ -45,6 +53,9 @@ class SmtpMailSender:
         message["To"] = email.to
         message["Subject"] = email.subject
         message.set_content(email.body)
+        for attachment in email.attachments:
+            maintype, subtype = attachment.content_type.split("/", 1)
+            message.add_attachment(attachment.data, maintype=maintype, subtype=subtype, filename=attachment.filename)
         # The timeout applies to the connection and to every SMTP command.
         with smtplib.SMTP(self._host, self._port, timeout=self._timeout) as smtp:
             smtp.send_message(message)

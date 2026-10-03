@@ -61,6 +61,8 @@ Requieren pruebas de comportamiento correcto, de errores y de control de acceso 
 - estados de cuenta (cálculo de saldos a partir de cargos y pagos);
 - operaciones administrativas.
 
+Las operaciones financieras (HU-004) requieren pruebas concurrentes reales (`committed_session_factory`) que demuestren que nunca se aplica más de lo debido ni hay interbloqueos con las operaciones de HU-013/HU-019.
+
 Toda ruta nueva se clasifica en `ACCESS_POLICY` (`backend/tests/integration/test_access_control.py`, HU-018), que prueba 401 sin sesión, 403 con otro rol y la ausencia de rutas sin clasificar; los endpoints de residente añaden pruebas de recurso ajeno.
 
 ## Backend: verificar como mínimo

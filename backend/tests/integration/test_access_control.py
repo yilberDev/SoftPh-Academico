@@ -64,6 +64,9 @@ ACCESS_POLICY: dict[tuple[str, str], Access] = {
     ("POST", "/resident-invitations/{invitation_id}/resend"): Access.ADMINISTRADOR,
     # HU-006: registered residents (read-only).
     ("GET", "/admin/residents"): Access.ADMINISTRADOR,
+    # HU-004: manual payments.
+    ("GET", "/admin/payments"): Access.ADMINISTRADOR,
+    ("POST", "/admin/payments"): Access.ADMINISTRADOR,
     # HU-013: physical structure.
     ("GET", "/blocks"): Access.ADMINISTRADOR,
     ("POST", "/blocks"): Access.ADMINISTRADOR,
@@ -87,6 +90,9 @@ PRIVATE = ROUTES_OF[Access.AUTHENTICATED] + ROUTES_OF[Access.ADMINISTRADOR] + RO
 
 # A complete, valid request for each private route (ids are replaced by real ones where needed).
 BODIES: dict[tuple[str, str], Any] = {
+    ("POST", "/admin/payments"): {
+        "resident_id": 1, "amount": "150000", "method": "CASH", "concept": "MONTHLY_FEE", "payment_date": "2026-01-05",
+    },
     ("POST", "/blocks"): {"number": 1},
     ("PATCH", "/blocks/{block_id}"): {"number": 2, "version": 1},
     ("POST", "/blocks/{block_id}/towers"): {"number": 1},
@@ -231,6 +237,17 @@ async def test_administrator_reaches_every_administrator_route(
     await ok("GET", "/resident-invitations", "/resident-invitations?status=PENDING", 200)
     await ok("POST", "/resident-invitations/{invitation_id}/resend", f"/resident-invitations/{invitation['id']}/resend", 200)
     await ok("GET", "/admin/residents", "/admin/residents?search=Laura&status=ACTIVE&sort_by=unit&page=1&page_size=10", 200)
+    # The invited resident activates the account (HU-019) with the link of the email, then receives a payment.
+    token = re.search(r"#token=([A-Za-z0-9_-]+)", mailer.sent[-1].body).group(1)  # type: ignore[union-attr]
+    activated = await client.post(f"{API}/resident-invitations/activate", headers={"Origin": headers["Origin"]}, json={
+        "token": token, "document_number": "1012345678", "password": "una clave segura 2026",
+        "password_confirmation": "una clave segura 2026"})
+    assert activated.status_code == 200, activated.text
+    resident_id = (await client.get(f"{API}/admin/residents")).json()["items"][0]["id"]
+    await ok("POST", "/admin/payments", "/admin/payments", 201, {
+        "resident_id": resident_id, "amount": "150000", "method": "CASH", "concept": "MONTHLY_FEE",
+        "payment_date": "2026-01-05"})
+    await ok("GET", "/admin/payments", "/admin/payments?date_from=2026-01-01&sort_by=amount&sort_order=asc", 200)
     spare = await ok("POST", "/towers/{tower_id}/units", f"/towers/{tower['id']}/units", 201, {"number": 103})
     await ok("DELETE", "/units/{unit_id}", f"/units/{spare['id']}?version={spare['version']}", 204)
     other_block = await ok("POST", "/blocks", "/blocks", 201, {"number": 9})
@@ -239,7 +256,7 @@ async def test_administrator_reaches_every_administrator_route(
     await ok("DELETE", "/blocks/{block_id}", f"/blocks/{other_block['id']}?version={other_block['version']}", 204)
 
     assert sorted(visited) == ROUTES_OF[Access.ADMINISTRADOR]
-    assert len(mailer.sent) == 2  # invitation + resend
+    assert len(mailer.sent) == 3  # invitation + resend + payment receipt
 
 
 # --- Criteria 2 and 3: the resident only reaches what belongs to the resident ----------------------
@@ -259,7 +276,7 @@ async def test_resident_is_forbidden_on_every_administrator_route(
         "error": {"code": "FORBIDDEN", "message": "No tienes permiso para realizar esta acción.", "details": []}
     }
     # Nothing was read or changed: no rows, no email, no audit entry.
-    for table in ("blocks", "towers", "units", "resident_invitations"):
+    for table in ("blocks", "towers", "units", "resident_invitations", "payments", "payment_allocations"):
         assert await count(db_session, table) == 0
     assert mailer.sent == []
     assert await count(db_session, "audit_logs") == audit_before

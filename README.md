@@ -131,6 +131,25 @@ Cada área solo admite su rol (con otro rol se muestra "Acceso no autorizado"), 
 | `GET /api/v1/auth/session` | Usuario actual y token CSRF |
 | `POST /api/v1/auth/logout` | Cierre de sesión (requiere `Origin` y cabecera `X-CSRF-Token`) |
 
+## Pagos de residentes (HU-004)
+
+En `http://localhost:4321/admin/payments` (solo administrador) se registran los pagos manuales: residente (búsqueda por nombre o documento), monto, método (efectivo, tarjeta o transferencia), concepto (mensualidad, mora, penalización u otro con descripción) y fecha del pago. El backend determina la unidad vigente del residente, aplica el pago a los cargos pendientes de la unidad del más antiguo al más reciente (FIFO) y conserva el excedente como saldo a favor. Después envía el recibo en PDF al correo del residente (Mailpit en desarrollo: `http://localhost:8025`); si el correo falla, el pago queda registrado y se avisa aparte. Debajo está el resumen de pagos, con filtros por residente y fechas, orden y paginación.
+
+No hay dinero real ni pasarelas externas. HU-004 no genera cargos (mensualidades, mora): llegarán con su HU.
+
+| Endpoint | Uso |
+|---|---|
+| `POST /api/v1/admin/payments` | Registra un pago: `{resident_id, amount, method, concept, concept_description, payment_date}` (requiere `Origin` y `X-CSRF-Token`) |
+| `GET /api/v1/admin/payments?page=1&page_size=10&search=&date_from=&date_to=&sort_by=date&sort_order=desc` | Resumen de pagos (`sort_by`: `date`, `resident`, `amount`, `concept`, `method`, `status`) |
+
+## Residentes registrados (HU-006)
+
+En `http://localhost:4321/admin/residents` (solo administrador) se consultan los residentes registrados: nombre, documento, apartamento (`B1-TO2-APTO-104`), teléfono, correo y estado (Activo o Inactivo). Búsqueda por nombre o documento, filtro por estado, orden por columna y paginación, todo resuelto en el servidor. Las opciones quedan en la URL. Solo consulta: la edición de residentes es HU-015.
+
+| Endpoint | Uso |
+|---|---|
+| `GET /api/v1/admin/residents?page=1&page_size=10&search=&status=ACTIVE&sort_by=name&sort_order=asc` | Página de residentes (`status`: `ACTIVE`/`INACTIVE`; `sort_by`: `name`, `document`, `unit`, `phone`, `email`, `status`; `page_size` de 1 a 100) |
+
 ## Unidades residenciales (HU-013)
 
 En el panel de administración, "Unidades residenciales" (`/admin/blocks`) gestiona la estructura **Bloque → Torre → Apartamento** con navegación jerárquica: `/admin/blocks` → `/admin/blocks/[blockId]` (torres) → `/admin/towers/[towerId]` (apartamentos).

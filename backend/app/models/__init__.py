@@ -6,6 +6,15 @@ Base.metadata. Each model is added with the HU that needs it.
 
 from app.db.base import Base
 from app.models.audit_log import AuditAction, AuditLog
+from app.models.finance import (
+    Charge,
+    FinancialConcept,
+    Payment,
+    PaymentAllocation,
+    PaymentMethod,
+    PaymentSource,
+    ReceiptEmailStatus,
+)
 from app.models.invitation import DeliveryStatus, InvitationStatus, ResidentInvitation, ResidentUnit
 from app.models.login_throttle import LoginThrottle
 from app.models.password_reset import PasswordResetToken
@@ -18,10 +27,17 @@ __all__ = [
     "AuditLog",
     "Base",
     "Block",
+    "Charge",
     "DeliveryStatus",
+    "FinancialConcept",
     "InvitationStatus",
     "LoginThrottle",
     "PasswordResetToken",
+    "Payment",
+    "PaymentAllocation",
+    "PaymentMethod",
+    "PaymentSource",
+    "ReceiptEmailStatus",
     "ResidentInvitation",
     "ResidentUnit",
     "Tower",

@@ -280,6 +280,23 @@ async def _lock_unit_path(db: AsyncSession, unit_id: int) -> tuple[Block, Tower,
     return block, tower, unit
 
 
+async def lock_unit_path(db: AsyncSession, unit_id: int, *, tower_id: int, block_id: int) -> tuple[Block, Tower, Unit]:
+    """The structure lock order (block S → tower S → unit X) for other HUs.
+
+    HU-004 payments lock the apartment first, in this same order, so they never
+    form a cycle with HU-013 or HU-019. The parents are known by the caller
+    (read in an earlier transaction; they never change), so the first statement
+    here is a locking read: the consistent reads that follow see everything
+    committed before the apartment lock was granted.
+    """
+    block = await _lock_active(db, Block, block_id, share=True)
+    tower = await _lock_active(db, Tower, tower_id, share=True)
+    unit = await _lock_active(db, Unit, unit_id, share=False)
+    if block is None or tower is None or unit is None or unit.tower_id != tower_id or tower.block_id != block_id:
+        raise UnitNotFoundError()
+    return block, tower, unit
+
+
 async def _has_active_children(db: AsyncSession, model: type[Tower] | type[Unit], parent_filter: Any) -> bool:
     # Locking read: sees children committed after this transaction started.
     found = await db.scalar(

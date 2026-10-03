@@ -1,0 +1,576 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import AdminHeader from '../../../components/AdminHeader.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import {
+  CONCEPT_LABELS,
+  CONCEPTS,
+  DESCRIPTION_MAX_LENGTH,
+  METHOD_LABELS,
+  METHODS,
+  bogotaToday
+} from '../../../lib/payments/payment-form';
+import { LOADING_MESSAGE, PAGE_SIZES, SEARCH_MAX_LENGTH, parseQuery } from '../../../lib/payments/payments-list';
+
+// HU-004. The middleware only renders /admin pages for a valid ADMINISTRADOR
+// session; the API authorizes every request on its own (HU-018).
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const today = bogotaToday();
+const initial = parseQuery(Astro.url.searchParams);
+
+const columns = [
+  { field: 'resident', label: 'Nombre' },
+  { field: 'concept', label: 'Concepto' },
+  { field: 'amount', label: 'Monto' },
+  { field: 'method', label: 'Método' },
+  { field: 'date', label: 'Fecha' },
+  { field: 'status', label: 'Estado' }
+] as const;
+
+const inputClass =
+  'mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30 disabled:bg-slate-100';
+const labelClass = 'block text-sm font-medium text-slate-700';
+const errorClass = 'mt-1 hidden text-sm text-red-700';
+const secondaryButton =
+  'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-50';
+---
+
+<Layout title="Pagos — SoftPh-Académico">
+  <AdminHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-5xl space-y-8 px-4 py-8" data-payments-page data-csrf-token={csrfToken} data-today={today}>
+    <div class="space-y-2">
+      <Breadcrumbs items={[{ label: 'Pagos' }]} />
+      <h1 class="text-2xl font-semibold tracking-tight">Pagos</h1>
+      <p class="text-slate-600">
+        Registra los pagos de administración de los residentes. El sistema los aplica a las obligaciones pendientes de
+        su unidad y envía el recibo en PDF a su correo.
+      </p>
+    </div>
+
+    <section aria-labelledby="payment-form-title" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <h2 id="payment-form-title" class="text-lg font-semibold">Registrar pago</h2>
+
+      <div data-confirmation role="status" class="mt-4 hidden rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+        <p data-confirmation-title class="font-medium text-emerald-900"></p>
+        <dl data-confirmation-lines class="mt-2 grid gap-x-6 gap-y-1 text-sm text-emerald-900 sm:grid-cols-2"></dl>
+      </div>
+      <div data-email-warning role="alert" class="mt-3 hidden rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"></div>
+
+      <form data-payment-form class="mt-4 grid gap-5 sm:grid-cols-2" novalidate>
+        <div data-form-alert role="alert" class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:col-span-2"></div>
+
+        <div class="sm:col-span-2" data-picker>
+          <label for="payment-resident" class={labelClass}>Residente</label>
+          <div data-picker-search>
+            <input
+              id="payment-resident"
+              type="search"
+              autocomplete="off"
+              maxlength={SEARCH_MAX_LENGTH}
+              placeholder="Busca por nombre o documento"
+              aria-describedby="payment-resident-hint"
+              aria-controls="payment-resident-results"
+              class={inputClass}
+            />
+            <p id="payment-resident-hint" class="mt-1 text-sm text-slate-500">Solo residentes registrados con una unidad vigente.</p>
+            <p data-picker-status class="mt-2 hidden text-sm text-slate-600" aria-live="polite"></p>
+            <ul id="payment-resident-results" data-picker-results class="mt-2 hidden divide-y divide-slate-100 rounded-lg border border-slate-200"></ul>
+          </div>
+          <div data-picker-selected class="mt-1 hidden items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <div>
+              <p data-selected-name class="font-medium text-slate-900"></p>
+              <p class="text-sm text-slate-600">Unidad: <span data-selected-unit class="font-mono"></span></p>
+            </div>
+            <button type="button" data-picker-change class={secondaryButton}>Cambiar</button>
+          </div>
+          <p id="payment-resident_id-error" data-error-for="resident_id" class={errorClass}></p>
+        </div>
+
+        <div>
+          <label for="payment-amount" class={labelClass}>Monto</label>
+          <input
+            id="payment-amount"
+            name="amount"
+            type="text"
+            inputmode="decimal"
+            autocomplete="off"
+            maxlength="20"
+            placeholder="150000"
+            aria-describedby="payment-amount-hint"
+            class={inputClass}
+          />
+          <p id="payment-amount-hint" class="mt-1 text-sm text-slate-500">En pesos, sin puntos de miles. Centavos con coma.</p>
+          <p id="payment-amount-error" data-error-for="amount" class={errorClass}></p>
+        </div>
+
+        <div>
+          <label for="payment-date" class={labelClass}>Fecha del pago</label>
+          <input id="payment-date" name="payment_date" type="date" required max={today} value={today} class={inputClass} />
+          <p id="payment-payment_date-error" data-error-for="payment_date" class={errorClass}></p>
+        </div>
+
+        <div>
+          <label for="payment-method" class={labelClass}>Método de pago</label>
+          <select id="payment-method" name="method" required class={inputClass}>
+            <option value="">Selecciona…</option>
+            {METHODS.map((method) => <option value={method}>{METHOD_LABELS[method]}</option>)}
+          </select>
+          <p id="payment-method-error" data-error-for="method" class={errorClass}></p>
+        </div>
+
+        <div>
+          <label for="payment-concept" class={labelClass}>Concepto</label>
+          <select id="payment-concept" name="concept" required class={inputClass}>
+            <option value="">Selecciona…</option>
+            {CONCEPTS.map((concept) => <option value={concept}>{CONCEPT_LABELS[concept]}</option>)}
+          </select>
+          <p id="payment-concept-error" data-error-for="concept" class={errorClass}></p>
+        </div>
+
+        <div class="hidden sm:col-span-2" data-description>
+          <label for="payment-description" class={labelClass}>Descripción del concepto</label>
+          <input
+            id="payment-description"
+            name="concept_description"
+            type="text"
+            autocomplete="off"
+            maxlength={DESCRIPTION_MAX_LENGTH}
+            placeholder="Ej.: Reparación de la puerta del parqueadero"
+            class={inputClass}
+          />
+          <p id="payment-concept_description-error" data-error-for="concept_description" class={errorClass}></p>
+        </div>
+
+        <div class="sm:col-span-2">
+          <button
+            type="submit"
+            class="rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:opacity-60"
+          >
+            Registrar pago
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <section aria-labelledby="payments-table-title" class="space-y-4">
+      <h2 id="payments-table-title" class="text-lg font-semibold">Resumen de pagos</h2>
+      <form data-filters role="search" class="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-[1fr_11rem_11rem]">
+        <div>
+          <label for="filter-resident" class={labelClass}>Residente</label>
+          <input
+            id="filter-resident"
+            type="search"
+            autocomplete="off"
+            maxlength={SEARCH_MAX_LENGTH}
+            value={initial.search}
+            placeholder="Nombre o documento"
+            class={inputClass}
+          />
+        </div>
+        <div>
+          <label for="filter-from" class={labelClass}>Desde</label>
+          <input id="filter-from" type="date" max={today} value={initial.dateFrom} class={inputClass} />
+        </div>
+        <div>
+          <label for="filter-to" class={labelClass}>Hasta</label>
+          <input id="filter-to" type="date" max={today} value={initial.dateTo} class={inputClass} />
+        </div>
+        <p data-filter-error role="alert" class="hidden text-sm text-red-700 sm:col-span-3"></p>
+      </form>
+
+      <div data-alert role="alert" class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <p data-alert-message></p>
+        <button type="button" data-retry class={`mt-3 ${secondaryButton}`}>Reintentar</button>
+      </div>
+
+      <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <p data-status-line class="border-b border-slate-200 px-4 py-3 text-sm text-slate-600" aria-live="polite">
+          {LOADING_MESSAGE}
+        </p>
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[52rem] divide-y divide-slate-200 text-left text-sm" data-table aria-busy="true">
+            <thead class="bg-slate-50 text-slate-700">
+              <tr>
+                {
+                  columns.map(({ field, label }) => (
+                    <th scope="col" class="whitespace-nowrap px-4 py-2 font-medium" data-sort-header={field} aria-sort="none">
+                      <button
+                        type="button"
+                        data-sort={field}
+                        class="inline-flex items-center gap-1 rounded hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+                      >
+                        {label}
+                        <span data-sort-icon aria-hidden="true" class="text-slate-400">↕</span>
+                      </button>
+                    </th>
+                  ))
+                }
+              </tr>
+            </thead>
+            <tbody data-rows class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+        <p data-message class="hidden px-4 py-10 text-center text-slate-600"></p>
+        <div data-loading class="space-y-3 px-4 py-6" aria-hidden="true">
+          <div class="h-4 w-3/4 animate-pulse rounded bg-slate-100"></div>
+          <div class="h-4 w-2/3 animate-pulse rounded bg-slate-100"></div>
+          <div class="h-4 w-1/2 animate-pulse rounded bg-slate-100"></div>
+        </div>
+        <nav
+          data-pagination
+          aria-label="Paginación de pagos"
+          class="hidden flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-sm"
+        >
+          <div class="flex items-center gap-2">
+            <label for="payments-page-size" class="text-slate-600">Por página</label>
+            <select id="payments-page-size" data-page-size class="rounded-lg border border-slate-300 bg-white px-2 py-1">
+              {PAGE_SIZES.map((size) => <option value={size} selected={initial.pageSize === size}>{size}</option>)}
+            </select>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" data-page="prev" class={secondaryButton}>Anterior</button>
+            <span data-page-info class="whitespace-nowrap text-slate-600"></span>
+            <button type="button" data-page="next" class={secondaryButton}>Siguiente</button>
+          </div>
+        </nav>
+      </div>
+    </section>
+  </main>
+</Layout>
+
+<script>
+  import { registerPayment, listPayments, type Payment, type PaymentSortField } from '../../../lib/api/payments';
+  import { listResidents } from '../../../lib/api/residents';
+  import {
+    CONCEPT_LABELS,
+    FIELDS,
+    METHOD_LABELS,
+    STATUS_LABELS,
+    bogotaToday,
+    createPaymentFlow,
+    createResidentPicker,
+    formatCop,
+    formatDate,
+    showsDescription,
+    type FieldErrors,
+    type PickerState,
+    type SubmitState
+  } from '../../../lib/payments/payment-form';
+  import {
+    EMPTY_MESSAGE,
+    LOADING_MESSAGE,
+    NO_RESULTS_MESSAGE,
+    createPaymentsList,
+    dateRangeError,
+    parseQuery,
+    rangeText,
+    type PaymentsListState
+  } from '../../../lib/payments/payments-list';
+
+  const page = document.querySelector<HTMLElement>('[data-payments-page]')!;
+  const csrfToken = page.dataset.csrfToken ?? '';
+  const $ = <T extends Element>(selector: string, root: ParentNode = page) => root.querySelector<T>(selector)!;
+  const show = (element: Element, visible: boolean) => element.classList.toggle('hidden', !visible);
+  const showFlex = (element: Element, visible: boolean) => {
+    element.classList.toggle('hidden', !visible);
+    element.classList.toggle('flex', visible);
+  };
+
+  // --- Form -------------------------------------------------------------------------------------
+  const form = $<HTMLFormElement>('[data-payment-form]');
+  const formAlert = $<HTMLElement>('[data-form-alert]');
+  const submit = $<HTMLButtonElement>('button[type="submit"]', form);
+  const amountInput = $<HTMLInputElement>('#payment-amount');
+  const dateInput = $<HTMLInputElement>('#payment-date');
+  const methodSelect = $<HTMLSelectElement>('#payment-method');
+  const conceptSelect = $<HTMLSelectElement>('#payment-concept');
+  const descriptionBox = $<HTMLElement>('[data-description]');
+  const descriptionInput = $<HTMLInputElement>('#payment-description');
+  const confirmation = $<HTMLElement>('[data-confirmation]');
+  const emailWarning = $<HTMLElement>('[data-email-warning]');
+
+  const pickerInput = $<HTMLInputElement>('#payment-resident');
+  const pickerSearch = $<HTMLElement>('[data-picker-search]');
+  const pickerStatus = $<HTMLElement>('[data-picker-status]');
+  const pickerResults = $<HTMLUListElement>('[data-picker-results]');
+  const pickerSelected = $<HTMLElement>('[data-picker-selected]');
+
+  const controlOf: Record<string, HTMLElement> = {
+    resident_id: pickerInput,
+    amount: amountInput,
+    method: methodSelect,
+    concept: conceptSelect,
+    concept_description: descriptionInput,
+    payment_date: dateInput
+  };
+
+  function showFieldErrors(errors: FieldErrors): void {
+    let first: HTMLElement | null = null;
+    for (const field of FIELDS) {
+      const error = $<HTMLElement>(`[data-error-for="${field}"]`);
+      const message = errors[field] ?? null;
+      error.textContent = message ?? '';
+      show(error, Boolean(message));
+      const control = controlOf[field];
+      control.setAttribute('aria-invalid', message ? 'true' : 'false');
+      if (message) {
+        control.setAttribute('aria-describedby', error.id);
+        first ??= control;
+      }
+    }
+    first?.focus();
+  }
+
+  function renderPicker(state: PickerState): void {
+    show(pickerSearch, state.kind !== 'selected');
+    showFlex(pickerSelected, state.kind === 'selected');
+    show(pickerResults, state.kind === 'results');
+    const status =
+      state.kind === 'searching'
+        ? 'Buscando residentes…'
+        : state.kind === 'none'
+          ? 'Ningún residente registrado coincide con la búsqueda.'
+          : state.kind === 'error'
+            ? state.message
+            : '';
+    pickerStatus.textContent = status;
+    show(pickerStatus, Boolean(status));
+    if (state.kind === 'results') {
+      pickerResults.replaceChildren(
+        ...state.residents.map((resident) => {
+          const item = document.createElement('li');
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className =
+            'block w-full px-3 py-2 text-left hover:bg-emerald-50 focus-visible:bg-emerald-50 focus-visible:outline-none';
+          const name = document.createElement('span');
+          name.className = 'block font-medium text-slate-900';
+          name.textContent = resident.full_name;
+          const detail = document.createElement('span');
+          detail.className = 'block text-sm text-slate-600';
+          detail.textContent = `${resident.document_number ?? 'Sin documento'} · ${resident.unit.label}`;
+          button.append(name, detail);
+          button.addEventListener('click', () => picker.select(resident));
+          item.append(button);
+          return item;
+        })
+      );
+    }
+    if (state.kind === 'selected') {
+      $('[data-selected-name]').textContent = state.resident.full_name;
+      // Informative only: the backend decides the apartment from the current residence.
+      $('[data-selected-unit]').textContent = state.resident.unit.label;
+    }
+  }
+
+  const picker = createResidentPicker({
+    load: listResidents,
+    render: renderPicker,
+    navigate: (path) => window.location.assign(path)
+  });
+  pickerInput.addEventListener('input', () => picker.search(pickerInput.value));
+  $('[data-picker-change]').addEventListener('click', () => {
+    picker.clear();
+    pickerInput.value = '';
+    pickerInput.focus();
+  });
+
+  conceptSelect.addEventListener('change', () => {
+    const visible = showsDescription(conceptSelect.value);
+    show(descriptionBox, visible);
+    if (!visible) descriptionInput.value = '';
+  });
+
+  function renderSubmit(state: SubmitState): void {
+    submit.disabled = state.kind === 'submitting';
+    submit.textContent = state.kind === 'submitting' ? 'Registrando…' : 'Registrar pago';
+    show(formAlert, state.kind === 'error' && Boolean(state.message));
+    if (state.kind === 'invalid') showFieldErrors(state.errors);
+    if (state.kind === 'error') {
+      formAlert.textContent = state.message;
+      showFieldErrors(state.errors);
+    }
+    if (state.kind === 'submitting') {
+      show(confirmation, false);
+      show(emailWarning, false);
+    }
+    if (state.kind === 'done') {
+      showFieldErrors({});
+      const { title, lines, warning } = state.confirmation;
+      $('[data-confirmation-title]').textContent = title;
+      $('[data-confirmation-lines]').replaceChildren(
+        ...lines.flatMap(({ label, value }) => {
+          const term = document.createElement('dt');
+          term.className = 'font-medium';
+          term.textContent = label;
+          const description = document.createElement('dd');
+          description.textContent = value;
+          const wrapper = document.createElement('div');
+          wrapper.className = 'flex justify-between gap-3 sm:block';
+          wrapper.append(term, description);
+          return [wrapper];
+        })
+      );
+      show(confirmation, true);
+      emailWarning.textContent = warning ?? '';
+      show(emailWarning, Boolean(warning));
+      // Ready for the next payment.
+      form.reset();
+      dateInput.value = bogotaToday();
+      show(descriptionBox, false);
+      picker.clear();
+      confirmation.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  const flow = createPaymentFlow({
+    register: (payload) => registerPayment(payload, csrfToken),
+    render: renderSubmit,
+    navigate: (path) => window.location.assign(path),
+    // Invalidation: the summary is queried again with the same options.
+    onRegistered: () => void list.refresh()
+  });
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void flow.submit(
+      {
+        residentId: picker.selected?.id ?? null,
+        amount: amountInput.value,
+        method: methodSelect.value,
+        concept: conceptSelect.value,
+        description: descriptionInput.value,
+        paymentDate: dateInput.value
+      },
+      bogotaToday()
+    );
+  });
+
+  // --- Summary ------------------------------------------------------------------------------------
+  const table = $<HTMLTableElement>('[data-table]');
+  const rows = $<HTMLElement>('[data-rows]');
+  const statusLine = $<HTMLElement>('[data-status-line]');
+  const message = $<HTMLElement>('[data-message]');
+  const loading = $<HTMLElement>('[data-loading]');
+  const alert = $<HTMLElement>('[data-alert]');
+  const pagination = $<HTMLElement>('[data-pagination]');
+  const pageInfo = $<HTMLElement>('[data-page-info]');
+  const prev = $<HTMLButtonElement>('[data-page="prev"]');
+  const next = $<HTMLButtonElement>('[data-page="next"]');
+  const pageSize = $<HTMLSelectElement>('[data-page-size]');
+  const residentFilter = $<HTMLInputElement>('#filter-resident');
+  const fromFilter = $<HTMLInputElement>('#filter-from');
+  const toFilter = $<HTMLInputElement>('#filter-to');
+  const filterError = $<HTMLElement>('[data-filter-error]');
+
+  const BADGE = {
+    APPLIED: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
+    PARTIALLY_APPLIED: 'bg-amber-50 text-amber-900 ring-amber-200',
+    CREDIT: 'bg-sky-50 text-sky-800 ring-sky-200'
+  } as const;
+
+  function cell(text: string, className: string): HTMLTableCellElement {
+    const element = document.createElement('td');
+    element.className = className;
+    element.textContent = text;
+    return element;
+  }
+
+  function row(payment: Payment): HTMLTableRowElement {
+    const tr = document.createElement('tr');
+    const name = document.createElement('th');
+    name.scope = 'row';
+    name.className = 'min-w-[13rem] px-4 py-3 font-medium text-slate-900';
+    name.textContent = payment.resident.full_name;
+    const receipt = document.createElement('span');
+    receipt.className = 'block whitespace-nowrap text-xs font-normal text-slate-500';
+    receipt.textContent = `${payment.receipt_number} · ${payment.unit.label}`;
+    name.append(receipt);
+    const concept = payment.concept_description
+      ? `${CONCEPT_LABELS[payment.concept]}: ${payment.concept_description}`
+      : CONCEPT_LABELS[payment.concept];
+    const status = document.createElement('td');
+    status.className = 'px-4 py-3';
+    const badge = document.createElement('span');
+    badge.className = `inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${BADGE[payment.status]}`;
+    badge.textContent = STATUS_LABELS[payment.status];
+    status.append(badge);
+    tr.append(
+      name,
+      cell(concept, 'min-w-[9rem] px-4 py-3 text-slate-700'),
+      cell(formatCop(payment.amount), 'whitespace-nowrap px-4 py-3 text-right font-mono text-slate-900'),
+      cell(METHOD_LABELS[payment.method], 'whitespace-nowrap px-4 py-3 text-slate-700'),
+      cell(formatDate(payment.payment_date), 'whitespace-nowrap px-4 py-3 text-slate-700'),
+      status
+    );
+    return tr;
+  }
+
+  function render(state: PaymentsListState): void {
+    const { query } = state;
+    page.querySelectorAll<HTMLElement>('[data-sort-header]').forEach((header) => {
+      const active = header.dataset.sortHeader === query.sortBy;
+      header.setAttribute('aria-sort', active ? (query.sortOrder === 'asc' ? 'ascending' : 'descending') : 'none');
+      header.querySelector('[data-sort-icon]')!.textContent = active ? (query.sortOrder === 'asc' ? '↑' : '↓') : '↕';
+    });
+    table.setAttribute('aria-busy', String(state.kind === 'loading'));
+    show(loading, state.kind === 'loading');
+    show(alert, state.kind === 'error');
+    show(message, state.kind === 'empty' || state.kind === 'no-results');
+    if (state.kind !== 'results') rows.replaceChildren();
+    showFlex(pagination, state.kind === 'results');
+    switch (state.kind) {
+      case 'loading':
+        statusLine.textContent = LOADING_MESSAGE;
+        break;
+      case 'results':
+        rows.replaceChildren(...state.page.items.map(row));
+        statusLine.textContent = rangeText(state.page);
+        pageInfo.textContent = `Página ${state.page.page} de ${state.page.total_pages}`;
+        prev.disabled = state.page.page <= 1;
+        next.disabled = state.page.page >= state.page.total_pages;
+        pageSize.value = String(state.page.page_size);
+        break;
+      case 'empty':
+      case 'no-results':
+        statusLine.textContent = '0 pagos';
+        message.textContent = state.kind === 'empty' ? EMPTY_MESSAGE : NO_RESULTS_MESSAGE;
+        break;
+      case 'error':
+        statusLine.textContent = 'No se pudo consultar el resumen.';
+        $('[data-alert-message]').textContent = state.message;
+        break;
+    }
+  }
+
+  const list = createPaymentsList(parseQuery(new URLSearchParams(window.location.search)), {
+    load: listPayments,
+    render,
+    remember: (queryString) =>
+      history.replaceState(null, '', queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname),
+    navigate: (path) => window.location.assign(path)
+  });
+
+  $('[data-filters]').addEventListener('submit', (event) => event.preventDefault());
+  residentFilter.addEventListener('input', () => list.searchResident(residentFilter.value));
+  const onDates = () => {
+    const error = dateRangeError(fromFilter.value, toFilter.value);
+    filterError.textContent = error ?? '';
+    show(filterError, Boolean(error));
+    if (!error) void list.setDates(fromFilter.value, toFilter.value);
+  };
+  fromFilter.addEventListener('change', onDates);
+  toFilter.addEventListener('change', onDates);
+  page.querySelectorAll<HTMLButtonElement>('[data-sort]').forEach((button) => {
+    button.addEventListener('click', () => list.sort(button.dataset.sort as PaymentSortField));
+  });
+  prev.addEventListener('click', () => list.goToPage(list.query.page - 1));
+  next.addEventListener('click', () => list.goToPage(list.query.page + 1));
+  pageSize.addEventListener('change', () => list.setPageSize(Number(pageSize.value)));
+  $('[data-retry]').addEventListener('click', () => list.refresh());
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void list.refresh();
+  });
+
+  void list.start();
+</script>

@@ -235,3 +235,11 @@ class PasswordResetUsedError(GoneError):
 class PasswordResetRevokedError(GoneError):
     code = "PASSWORD_RESET_REVOKED"
     message = "Este enlace fue reemplazado por uno más reciente. Usa el último correo que recibiste o solicita uno nuevo."
+
+
+# --- HU-004: manual payments ----------------------------------------------------------
+
+
+class ResidenceChangedError(ConflictError):
+    code = "RESIDENCE_CHANGED"
+    message = "La residencia del residente cambió mientras se registraba el pago. Intenta de nuevo."

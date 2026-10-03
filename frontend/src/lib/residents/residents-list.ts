@@ -1,4 +1,4 @@
-import { ApiError } from '../api/errors.ts';
+import { createServerList, sortedBy as sortedByField, type ListState as ServerListState } from '../lists/server-list.ts';
 import type { ResidentPage, ResidentSortField, ResidentStatus, SortOrder } from '../api/residents.ts';
 
 /**
@@ -79,8 +79,7 @@ export function toQueryString(query: ResidentQuery): string {
 
 /** Clicking a column: same column toggles the direction; another column starts ascending. */
 export function sortedBy(query: ResidentQuery, field: ResidentSortField): ResidentQuery {
-  const sortOrder: SortOrder = query.sortBy === field && query.sortOrder === 'asc' ? 'desc' : 'asc';
-  return { ...query, sortBy: field, sortOrder, page: 1 };
+  return sortedByField<ResidentSortField, ResidentQuery>(query, field);
 }
 
 export function isFiltered(query: ResidentQuery): boolean {
@@ -95,12 +94,7 @@ export function rangeText(page: ResidentPage): string {
   return `Mostrando ${first}–${last} de ${page.total} ${noun}`;
 }
 
-export type ListState =
-  | { kind: 'loading'; query: ResidentQuery }
-  | { kind: 'results'; query: ResidentQuery; page: ResidentPage }
-  | { kind: 'empty'; query: ResidentQuery }
-  | { kind: 'no-results'; query: ResidentQuery }
-  | { kind: 'error'; query: ResidentQuery; message: string };
+export type ListState = ServerListState<ResidentQuery, ResidentPage>;
 
 interface ListDeps {
   load: (queryString: string) => Promise<ResidentPage>;
@@ -112,92 +106,35 @@ interface ListDeps {
   schedule?: (callback: () => void, ms: number) => () => void;
 }
 
-function defaultSchedule(callback: () => void, ms: number): () => void {
-  const timer = setTimeout(callback, ms);
-  return () => clearTimeout(timer);
-}
-
+/** The residents list on the shared server-side list controller (lib/lists/server-list.ts). */
 export function createResidentsList(initial: ResidentQuery, deps: ListDeps) {
-  const schedule = deps.schedule ?? defaultSchedule;
-  let query = initial;
-  let latest = 0;
-  let cancelSearch: (() => void) | null = null;
-
-  async function fetchPage(next: ResidentQuery): Promise<void> {
-    query = next;
-    const request = ++latest;
-    const queryString = toQueryString(query);
-    deps.remember(queryString);
-    deps.render({ kind: 'loading', query });
-    let page: ResidentPage;
-    try {
-      page = await deps.load(queryString);
-    } catch (error) {
-      if (request !== latest) return; // a newer request is on its way
-      if (error instanceof ApiError && error.status === 401) {
-        deps.navigate('/login');
-        return;
-      }
-      const message =
-        error instanceof ApiError && error.status === 403
-          ? FORBIDDEN_MESSAGE
-          : error instanceof ApiError && error.status === 422
-            ? error.message
-            : CONNECTION_ERROR;
-      deps.render({ kind: 'error', query, message });
-      return;
-    }
-    if (request !== latest) return; // an older answer never replaces a newer one
-    if (page.total === 0) {
-      deps.render({ kind: isFiltered(query) ? 'no-results' : 'empty', query });
-    } else if (page.items.length === 0 && query.page > page.total_pages) {
-      // The page no longer exists (fewer residents now): go to the last one.
-      await fetchPage({ ...query, page: page.total_pages });
-    } else {
-      deps.render({ kind: 'results', query, page });
-    }
-  }
-
-  /** Text typed but not searched yet: any other action searches it right away. */
-  let draft: string | null = null;
-
-  function withDraft(next: ResidentQuery): ResidentQuery {
-    cancelSearch?.();
-    cancelSearch = null;
-    const typed = draft;
-    draft = null;
-    return typed !== null && typed.trim() !== next.search.trim() ? { ...next, search: typed, page: 1 } : next;
-  }
-
+  const list = createServerList<ResidentSortField, ResidentQuery, ResidentPage>(
+    initial,
+    {
+      toQueryString,
+      isFiltered,
+      pageSizes: PAGE_SIZES,
+      defaultPageSize: DEFAULT_PAGE_SIZE,
+      pageMax: PAGE_MAX,
+      searchMaxLength: SEARCH_MAX_LENGTH,
+      debounceMs: SEARCH_DEBOUNCE_MS,
+      forbiddenMessage: FORBIDDEN_MESSAGE,
+      connectionError: CONNECTION_ERROR
+    },
+    deps
+  );
   return {
     get query(): ResidentQuery {
-      return query;
+      return list.query;
     },
-    start: () => fetchPage(query),
+    start: list.start,
     /** Debounced: one request after the user stops typing. */
-    search(text: string): void {
-      cancelSearch?.();
-      draft = text.slice(0, SEARCH_MAX_LENGTH);
-      cancelSearch = schedule(() => {
-        cancelSearch = null;
-        const next = withDraft(query);
-        if (next !== query) void fetchPage(next);
-      }, SEARCH_DEBOUNCE_MS);
-    },
-    filter(status: ResidentStatus | ''): Promise<void> {
-      return fetchPage(withDraft({ ...query, status, page: 1 }));
-    },
-    sort(field: ResidentSortField): Promise<void> {
-      return fetchPage(withDraft(sortedBy(query, field)));
-    },
-    goToPage(page: number): Promise<void> {
-      return fetchPage(withDraft({ ...query, page: Math.min(Math.max(1, page), PAGE_MAX) }));
-    },
-    setPageSize(pageSize: number): Promise<void> {
-      const size = (PAGE_SIZES as readonly number[]).includes(pageSize) ? pageSize : DEFAULT_PAGE_SIZE;
-      return fetchPage(withDraft({ ...query, pageSize: size, page: 1 }));
-    },
+    search: list.search,
+    filter: (status: ResidentStatus | ''): Promise<void> => list.update({ status }),
+    sort: (field: ResidentSortField): Promise<void> => list.sort(field),
+    goToPage: list.goToPage,
+    setPageSize: list.setPageSize,
     /** Same options again: retry after an error, or show the latest data (criterion 4). */
-    refresh: () => fetchPage(withDraft(query))
+    refresh: list.refresh
   };
 }

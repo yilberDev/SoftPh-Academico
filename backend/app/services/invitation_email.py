@@ -5,7 +5,7 @@ browser never sends the fragment to the server, so it does not end up in
 access logs or in the Referer header. /activate-account is implemented by HU-019.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 from app.services.mail import OutgoingEmail
@@ -27,6 +27,11 @@ def token_link(app_origin: str, path: str, token: str) -> str:
 
 def activation_link(app_origin: str, token: str) -> str:
     return token_link(app_origin, ACTIVATION_PATH, token)
+
+
+def format_long_date(day: date) -> str:
+    """'8 de octubre de 2026' (a calendar date, no time zone involved)."""
+    return f"{day.day} de {_MONTHS[day.month - 1]} de {day.year}"
 
 
 def format_bogota(moment_utc: datetime) -> str:

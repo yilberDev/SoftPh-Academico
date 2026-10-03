@@ -11,3 +11,5 @@ argon2-cffi==25.1.0
 # Email validation for Pydantic EmailStr.
 email-validator==2.3.0
 pydantic-settings==2.15.0
+# PDF receipts of manual payments (HU-004).
+reportlab==5.0.1

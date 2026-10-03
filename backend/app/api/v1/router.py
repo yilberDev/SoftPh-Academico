@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import activation, auth, health, invitations, password_reset, residents, structure
+from app.api.v1 import activation, auth, health, invitations, password_reset, payments, residents, structure
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -14,3 +14,5 @@ api_router.include_router(activation.router)
 api_router.include_router(structure.router)
 # HU-006: registered residents (administrator, read-only).
 api_router.include_router(residents.router)
+# HU-004: manual payments (administrator).
+api_router.include_router(payments.router)

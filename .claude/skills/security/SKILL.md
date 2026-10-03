@@ -48,6 +48,7 @@ Las llamadas servidor a servidor desde Astro (SSR, middleware) son solo de lectu
 - El backend comprueba autenticación y rol en cada endpoint protegido mediante dependencias reutilizables.
 - Un residente solo accede a sus propios datos (unidad, pagos, estado de cuenta, feedback). Verificar la propiedad del recurso, no solo el rol.
 - Nunca confiar en controles de interfaz ni en un rol enviado por el cliente.
+- Área `/api/v1/admin/` (HU-004, HU-006): solo operaciones de ADMINISTRADOR con sesión; ninguna ruta crea cuentas (la salvaguarda de HU-001 prohíbe `user`, `admins`, `administrator`, `register` y `signup` en rutas de escritura y exige 401/403 en el área).
 - HU-018: la identidad y el rol salen de la sesión (cookie → sesión → usuario activo → rol, leído de la base en cada petición). 401 sin sesión válida; 403 con otro rol, decidido antes de leer o validar el recurso (mismo 403 exista o no). Sin tablas de permisos: `require_roles(...)` en cada endpoint. Cada ruta publicada se clasifica en `ACCESS_POLICY` (`backend/tests/integration/test_access_control.py`). Los accesos denegados no se auditan.
 
 ## Creación del primer administrador

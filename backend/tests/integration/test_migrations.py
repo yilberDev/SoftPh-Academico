@@ -9,9 +9,11 @@ from tests.integration.conftest import alembic_config
 
 # HU-001: users, audit_logs. HU-002: sessions, login_throttles. HU-013: blocks, towers, units.
 # HU-003: resident_invitations, resident_units. HU-016: password_reset_tokens.
+# HU-004: charges, payments, payment_allocations.
 APP_TABLES = {
     "users", "audit_logs", "sessions", "login_throttles", "blocks", "towers", "units",
     "resident_invitations", "resident_units", "password_reset_tokens",
+    "charges", "payments", "payment_allocations",
 }
 
 
