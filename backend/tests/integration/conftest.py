@@ -83,6 +83,8 @@ async def committed_session_factory(migrated_test_database: URL) -> AsyncIterato
         yield async_sessionmaker(engine, expire_on_commit=False)
     finally:
         async with engine.begin() as connection:
+            # Late fees before their origins (self-referencing foreign key of charges).
+            await connection.execute(text("DELETE FROM charges WHERE source_charge_id IS NOT NULL"))
             # Children before parents (foreign keys).
             for table in (
                 "feedback", "payment_allocations", "payments", "charges",

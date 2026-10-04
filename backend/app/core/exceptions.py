@@ -267,3 +267,18 @@ class FeedbackResidentNotValidError(AppError):
     status_code = 422
     code = "VALIDATION_ERROR"
     message = "El feedback solo puede pertenecer a un residente activo."
+
+
+# --- Obligations extension: charges ----------------------------------------------------
+
+
+class MonthlyFeeExistsError(ConflictError):
+    code = "MONTHLY_FEE_EXISTS"
+
+    def __init__(self, label: str, period: str) -> None:
+        super().__init__(f"{label} ya tiene la mensualidad de {period}.")
+
+
+class LateFeeExistsError(ConflictError):
+    code = "LATE_FEE_EXISTS"
+    message = "La obligación de origen ya tiene una mora."

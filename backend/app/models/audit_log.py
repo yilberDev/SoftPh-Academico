@@ -48,6 +48,9 @@ class AuditAction(StrEnum):
     FEEDBACK_RESOLVED = "FEEDBACK_RESOLVED"
     FEEDBACK_NOTIFICATION_SENT = "FEEDBACK_NOTIFICATION_SENT"
     FEEDBACK_NOTIFICATION_FAILED = "FEEDBACK_NOTIFICATION_FAILED"
+    # Obligations extension: charges and the credit (saldo a favor) applied to them.
+    CHARGE_CREATED = "CHARGE_CREATED"
+    CREDIT_APPLIED = "CREDIT_APPLIED"
 
 
 class AuditLog(Base):
