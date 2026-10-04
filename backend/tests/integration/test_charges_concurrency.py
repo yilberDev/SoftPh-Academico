@@ -190,3 +190,34 @@ async def test_two_late_fees_for_one_origin_at_once(
     assert sum(not isinstance(r, Exception) for r in results) == 1
     assert sum(isinstance(r, LateFeeExistsError) for r in results) == 2
     assert await scalar(committed_session_factory, "SELECT COUNT(*) FROM charges WHERE source_charge_id = :o", o=origin.id) == 1
+
+
+async def test_charges_on_different_apartments_never_deadlock(
+    committed_session_factory: Factory, setup: dict[str, int], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression (see test_payments_on_different_apartments_never_deadlock): obligations of
+    different apartments, each consuming its own credit, at the same time."""
+    async with committed_session_factory() as session:
+        community = Community(session, setup["admin"])
+        others = [await community.resident(f"Vecino {n}", f"10987654{n:02d}", (2, 1, 200 + n), email=f"v{n}@example.com")
+                  for n in range(1, 4)]
+        units = {int(user): int(unit) for user, unit in
+                 (await session.execute(text("SELECT user_id, unit_id FROM resident_units"))).all()}
+        await session.commit()
+    residents = [setup["resident"], *others]
+    for resident in residents:
+        neighbor = {**setup, "resident": resident}
+        assert (await pay(committed_session_factory, neighbor, "250000")).status == "CREDIT"
+
+    for month in range(1, 6):
+        all_at_the_lock(monkeypatch, len(residents))
+        results = await gather(*(create(committed_session_factory, setup, monthly(units[r], "50000", month)) for r in residents))
+        monkeypatch.undo()
+        assert all(not isinstance(r, Exception) for r in results), results
+        assert [r.status for r in results] == [ChargeStatus.PAID] * len(residents)
+
+    await assert_never_over_allocated(committed_session_factory)
+    for resident in residents:
+        async with committed_session_factory() as session:
+            balance = await payment_service.unit_balance(session, units[resident])
+        assert (balance.pending_balance, balance.credit_balance) == (Decimal("0.00"), Decimal("0.00"))

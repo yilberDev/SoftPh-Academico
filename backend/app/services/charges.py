@@ -9,14 +9,16 @@ create  One atomic transaction:
               origin of a late fee, existing monthly fee / late fee
               charge
               pending charges of the apartment (X)        FIFO: due_date, created_at, id
-              payments of the apartment with credit (S)   oldest first: payment_date, registered_at, id
+              payments of the apartment with credit       oldest first: payment_date, registered_at, id
               allocations of the credit + CHARGE_CREATED + CREDIT_APPLIED
               invariants checked again (never over-allocated)
             COMMIT
 
         Every change to the charges, payments or allocations of an apartment
         holds its lock (X), so two operations on the same apartment run one
-        after the other and the credit is consumed only once. The author is
+        after the other and the credit is consumed only once. After the lock,
+        payments and allocations are read with consistent reads (never FOR
+        SHARE, which deadlocked operations on different apartments). The author is
         always the authenticated actor, never a value from the client. Any
         error rolls everything back: no charge, allocation or audit entry is
         left behind.
@@ -159,13 +161,15 @@ def _validated(data: ChargeInput) -> ChargeInput:
 async def _available_credits(db: AsyncSession, unit_id: int) -> list[AvailableCredit]:
     """Payments of the apartment not fully allocated, oldest first.
 
-    Locking reads (FOR SHARE): the latest committed allocations, never an old
-    snapshot. Only called while the apartment is locked (X).
+    Only called while the apartment is locked (X), after the transaction's first
+    consistent read: a consistent read has every allocation committed before the
+    lock (every writer of them holds it). No FOR SHARE: a locking read of
+    allocations that do not exist yet locks the gap shared by the new allocations
+    of every apartment (deadlock between apartments, see payments._covered).
     """
     applied = (
         select(func.coalesce(func.sum(PaymentAllocation.amount), 0))
         .where(PaymentAllocation.payment_id == Payment.id)
-        .with_for_update(read=True)
         .correlate(Payment)
         .scalar_subquery()
     )
@@ -174,7 +178,6 @@ async def _available_credits(db: AsyncSession, unit_id: int) -> list[AvailableCr
             select(Payment.id, Payment.payment_date, Payment.registered_at, (Payment.amount - applied).label("available"))
             .where(Payment.unit_id == unit_id, Payment.amount > applied)
             .order_by(Payment.payment_date, Payment.registered_at, Payment.id)
-            .with_for_update(read=True)
         )
     ).all()
     return [AvailableCredit(row.id, row.payment_date, row.registered_at, money(row.available)) for row in rows]
@@ -346,7 +349,7 @@ async def create_charge(db: AsyncSession, data: ChargeInput, actor: Actor) -> Cr
             )
 
         applied = money(sum((a.amount for a in allocations if a.charge_id == charge.id), Decimal(0)))
-        account = await unit_balance(db, data.unit_id, lock=True)
+        account = await unit_balance(db, data.unit_id)
         created_at = await db.scalar(select(Charge.created_at).where(Charge.id == charge.id))
         result = CreatedCharge(
             id=charge.id,

@@ -229,3 +229,48 @@ async def test_the_guard_catches_a_stale_read(
 
     assert await scalar(committed_session_factory, "SELECT COUNT(*) FROM payments") == 1
     await assert_never_over_allocated(committed_session_factory)
+
+
+@pytest.fixture
+async def neighbors(committed_session_factory: Factory) -> dict[str, Any]:
+    """Four residents in four different apartments of the same tower (shared block and tower locks)."""
+    async with committed_session_factory() as session:
+        admin = User(email="admin@example.com", full_name="Admin Uno", role=UserRole.ADMINISTRADOR,
+                     status=UserStatus.ACTIVE, password_hash="not-a-real-hash")
+        session.add(admin)
+        await session.flush()
+        community = Community(session, admin.id)
+        residents = [await community.resident(f"Residente {n}", f"10123456{n:02d}", (1, 2, 100 + n),
+                                              email=f"r{n}@example.com") for n in range(1, 5)]
+        rows = (await session.execute(text("SELECT user_id, unit_id FROM resident_units"))).all()
+        admin_id = admin.id
+        await session.commit()
+    return {"admin": admin_id, "residents": residents, "unit_of": {int(user): int(unit) for user, unit in rows}}
+
+
+async def test_payments_on_different_apartments_never_deadlock(
+    committed_session_factory: Factory, neighbors: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: locking reads (FOR SHARE) of allocations that did not exist yet locked the gap
+    at the end of the allocation indexes, where every apartment inserts its new allocations, so
+    payments of different apartments with pending charges deadlocked (1213) almost every time."""
+    for round_ in range(1, 6):
+        for resident in neighbors["residents"]:
+            await add_charge(committed_session_factory, neighbors["unit_of"][resident], "100000", date(2026, round_, 5))
+        all_at_the_lock(monkeypatch, len(neighbors["residents"]))
+
+        async def pay(resident: int) -> Any:
+            async with committed_session_factory() as session:
+                return await payment_service.register_payment(
+                    session, payment(resident, "60000"), Actor(neighbors["admin"], None), mailer=FakeMailSender())
+
+        results = await gather(*(pay(r) for r in neighbors["residents"]))
+        monkeypatch.undo()
+
+        assert [r.applied_amount for r in results] == [Decimal("60000.00")] * len(results)
+    await assert_never_over_allocated(committed_session_factory)
+    for resident in neighbors["residents"]:
+        async with committed_session_factory() as session:
+            balance = await payment_service.unit_balance(session, neighbors["unit_of"][resident])
+        # 5 charges of 100.000 and 5 payments of 60.000 in each apartment.
+        assert (balance.pending_balance, balance.credit_balance) == (Decimal("200000.00"), Decimal("0.00"))

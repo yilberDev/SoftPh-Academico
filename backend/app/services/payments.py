@@ -105,14 +105,17 @@ def _applied_amount() -> Any:
     )
 
 
-async def unit_balance(db: AsyncSession, unit_id: int, *, lock: bool = False) -> AccountBalance:
+async def unit_balance(db: AsyncSession, unit_id: int) -> AccountBalance:
     """Pending = charges - allocations to them; credit = payments - allocations from them.
 
-    lock=True (inside the payment transaction): locking reads of the latest committed data.
+    Consistent reads. Inside a financial transaction it runs under the apartment
+    lock (X), after the transaction's first consistent read, so it sees every
+    committed change plus the transaction's own. No FOR SHARE: these joins
+    locked allocation rows and gaps of other apartments (deadlock, see _covered).
     """
 
     async def total(statement: Any) -> Decimal:
-        return money(await db.scalar(statement.with_for_update(read=True) if lock else statement))
+        return money(await db.scalar(statement))
 
     charged = await total(select(func.coalesce(func.sum(Charge.amount), 0)).where(Charge.unit_id == unit_id))
     covered = await total(
@@ -154,21 +157,28 @@ async def _current_unit(db: AsyncSession, resident_id: int) -> tuple[int, int, i
     return row.unit_id, row.tower_id, row.block_id
 
 
-def _covered(*, lock: bool) -> Any:
-    """Correlated subquery: what has been allocated to a charge (FOR SHARE: latest committed)."""
+def _covered() -> Any:
+    """Correlated subquery: what has been allocated to a charge.
+
+    A consistent read, never FOR SHARE: a locking read of an allocation that does
+    not exist yet locks the gap at the end of ix_payment_allocations_charge_id,
+    the same gap every new allocation of any apartment is inserted into, so two
+    operations on different apartments deadlocked (1213). The apartment lock (X)
+    already serializes every writer of these rows.
+    """
     covered = select(func.coalesce(func.sum(PaymentAllocation.amount), 0)).where(PaymentAllocation.charge_id == Charge.id)
-    if lock:
-        covered = covered.with_for_update(read=True)
     return covered.correlate(Charge).scalar_subquery()
 
 
 async def _pending_charges(db: AsyncSession, unit_id: int) -> list[PendingCharge]:
     """Charges of the apartment not fully covered, locked (FOR UPDATE) in FIFO order.
 
-    What is covered is read with FOR SHARE (latest committed allocations), never
-    from an older snapshot of the transaction.
+    Only called while the apartment is locked (X), and the transaction's first
+    consistent read happens after that lock: what is covered is read from a
+    snapshot that already has every allocation committed before it. Every writer
+    of the apartment's charges and allocations holds the same apartment lock.
     """
-    covered = _covered(lock=True)
+    covered = _covered()
     rows = (
         await db.execute(
             select(Charge.id, Charge.due_date, Charge.created_at, (Charge.amount - covered).label("outstanding"))
@@ -183,20 +193,17 @@ async def _pending_charges(db: AsyncSession, unit_id: int) -> list[PendingCharge
 async def _check_invariants(db: AsyncSession, payment: Payment, charge_ids: list[int]) -> None:
     """Defense in depth before COMMIT: never more allocated than a payment or a charge.
 
-    Locking reads (latest committed data), so the check never trusts an old snapshot.
+    Consistent reads under the apartment lock (X): the snapshot was taken after
+    the lock, so it has every allocation committed before, plus this
+    transaction's own. No FOR SHARE: see _covered (deadlock between apartments).
     """
     allocated = money(
         await db.scalar(
-            select(func.coalesce(func.sum(PaymentAllocation.amount), 0))
-            .where(PaymentAllocation.payment_id == payment.id)
-            .with_for_update(read=True)
+            select(func.coalesce(func.sum(PaymentAllocation.amount), 0)).where(PaymentAllocation.payment_id == payment.id)
         )
     )
     over_charged = await db.scalar(
-        select(func.count())
-        .select_from(Charge)
-        .where(Charge.id.in_(charge_ids), Charge.amount < _covered(lock=True))
-        .with_for_update(read=True)
+        select(func.count()).select_from(Charge).where(Charge.id.in_(charge_ids), Charge.amount < _covered())
     ) if charge_ids else 0
     if allocated > payment.amount or over_charged:
         await db.rollback()
@@ -285,7 +292,7 @@ async def _register(db: AsyncSession, data: PaymentCreate, actor: Actor) -> _Reg
             )
         ).all()
     } if result.allocations else {}
-    account = await unit_balance(db, unit_id, lock=True)
+    account = await unit_balance(db, unit_id)
     response = PaymentRegistered(
         id=payment.id,
         receipt_number=number,
