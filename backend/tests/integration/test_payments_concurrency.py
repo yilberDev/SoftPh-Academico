@@ -12,7 +12,7 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -48,7 +48,10 @@ async def setup(committed_session_factory: Factory) -> dict[str, int]:
 
 async def add_charge(factory: Factory, unit_id: int, amount: str, due: date) -> int:
     async with factory() as session:
-        row = Charge(unit_id=unit_id, concept="MONTHLY_FEE", amount=Decimal(amount), due_date=due)
+        # Obligations extension: billing period (month of the due date) and author (the administrator).
+        author = await session.scalar(select(User.id).where(User.role == UserRole.ADMINISTRADOR).limit(1))
+        row = Charge(unit_id=unit_id, concept="MONTHLY_FEE", amount=Decimal(amount), due_date=due,
+                     billing_period=due.replace(day=1), created_by_user_id=author)
         session.add(row)
         await session.commit()
         return row.id

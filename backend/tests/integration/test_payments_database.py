@@ -68,8 +68,12 @@ async def test_constraints_indexes_and_foreign_keys(db_session: AsyncSession) ->
         "AND tc.CONSTRAINT_NAME = cc.CONSTRAINT_NAME WHERE cc.CONSTRAINT_SCHEMA = DATABASE() "
         "AND tc.TABLE_NAME IN ('charges', 'payments', 'payment_allocations') AND tc.ENFORCED = 'YES' ORDER BY 1, 2",
     ) == [
+        # The obligations extension (f3c8fc28babe) replaced other_has_description with description_required
+        # and added the period, description and origin rules (tested in test_charges_database.py).
         ("charges", "ck_charges_amount_positive"), ("charges", "ck_charges_concept_valid"),
-        ("charges", "ck_charges_other_has_description"),
+        ("charges", "ck_charges_description_required"), ("charges", "ck_charges_monthly_fee_without_description"),
+        ("charges", "ck_charges_period_first_day"), ("charges", "ck_charges_period_only_for_monthly_fee"),
+        ("charges", "ck_charges_source_only_for_late_fee"),
         ("payment_allocations", "ck_payment_allocations_amount_positive"),
         ("payments", "ck_payments_amount_positive"), ("payments", "ck_payments_concept_valid"),
         ("payments", "ck_payments_description_only_for_other"), ("payments", "ck_payments_method_valid"),
@@ -82,8 +86,13 @@ async def test_constraints_indexes_and_foreign_keys(db_session: AsyncSession) ->
         "FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() "
         "AND TABLE_NAME IN ('charges', 'payments', 'payment_allocations') GROUP BY 1, 2, 3 ORDER BY 1, 2",
     ) == [
+        ("charges", "ix_charges_created_by_user_id", 1, "created_by_user_id"),
         ("charges", "ix_charges_unit_id_due_date_created_at", 1, "unit_id,due_date,created_at"),
+        ("charges", "ix_charges_unit_id_source_charge_id", 1, "unit_id,source_charge_id,late_fee_source_link"),
         ("charges", "PRIMARY", 0, "id"),
+        ("charges", "uq_charges_source_charge_id", 0, "source_charge_id"),
+        ("charges", "uq_charges_unit_id_billing_period", 0, "unit_id,billing_period"),
+        ("charges", "uq_charges_unit_id_id_can_originate_late_fee", 0, "unit_id,id,can_originate_late_fee"),
         ("payment_allocations", "ix_payment_allocations_charge_id", 1, "charge_id"),
         ("payment_allocations", "PRIMARY", 0, "id"),
         ("payment_allocations", "uq_payment_allocations_payment_id", 0, "payment_id,charge_id"),
@@ -99,6 +108,8 @@ async def test_constraints_indexes_and_foreign_keys(db_session: AsyncSession) ->
         "FROM information_schema.REFERENTIAL_CONSTRAINTS rc WHERE rc.CONSTRAINT_SCHEMA = DATABASE() "
         "AND rc.TABLE_NAME IN ('charges', 'payments', 'payment_allocations') ORDER BY 1, 2",
     ) == [
+        ("charges", "fk_charges_created_by_user_id_users", "users", "RESTRICT"),
+        ("charges", "fk_charges_source_charge_id_charges", "charges", "RESTRICT"),
         ("charges", "fk_charges_unit_id_units", "units", "RESTRICT"),
         ("payment_allocations", "fk_payment_allocations_charge_id_charges", "charges", "RESTRICT"),
         ("payment_allocations", "fk_payment_allocations_payment_id_payments", "payments", "RESTRICT"),
@@ -115,7 +126,8 @@ async def ids(db_session: AsyncSession, make_user: Any) -> dict[str, int]:
     resident = await community.resident("Laura Gómez", "1012345678", (1, 1, 101))
     unit_id = (await rows(db_session, "SELECT unit_id FROM resident_units WHERE user_id = :u", u=resident))[0][0]
     await db_session.execute(text(
-        "INSERT INTO charges (unit_id, concept, amount, due_date) VALUES (:u, 'MONTHLY_FEE', 100000, '2026-01-05')"), {"u": unit_id})
+        "INSERT INTO charges (unit_id, concept, amount, due_date, billing_period, created_by_user_id) "
+        "VALUES (:u, 'MONTHLY_FEE', 100000, '2026-01-05', '2026-01-01', :a)"), {"u": unit_id, "a": admin.id})
     charge_id = (await rows(db_session, "SELECT MAX(id) FROM charges"))[0][0]
     await db_session.execute(text(
         "INSERT INTO payments (resident_id, unit_id, registered_by_user_id, amount, method, concept, payment_date, "
@@ -139,10 +151,11 @@ DUPLICATE = 1062
 
 
 async def test_check_constraints(db_session: AsyncSession, ids: dict[str, int]) -> None:
-    u, p = ids["unit"], ids["payment"]
-    await rejects(db_session, "INSERT INTO charges (unit_id, concept, amount, due_date) VALUES (:u, 'MONTHLY_FEE', 0, '2026-01-01')", CHECK_VIOLATED, u=u)
-    await rejects(db_session, "INSERT INTO charges (unit_id, concept, amount, due_date) VALUES (:u, 'RENT', 1, '2026-01-01')", CHECK_VIOLATED, u=u)
-    await rejects(db_session, "INSERT INTO charges (unit_id, concept, amount, due_date) VALUES (:u, 'OTHER', 1, '2026-01-01')", CHECK_VIOLATED, u=u)
+    u, p, a = ids["unit"], ids["payment"], ids["admin"]
+    insert = "INSERT INTO charges (unit_id, concept, amount, due_date, billing_period, created_by_user_id) VALUES "
+    await rejects(db_session, insert + "(:u, 'MONTHLY_FEE', 0, '2026-01-01', '2026-02-01', :a)", CHECK_VIOLATED, u=u, a=a)
+    await rejects(db_session, insert + "(:u, 'RENT', 1, '2026-01-01', NULL, :a)", CHECK_VIOLATED, u=u, a=a)
+    await rejects(db_session, insert + "(:u, 'OTHER', 1, '2026-01-01', NULL, :a)", CHECK_VIOLATED, u=u, a=a)
     await rejects(db_session, "UPDATE payments SET amount = -1 WHERE id = :p", CHECK_VIOLATED, p=p)
     await rejects(db_session, "UPDATE payments SET method = 'CHECK' WHERE id = :p", CHECK_VIOLATED, p=p)
     await rejects(db_session, "UPDATE payments SET concept = 'OTHER' WHERE id = :p", CHECK_VIOLATED, p=p)  # without description
@@ -154,7 +167,8 @@ async def test_check_constraints(db_session: AsyncSession, ids: dict[str, int]) 
 
 async def test_foreign_keys_and_uniqueness(db_session: AsyncSession, ids: dict[str, int]) -> None:
     p, c = ids["payment"], ids["charge"]
-    await rejects(db_session, "INSERT INTO charges (unit_id, concept, amount, due_date) VALUES (999999, 'MONTHLY_FEE', 1, '2026-01-01')", FK_PARENT_MISSING)
+    await rejects(db_session, "INSERT INTO charges (unit_id, concept, amount, due_date, billing_period, created_by_user_id) "
+                              "VALUES (999999, 'MONTHLY_FEE', 1, '2026-01-01', '2026-01-01', :a)", FK_PARENT_MISSING, a=ids["admin"])
     await rejects(db_session, "INSERT INTO payment_allocations (payment_id, charge_id, amount) VALUES (:p, 999999, 1)", FK_PARENT_MISSING, p=p)
     await db_session.execute(text("INSERT INTO payment_allocations (payment_id, charge_id, amount) VALUES (:p, :c, 1)"), {"p": p, "c": c})
     await rejects(db_session, "INSERT INTO payment_allocations (payment_id, charge_id, amount) VALUES (:p, :c, 1)", DUPLICATE, p=p, c=c)

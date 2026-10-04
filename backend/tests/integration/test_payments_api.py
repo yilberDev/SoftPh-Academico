@@ -52,8 +52,13 @@ async def unit_of(db: AsyncSession, user_id: int) -> int:
 
 
 async def charge(db: AsyncSession, unit_id: int, amount: str, due: date, concept: str = "MONTHLY_FEE",
-                 description: str | None = None, created_at: datetime | None = None) -> int:
+                 description: str | None = None, created_at: datetime | None = None, period: date | None = None) -> int:
+    # Obligations extension: a monthly fee has a billing period (by default the month of its due date) and
+    # every charge has the administrator who created it.
+    author = await db.scalar(select(User.id).where(User.role == UserRole.ADMINISTRADOR).limit(1))
+    billing_period = (period or due.replace(day=1)) if concept == "MONTHLY_FEE" else None
     row = Charge(unit_id=unit_id, concept=concept, description=description, amount=Decimal(amount), due_date=due,
+                 billing_period=billing_period, created_by_user_id=author,
                  **({"created_at": created_at} if created_at else {}))
     db.add(row)
     await db.flush()
@@ -322,9 +327,10 @@ async def test_fifo_ties_use_created_at_then_id(
 ) -> None:
     unit_id = await unit_of(db_session, laura)
     due = date(2026, 3, 5)
-    later = await charge(db_session, unit_id, "10000", due, created_at=datetime(2026, 3, 1, 12, 0, 1))
-    first_a = await charge(db_session, unit_id, "10000", due, created_at=datetime(2026, 3, 1, 12, 0, 0))
-    first_b = await charge(db_session, unit_id, "10000", due, created_at=datetime(2026, 3, 1, 12, 0, 0))
+    # Same due date: distinct billing periods (one monthly fee per apartment and period).
+    later = await charge(db_session, unit_id, "10000", due, created_at=datetime(2026, 3, 1, 12, 0, 1), period=date(2026, 3, 1))
+    first_a = await charge(db_session, unit_id, "10000", due, created_at=datetime(2026, 3, 1, 12, 0, 0), period=date(2026, 4, 1))
+    first_b = await charge(db_session, unit_id, "10000", due, created_at=datetime(2026, 3, 1, 12, 0, 0), period=date(2026, 5, 1))
     earlier_due = await charge(db_session, unit_id, "10000", date(2026, 2, 5), created_at=datetime(2026, 3, 2))
 
     body = (await pay(client, headers, laura, "35000")).json()
