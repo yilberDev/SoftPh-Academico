@@ -1,0 +1,261 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import AdminHeader from '../../../components/AdminHeader.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import { loadFeedback } from '../../../lib/api/feedback-server';
+import { isValidId, loadPage } from '../../../lib/api/structure-server';
+import { TEXT_MAX_LENGTH, formatDateTime } from '../../../lib/feedback/feedback-detail';
+import { NO_SUBJECT } from '../../../lib/feedback/feedback-list';
+
+// HU-005 criteria 2-4. The middleware only renders /admin pages for a valid
+// ADMINISTRADOR session; the API decides exactly which fields are exposed.
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const { id } = Astro.params;
+const page = isValidId(id) ? await loadPage(() => loadFeedback(id, Astro.request)) : { notFound: true as const };
+if ('unauthenticated' in page) {
+  return Astro.redirect('/login');
+}
+const feedback = 'data' in page ? page.data : null;
+if (!feedback) {
+  Astro.response.status = 404;
+}
+// Initial state for the page script (the detail is admin-only and never cached).
+const initialJson = feedback ? JSON.stringify(feedback).replace(/</g, '\\u003c') : '';
+
+const textareaClass =
+  'mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30 disabled:bg-slate-100';
+const primaryButton =
+  'rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:opacity-60';
+const secondaryButton =
+  'rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:opacity-60';
+const card = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6';
+---
+
+<Layout title={feedback ? `Feedback de ${feedback.resident.full_name} — SoftPh-Académico` : 'Feedback no encontrado — SoftPh-Académico'}>
+  <AdminHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-3xl space-y-6 px-4 py-8" data-detail-page data-csrf-token={csrfToken}>
+    <Breadcrumbs items={[{ label: 'Feedback', href: '/admin/feedback' }, { label: feedback ? `Feedback #${feedback.id}` : 'No encontrado' }]} />
+    {
+      !feedback ? (
+        <div class="rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
+          <p class="text-slate-700">Este feedback no existe.</p>
+          <a href="/admin/feedback" class="mt-4 inline-block rounded text-sm font-medium text-emerald-800 hover:underline">Volver al feedback</a>
+        </div>
+      ) : (
+        <>
+          <script type="application/json" data-initial set:html={initialJson} />
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 class:list={['text-2xl font-semibold tracking-tight break-words', !feedback.subject && 'italic text-slate-600']}>
+                {feedback.subject ?? NO_SUBJECT}
+              </h1>
+              <p class="mt-1 text-sm text-slate-600">Recibido el {formatDateTime(feedback.created_at)}</p>
+            </div>
+            <span data-status-badge class="inline-flex rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset"></span>
+          </div>
+
+          <div data-notice role="status" class="hidden rounded-lg border px-4 py-3 text-sm"></div>
+
+          <section aria-labelledby="resident-title" class={card}>
+            <h2 id="resident-title" class="text-lg font-semibold">Residente</h2>
+            <dl class="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
+              <div><dt class="text-slate-500">Nombre</dt><dd class="font-medium text-slate-900">{feedback.resident.full_name}</dd></div>
+              <div><dt class="text-slate-500">Correo</dt><dd class="break-all text-slate-900">{feedback.resident.email}</dd></div>
+              <div>
+                <dt class="text-slate-500">Unidad</dt>
+                <dd class:list={['text-slate-900', feedback.resident.unit_label ? 'font-mono' : 'italic text-slate-500']}>
+                  {feedback.resident.unit_label ?? 'Sin unidad residencial actual'}
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section aria-labelledby="message-title" class={card}>
+            <h2 id="message-title" class="text-lg font-semibold">Mensaje del residente</h2>
+            <p class="mt-3 whitespace-pre-wrap break-words text-slate-800" data-message>{feedback.message}</p>
+            <p class="mt-3 text-xs text-slate-500">El mensaje original no se puede modificar.</p>
+          </section>
+
+          <section aria-labelledby="response-title" class={card}>
+            <h2 id="response-title" class="text-lg font-semibold">Respuesta del administrador</h2>
+            <p class="mt-1 text-sm text-slate-600">Se envía por correo al residente.</p>
+            <div data-response-saved class="mt-3 hidden rounded-lg bg-slate-50 px-4 py-3">
+              <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Respuesta enviada</p>
+              <p data-response-text class="mt-1 whitespace-pre-wrap break-words text-slate-800"></p>
+            </div>
+            <p data-response-none class="mt-3 hidden text-sm italic text-slate-500">No se registró una respuesta escrita.</p>
+            <form data-response-form class="mt-4 space-y-3" novalidate>
+              <label for="feedback-response" class="block text-sm font-medium text-slate-700">Respuesta</label>
+              <textarea id="feedback-response" rows="4" maxlength={TEXT_MAX_LENGTH} class={textareaClass}></textarea>
+              <p id="feedback-response-error" data-error-for="response" class="hidden text-sm text-red-700"></p>
+              <button type="submit" class={primaryButton}>Guardar respuesta</button>
+            </form>
+          </section>
+
+          <section aria-labelledby="management-title" class={card}>
+            <h2 id="management-title" class="text-lg font-semibold">Gestión</h2>
+            <div data-resolution-saved class="mt-3 hidden rounded-lg bg-slate-50 px-4 py-3">
+              <p class="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Nota interna de resolución <span class="normal-case">(no se envía al residente)</span>
+              </p>
+              <p data-resolution-text class="mt-1 whitespace-pre-wrap break-words text-slate-800"></p>
+              <p data-resolved-at class="mt-2 text-sm text-slate-600"></p>
+            </div>
+            <form data-resolve-form class="mt-3 space-y-3" novalidate>
+              <label for="feedback-note" class="block text-sm font-medium text-slate-700">Nota de resolución</label>
+              <p class="text-sm text-slate-600">Registra la gestión realizada. Es interna: el residente no la recibe.</p>
+              <textarea id="feedback-note" rows="3" maxlength={TEXT_MAX_LENGTH} class={textareaClass}></textarea>
+              <p id="feedback-note-error" data-error-for="resolution_note" class="hidden text-sm text-red-700"></p>
+              <button type="submit" class={primaryButton}>Marcar como resuelto</button>
+            </form>
+          </section>
+
+          <section aria-labelledby="history-title" class={card}>
+            <h2 id="history-title" class="text-lg font-semibold">Historial de acciones</h2>
+            <ol data-history class="mt-3 space-y-3 border-l border-slate-200 pl-4"></ol>
+            <p data-history-empty class="mt-3 hidden text-sm text-slate-500">Aún no hay acciones registradas.</p>
+          </section>
+
+          <dialog data-confirm-dialog aria-labelledby="confirm-title"
+            class="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl p-0 shadow-xl backdrop:bg-slate-900/40">
+            <div class="space-y-3 p-6">
+              <h2 id="confirm-title" class="text-lg font-semibold">¿Marcar este feedback como resuelto?</h2>
+              <p class="text-sm text-slate-600">
+                Se notificará al residente y el feedback ya no podrá modificarse. La nota de resolución es interna y no se
+                envía.
+              </p>
+              <div class="flex justify-end gap-2 pt-2">
+                <button type="button" data-confirm-cancel class={secondaryButton}>Cancelar</button>
+                <button type="button" data-confirm-ok class={primaryButton}>Marcar como resuelto</button>
+              </div>
+            </div>
+          </dialog>
+        </>
+      )
+    }
+  </main>
+</Layout>
+
+<script>
+  import { getFeedback, resolveFeedback, respondFeedback, type FeedbackDetail } from '../../../lib/api/feedback';
+  import { actionLabel, createFeedbackDetail, formatDateTime, type DetailState } from '../../../lib/feedback/feedback-detail';
+  import { STATUS_LABELS } from '../../../lib/feedback/feedback-list';
+
+  const page = document.querySelector<HTMLElement>('[data-detail-page]')!;
+  const initialScript = page.querySelector<HTMLScriptElement>('[data-initial]');
+  if (initialScript) {
+    const csrfToken = page.dataset.csrfToken ?? '';
+    const $ = <T extends Element>(selector: string) => page.querySelector<T>(selector)!;
+    const show = (element: Element, visible: boolean) => element.classList.toggle('hidden', !visible);
+    const badge = $<HTMLElement>('[data-status-badge]');
+    const notice = $<HTMLElement>('[data-notice]');
+    const responseForm = $<HTMLFormElement>('[data-response-form]');
+    const responseInput = $<HTMLTextAreaElement>('#feedback-response');
+    const resolveForm = $<HTMLFormElement>('[data-resolve-form]');
+    const noteInput = $<HTMLTextAreaElement>('#feedback-note');
+    const dialog = $<HTMLDialogElement>('[data-confirm-dialog]');
+    const okButton = $<HTMLButtonElement>('[data-confirm-ok]');
+    let lastVersion = -1;
+
+    const TONES = {
+      success: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+      warning: 'border-amber-200 bg-amber-50 text-amber-900',
+      error: 'border-red-200 bg-red-50 text-red-800'
+    } as const;
+
+    function showError(field: string, message: string | undefined, control: HTMLTextAreaElement): void {
+      const error = $<HTMLElement>(`[data-error-for="${field}"]`);
+      error.textContent = message ?? '';
+      show(error, Boolean(message));
+      control.setAttribute('aria-invalid', message ? 'true' : 'false');
+      if (message) {
+        control.setAttribute('aria-describedby', error.id);
+        control.focus();
+      }
+    }
+
+    function render(state: DetailState): void {
+      const { feedback } = state;
+      const pending = feedback.status === 'PENDING';
+      badge.textContent = STATUS_LABELS[feedback.status];
+      badge.className = `inline-flex rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset ${
+        pending ? 'bg-amber-50 text-amber-900 ring-amber-200' : 'bg-emerald-50 text-emerald-800 ring-emerald-200'
+      }`;
+      // Response (to the resident) and resolution note (internal) are always shown apart.
+      show($('[data-response-saved]'), Boolean(feedback.admin_response));
+      $('[data-response-text]').textContent = feedback.admin_response ?? '';
+      show($('[data-response-none]'), !pending && !feedback.admin_response);
+      show(responseForm, pending);
+      show($('[data-resolution-saved]'), !pending);
+      $('[data-resolution-text]').textContent = feedback.resolution_note ?? '';
+      $('[data-resolved-at]').textContent = feedback.resolved_at ? `Resuelto el ${formatDateTime(feedback.resolved_at)}` : '';
+      show(resolveForm, pending);
+      if (feedback.version !== lastVersion) {
+        // New data from the server: the forms start from it.
+        responseInput.value = feedback.admin_response ?? '';
+        noteInput.value = '';
+        lastVersion = feedback.version;
+      }
+
+      const busy = state.busy !== null;
+      for (const control of [responseInput, noteInput, ...page.querySelectorAll<HTMLButtonElement>('form button')]) {
+        control.disabled = busy;
+      }
+      responseForm.querySelector('button')!.textContent = state.busy === 'response' ? 'Guardando…' : 'Guardar respuesta';
+      okButton.disabled = busy;
+      okButton.textContent = state.busy === 'resolve' ? 'Guardando…' : 'Marcar como resuelto';
+      if (state.confirming && !dialog.open) dialog.showModal();
+      if (!state.confirming && dialog.open) dialog.close();
+
+      showError('response', state.errors.response, responseInput);
+      showError('resolution_note', state.errors.resolution_note, noteInput);
+      show(notice, state.notice !== null);
+      if (state.notice) {
+        notice.className = `rounded-lg border px-4 py-3 text-sm ${TONES[state.notice.tone]}`;
+        notice.textContent = state.notice.text;
+      }
+
+      const history = $<HTMLOListElement>('[data-history]');
+      history.replaceChildren(
+        ...feedback.action_history.map((entry) => {
+          const item = document.createElement('li');
+          item.className = 'relative';
+          const title = document.createElement('p');
+          title.className = 'font-medium text-slate-900';
+          title.textContent = actionLabel(entry.action);
+          const meta = document.createElement('p');
+          meta.className = 'text-sm text-slate-600';
+          meta.textContent = `${formatDateTime(entry.at)} · ${entry.actor.full_name ?? 'Sistema'}`;
+          item.append(title, meta);
+          return item;
+        })
+      );
+      show($('[data-history-empty]'), feedback.action_history.length === 0);
+    }
+
+    const initial = JSON.parse(initialScript.textContent ?? '{}') as FeedbackDetail;
+    const detail = createFeedbackDetail(initial, {
+      respond: (id, text, version) => respondFeedback(id, text, version, csrfToken),
+      resolve: (id, note, version) => resolveFeedback(id, note, version, csrfToken),
+      reload: getFeedback,
+      render,
+      navigate: (path) => window.location.assign(path)
+    });
+    render(detail.state);
+
+    responseForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      void detail.respond(responseInput.value);
+    });
+    resolveForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      detail.askResolve(noteInput.value);
+    });
+    $('[data-confirm-cancel]').addEventListener('click', () => detail.cancelResolve());
+    dialog.addEventListener('cancel', (event) => {
+      event.preventDefault();
+      detail.cancelResolve();
+    });
+    okButton.addEventListener('click', () => void detail.confirmResolve());
+  }
+</script>

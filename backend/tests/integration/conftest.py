@@ -85,7 +85,7 @@ async def committed_session_factory(migrated_test_database: URL) -> AsyncIterato
         async with engine.begin() as connection:
             # Children before parents (foreign keys).
             for table in (
-                "payment_allocations", "payments", "charges",
+                "feedback", "payment_allocations", "payments", "charges",
                 "password_reset_tokens", "resident_units", "resident_invitations", "units", "towers", "blocks",
                 "sessions", "login_throttles", "audit_logs", "users",
             ):

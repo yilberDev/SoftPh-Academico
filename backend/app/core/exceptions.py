@@ -243,3 +243,27 @@ class PasswordResetRevokedError(GoneError):
 class ResidenceChangedError(ConflictError):
     code = "RESIDENCE_CHANGED"
     message = "La residencia del residente cambió mientras se registraba el pago. Intenta de nuevo."
+
+
+# --- HU-005: feedback management ------------------------------------------------------
+
+
+class FeedbackNotFoundError(NotFoundError):
+    message = "El feedback no existe."
+
+
+class FeedbackAlreadyResolvedError(ConflictError):
+    code = "FEEDBACK_ALREADY_RESOLVED"
+    message = "Este feedback ya fue marcado como resuelto."
+
+
+class FeedbackVersionConflictError(VersionConflictError):
+    message = "El feedback fue actualizado en otra sesión. Vuelve a cargar la información antes de realizar cambios."
+
+
+class FeedbackResidentNotValidError(AppError):
+    """A feedback can only belong to an activated, non-deleted RESIDENTE (domain rule, HU-009 creates them)."""
+
+    status_code = 422
+    code = "VALIDATION_ERROR"
+    message = "El feedback solo puede pertenecer a un residente activo."

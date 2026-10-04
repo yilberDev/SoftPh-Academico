@@ -6,6 +6,7 @@ Base.metadata. Each model is added with the HU that needs it.
 
 from app.db.base import Base
 from app.models.audit_log import AuditAction, AuditLog
+from app.models.feedback import Feedback, FeedbackStatus
 from app.models.finance import (
     Charge,
     FinancialConcept,
@@ -29,6 +30,8 @@ __all__ = [
     "Block",
     "Charge",
     "DeliveryStatus",
+    "Feedback",
+    "FeedbackStatus",
     "FinancialConcept",
     "InvitationStatus",
     "LoginThrottle",

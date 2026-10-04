@@ -90,6 +90,11 @@ Aplicar las reglas de la skill `security`. En resumen:
 - Dinero: `Decimal` y `app/core/money.py` (`format_cop`); los montos con más de 2 decimales se rechazan, nunca se redondean.
 - Fechas de calendario del usuario: `app/core/clock.bogota_today()`.
 
+## Cambios con bloqueo optimista y notificaciones (HU-005)
+
+- Las entidades que el administrador edita por partes usan `version`: el cliente envía la versión que vio; el servicio bloquea la fila (`FOR UPDATE`), compara la versión (409 `VERSION_CONFLICT`) y la incrementa. Un endpoint por cambio, nunca un PUT genérico.
+- Las notificaciones al residente usan `MailSender` después del COMMIT y registran `*_NOTIFICATION_SENT/FAILED` en otra transacción; un fallo nunca deshace el cambio. Las notas internas nunca forman parte del correo.
+
 ## Pago electrónico simulado (HU-010)
 
 - Es una simulación interna implementada en `services/`: no llama a ninguna pasarela externa ni a su sandbox, ni usa SDK o credenciales de terceros.

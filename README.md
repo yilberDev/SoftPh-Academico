@@ -131,6 +131,19 @@ Cada área solo admite su rol (con otro rol se muestra "Acceso no autorizado"), 
 | `GET /api/v1/auth/session` | Usuario actual y token CSRF |
 | `POST /api/v1/auth/logout` | Cierre de sesión (requiere `Origin` y cabecera `X-CSRF-Token`) |
 
+## Feedback de residentes (HU-005)
+
+En `http://localhost:4321/admin/feedback` (solo administrador) se consulta el feedback de los residentes: búsqueda por residente o asunto, filtro por estado (Pendiente o Resuelto), orden y paginación. En el detalle se ve el mensaje original y el residente, se guarda una respuesta (se envía por correo al residente) y se marca como resuelto con una nota interna de gestión (no se envía), con confirmación previa. El historial de acciones sale de la auditoría. Si dos administradores cambian el mismo feedback a la vez, solo un cambio se guarda y el otro ve un aviso para recargar.
+
+El residente todavía no puede enviar feedback (HU-009); para probar la gestión se crean datos con la función de dominio `create_feedback` (ver pruebas).
+
+| Endpoint | Uso |
+|---|---|
+| `GET /api/v1/admin/feedback?page=1&page_size=10&status=PENDING&search=&sort_by=created_at&sort_order=desc` | Listado (`sort_by`: `created_at`, `resident`, `subject`, `status`) |
+| `GET /api/v1/admin/feedback/{id}` | Detalle con el residente y el historial |
+| `POST /api/v1/admin/feedback/{id}/response` | Respuesta: `{response, version}` (requiere `Origin` y `X-CSRF-Token`) |
+| `POST /api/v1/admin/feedback/{id}/resolve` | Resolución: `{resolution_note, version}` (requiere `Origin` y `X-CSRF-Token`) |
+
 ## Pagos de residentes (HU-004)
 
 En `http://localhost:4321/admin/payments` (solo administrador) se registran los pagos manuales: residente (búsqueda por nombre o documento), monto, método (efectivo, tarjeta o transferencia), concepto (mensualidad, mora, penalización u otro con descripción) y fecha del pago. El backend determina la unidad vigente del residente, aplica el pago a los cargos pendientes de la unidad del más antiguo al más reciente (FIFO) y conserva el excedente como saldo a favor. Después envía el recibo en PDF al correo del residente (Mailpit en desarrollo: `http://localhost:8025`); si el correo falla, el pago queda registrado y se avisa aparte. Debajo está el resumen de pagos, con filtros por residente y fechas, orden y paginación.

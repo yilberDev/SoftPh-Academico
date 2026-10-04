@@ -28,6 +28,7 @@ from app.core.config import get_settings
 from app.core.sessions import CSRF_HEADER_NAME, SESSION_COOKIE_NAME, derive_csrf_token, generate_session_token, hash_token
 from app.main import app
 from app.models import AuditLog, User, UserRole, UserSession, UserStatus
+from app.services import feedback as feedback_service
 from app.services.sessions import create_session
 from tests.integration.conftest import PASSWORD, FakeMailSender
 
@@ -67,6 +68,11 @@ ACCESS_POLICY: dict[tuple[str, str], Access] = {
     # HU-004: manual payments.
     ("GET", "/admin/payments"): Access.ADMINISTRADOR,
     ("POST", "/admin/payments"): Access.ADMINISTRADOR,
+    # HU-005: feedback management.
+    ("GET", "/admin/feedback"): Access.ADMINISTRADOR,
+    ("GET", "/admin/feedback/{feedback_id}"): Access.ADMINISTRADOR,
+    ("POST", "/admin/feedback/{feedback_id}/response"): Access.ADMINISTRADOR,
+    ("POST", "/admin/feedback/{feedback_id}/resolve"): Access.ADMINISTRADOR,
     # HU-013: physical structure.
     ("GET", "/blocks"): Access.ADMINISTRADOR,
     ("POST", "/blocks"): Access.ADMINISTRADOR,
@@ -90,6 +96,8 @@ PRIVATE = ROUTES_OF[Access.AUTHENTICATED] + ROUTES_OF[Access.ADMINISTRADOR] + RO
 
 # A complete, valid request for each private route (ids are replaced by real ones where needed).
 BODIES: dict[tuple[str, str], Any] = {
+    ("POST", "/admin/feedback/{feedback_id}/response"): {"response": "Revisaremos el caso.", "version": 1},
+    ("POST", "/admin/feedback/{feedback_id}/resolve"): {"resolution_note": "Caso gestionado.", "version": 1},
     ("POST", "/admin/payments"): {
         "resident_id": 1, "amount": "150000", "method": "CASH", "concept": "MONTHLY_FEE", "payment_date": "2026-01-05",
     },
@@ -248,6 +256,14 @@ async def test_administrator_reaches_every_administrator_route(
         "resident_id": resident_id, "amount": "150000", "method": "CASH", "concept": "MONTHLY_FEE",
         "payment_date": "2026-01-05"})
     await ok("GET", "/admin/payments", "/admin/payments?date_from=2026-01-01&sort_by=amount&sort_order=asc", 200)
+    # HU-005: a feedback of that resident (HU-009 will create them; here, the domain function).
+    feedback_id = await feedback_service.create_feedback(db_session, resident_id, subject="Ruido", message="Hay ruido.")
+    await ok("GET", "/admin/feedback", "/admin/feedback?status=PENDING&search=Ruido&sort_by=resident&sort_order=asc", 200)
+    await ok("GET", "/admin/feedback/{feedback_id}", f"/admin/feedback/{feedback_id}", 200)
+    await ok("POST", "/admin/feedback/{feedback_id}/response", f"/admin/feedback/{feedback_id}/response", 200,
+             {"response": "Revisaremos el caso.", "version": 1})
+    await ok("POST", "/admin/feedback/{feedback_id}/resolve", f"/admin/feedback/{feedback_id}/resolve", 200,
+             {"resolution_note": "Caso gestionado.", "version": 2})
     spare = await ok("POST", "/towers/{tower_id}/units", f"/towers/{tower['id']}/units", 201, {"number": 103})
     await ok("DELETE", "/units/{unit_id}", f"/units/{spare['id']}?version={spare['version']}", 204)
     other_block = await ok("POST", "/blocks", "/blocks", 201, {"number": 9})
@@ -256,7 +272,7 @@ async def test_administrator_reaches_every_administrator_route(
     await ok("DELETE", "/blocks/{block_id}", f"/blocks/{other_block['id']}?version={other_block['version']}", 204)
 
     assert sorted(visited) == ROUTES_OF[Access.ADMINISTRADOR]
-    assert len(mailer.sent) == 3  # invitation + resend + payment receipt
+    assert len(mailer.sent) == 5  # invitation + resend + payment receipt + 2 feedback notifications
 
 
 # --- Criteria 2 and 3: the resident only reaches what belongs to the resident ----------------------
@@ -276,7 +292,7 @@ async def test_resident_is_forbidden_on_every_administrator_route(
         "error": {"code": "FORBIDDEN", "message": "No tienes permiso para realizar esta acción.", "details": []}
     }
     # Nothing was read or changed: no rows, no email, no audit entry.
-    for table in ("blocks", "towers", "units", "resident_invitations", "payments", "payment_allocations"):
+    for table in ("blocks", "towers", "units", "resident_invitations", "payments", "payment_allocations", "feedback"):
         assert await count(db_session, table) == 0
     assert mailer.sent == []
     assert await count(db_session, "audit_logs") == audit_before
@@ -359,12 +375,13 @@ async def test_resident_cannot_reach_resources_by_changing_identifiers(
     invitation = (await client.post(f"{API}/resident-invitations", headers=admin_headers, json={
         "email": "otra@example.com", "full_name": "Otra Persona", "unit_id": unit["id"], "validity_days": 7,
     })).json()
+    feedback_id = await feedback_service.create_feedback(db_session, resident.id, subject="Mío", message="Hola")
     sent, audit_before = len(mailer.sent), await count(db_session, "audit_logs")
     headers = await open_session(client, db_session, resident)
 
     # Real ids, missing ids and invalid ids get the same answer: no existence leak.
     real = {"/blocks/{block_id}": block["id"], "/towers/{tower_id}": tower["id"], "/units/{unit_id}": unit["id"],
-            "/resident-invitations/{invitation_id}/resend": invitation["id"]}
+            "/resident-invitations/{invitation_id}/resend": invitation["id"], "/admin/feedback/{feedback_id}": feedback_id}
     bodies = set()
     for route in ROUTES_OF[Access.ADMINISTRADOR]:
         if "{" not in route[1]:
