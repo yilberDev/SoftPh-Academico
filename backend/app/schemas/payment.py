@@ -17,7 +17,13 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictInt, Va
 from app.core.clock import bogota_today
 from app.core.money import MONEY_MAX, format_cop
 from app.core.validation import invalid
-from app.models.finance import FinancialConcept, PaymentMethod, ReceiptEmailStatus
+from app.models.finance import (
+    PAYMENT_NOTES_MAX_LENGTH,
+    TRANSACTION_REFERENCE_MAX_LENGTH,
+    FinancialConcept,
+    PaymentMethod,
+    ReceiptEmailStatus,
+)
 from app.schemas.invitation import ID_MAX
 from app.services.allocation import PaymentStatus
 
@@ -90,6 +96,39 @@ def _valid_resident_id(value: int) -> int:
 ResidentId = Annotated[StrictInt, AfterValidator(_valid_resident_id)]
 
 
+def clean_transaction_reference(value: Any) -> str | None:
+    """HU-008: optional, one line (spaces collapsed), printable, at most 100 characters; empty is None."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise invalid("transaction_reference_format", "La referencia de transacción debe ser un texto.")
+    reference = " ".join(value.split())
+    if not reference:
+        return None
+    if len(reference) > TRANSACTION_REFERENCE_MAX_LENGTH:
+        raise invalid("transaction_reference_too_long",
+                      f"La referencia de transacción no puede superar {TRANSACTION_REFERENCE_MAX_LENGTH} caracteres.")
+    if not reference.isprintable():
+        raise invalid("transaction_reference_invalid", "La referencia de transacción contiene caracteres no válidos.")
+    return reference
+
+
+def clean_payment_notes(value: Any) -> str | None:
+    """HU-008: optional, trimmed (inner line breaks kept), at most 500 characters; empty is None."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise invalid("notes_format", "Las notas deben ser un texto.")
+    notes = value.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not notes:
+        return None
+    if len(notes) > PAYMENT_NOTES_MAX_LENGTH:
+        raise invalid("notes_too_long", f"Las notas no pueden superar {PAYMENT_NOTES_MAX_LENGTH} caracteres.")
+    if not all(char.isprintable() or char in "\n\t" for char in notes):
+        raise invalid("notes_invalid", "Las notas contienen caracteres no válidos.")
+    return notes
+
+
 class PaymentCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -100,6 +139,9 @@ class PaymentCreate(BaseModel):
     # Validated even when omitted: required for OTHER, not allowed otherwise.
     concept_description: str | None = Field(default=None, validate_default=True)
     payment_date: date
+    # HU-008: optional data of the administrator, shown in the detail of the payment.
+    transaction_reference: str | None = None
+    notes: str | None = None
 
     @field_validator("amount", mode="before")
     @classmethod
@@ -145,6 +187,16 @@ class PaymentCreate(BaseModel):
             raise invalid("payment_date_future", "La fecha del pago no puede ser posterior a hoy.")
         return payment_date
 
+    @field_validator("transaction_reference", mode="before")
+    @classmethod
+    def validate_transaction_reference(cls, value: Any) -> Any:
+        return clean_transaction_reference(value)
+
+    @field_validator("notes", mode="before")
+    @classmethod
+    def validate_notes(cls, value: Any) -> Any:
+        return clean_payment_notes(value)
+
 
 # --- Responses --------------------------------------------------------------------------------------
 
@@ -170,6 +222,8 @@ class PaymentRead(BaseModel):
     concept_description: str | None
     payment_date: date
     registered_at: datetime  # UTC (timezone-aware)
+    transaction_reference: str | None
+    notes: str | None
     applied_amount: Decimal
     credit_amount: Decimal
     status: PaymentStatus

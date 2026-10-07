@@ -47,6 +47,10 @@ class PaymentMethod(StrEnum):
     TRANSFER = "TRANSFER"
 
 
+TRANSACTION_REFERENCE_MAX_LENGTH = 100
+PAYMENT_NOTES_MAX_LENGTH = 500
+
+
 class PaymentSource(StrEnum):
     # The electronic payment simulated internally (HU-010) will add its own value.
     MANUAL = "MANUAL"
@@ -143,6 +147,12 @@ class Payment(Base):
         CheckConstraint(_in_list("source", PaymentSource), name="source_valid"),
         CheckConstraint(_in_list("receipt_email_status", ReceiptEmailStatus), name="receipt_email_status_valid"),
         CheckConstraint("receipt_email_status <> 'SENT' OR receipt_sent_at IS NOT NULL", name="sent_has_timestamp"),
+        # HU-008: optional, never blank ("nothing" is NULL).
+        CheckConstraint(
+            "transaction_reference IS NULL OR CHAR_LENGTH(TRIM(transaction_reference)) > 0",
+            name="transaction_reference_not_blank",
+        ),
+        CheckConstraint("notes IS NULL OR CHAR_LENGTH(TRIM(notes)) > 0", name="notes_not_blank"),
         Index("ix_payments_resident_id_payment_date", "resident_id", "payment_date"),
         Index("ix_payments_unit_id", "unit_id"),
         Index("ix_payments_payment_date", "payment_date"),
@@ -158,6 +168,11 @@ class Payment(Base):
     concept: Mapped[str] = mapped_column(String(20))
     concept_description: Mapped[str | None] = mapped_column(String(200))
     source: Mapped[str] = mapped_column(String(20), server_default=text("'MANUAL'"))
+    # HU-008: external reference of the transaction (transfer, card voucher; HU-010 will reuse it).
+    # NULL when there is none: never invented, never the receipt number.
+    transaction_reference: Mapped[str | None] = mapped_column(String(TRANSACTION_REFERENCE_MAX_LENGTH))
+    # HU-008: the administrator's notes on the payment.
+    notes: Mapped[str | None] = mapped_column(String(PAYMENT_NOTES_MAX_LENGTH))
     # The day the resident paid (Bogotá calendar date, never in the future).
     payment_date: Mapped[date] = mapped_column(Date)
     # When it was registered in the system (UTC).

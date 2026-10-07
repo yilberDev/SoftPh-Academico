@@ -32,6 +32,9 @@ export const METHODS = Object.keys(METHOD_LABELS) as PaymentMethod[];
 export const CONCEPTS = Object.keys(CONCEPT_LABELS) as PaymentConcept[];
 
 export const DESCRIPTION_MAX_LENGTH = 200;
+/** HU-008: optional data shown in the detail of the payment (same limits as the server). */
+export const REFERENCE_MAX_LENGTH = 100;
+export const NOTES_MAX_LENGTH = 500;
 export const AMOUNT_MAX = '9999999999.99';
 export const RESIDENT_SEARCH_DEBOUNCE_MS = 300;
 export const RESIDENT_SEARCH_PAGE_SIZE = 8;
@@ -106,8 +109,25 @@ export function showsDescription(concept: string): boolean {
   return concept === 'OTHER';
 }
 
-export type PaymentField = 'resident_id' | 'amount' | 'method' | 'concept' | 'concept_description' | 'payment_date';
-export const FIELDS: PaymentField[] = ['resident_id', 'amount', 'method', 'concept', 'concept_description', 'payment_date'];
+export type PaymentField =
+  | 'resident_id'
+  | 'amount'
+  | 'method'
+  | 'concept'
+  | 'concept_description'
+  | 'payment_date'
+  | 'transaction_reference'
+  | 'notes';
+export const FIELDS: PaymentField[] = [
+  'resident_id',
+  'amount',
+  'method',
+  'concept',
+  'concept_description',
+  'payment_date',
+  'transaction_reference',
+  'notes'
+];
 export type FieldErrors = Partial<Record<PaymentField, string>>;
 
 export interface PaymentFormValues {
@@ -117,6 +137,9 @@ export interface PaymentFormValues {
   concept: string;
   description: string;
   paymentDate: string;
+  /** Optional (HU-008): empty means none. */
+  transactionReference: string;
+  notes: string;
 }
 
 export function validatePaymentForm(
@@ -140,6 +163,13 @@ export function validatePaymentForm(
   else if (!isIsoDate(values.paymentDate)) {
     errors.payment_date = 'La fecha del pago no es válida.';
   } else if (values.paymentDate > today) errors.payment_date = 'La fecha del pago no puede ser posterior a hoy.';
+  // Optional: one line for the reference; the notes keep their line breaks.
+  const reference = values.transactionReference.trim().replace(/\s+/g, ' ');
+  if (reference.length > REFERENCE_MAX_LENGTH) {
+    errors.transaction_reference = `La referencia de transacción no puede superar ${REFERENCE_MAX_LENGTH} caracteres.`;
+  }
+  const notes = values.notes.replace(/\r\n?/g, '\n').trim();
+  if (notes.length > NOTES_MAX_LENGTH) errors.notes = `Las notas no pueden superar ${NOTES_MAX_LENGTH} caracteres.`;
 
   if (Object.keys(errors).length > 0 || 'error' in amount) return { errors, payload: null };
   return {
@@ -151,7 +181,9 @@ export function validatePaymentForm(
       concept: values.concept as PaymentConcept,
       // Only for "Otro"; never sent with another concept.
       concept_description: showsDescription(values.concept) ? description : null,
-      payment_date: values.paymentDate
+      payment_date: values.paymentDate,
+      transaction_reference: reference || null,
+      notes: notes || null
     }
   };
 }
@@ -172,12 +204,14 @@ export function confirmationOf(payment: RegisteredPayment): Confirmation {
     { label: 'Monto', value: formatCop(payment.amount) },
     { label: 'Valor aplicado', value: formatCop(payment.applied_amount) }
   ];
+  if (payment.transaction_reference) lines.push({ label: 'Referencia de transacción', value: payment.transaction_reference });
   if (Number(payment.credit_amount) > 0) lines.push({ label: 'Saldo a favor', value: formatCop(payment.credit_amount) });
   lines.push(
     { label: 'Estado del pago', value: STATUS_LABELS[payment.status] },
     { label: 'Saldo pendiente de la unidad', value: formatCop(payment.account.pending_balance) },
     { label: 'Saldo a favor de la unidad', value: formatCop(payment.account.credit_balance) }
   );
+  if (payment.notes) lines.push({ label: 'Notas', value: payment.notes });
   return {
     title: SUCCESS_MESSAGE,
     lines,

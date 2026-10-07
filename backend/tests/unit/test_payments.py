@@ -118,6 +118,37 @@ def test_bogota_today_is_not_utc_today() -> None:
     assert bogota_today(datetime(2026, 10, 3, 5, 0)) == date(2026, 10, 3)
 
 
+def test_reference_and_notes_are_optional() -> None:
+    # HU-008: omitted, null or blank → None (never invented, never the receipt number).
+    for fields in ({}, {"transaction_reference": None, "notes": None}, {"transaction_reference": "   ", "notes": " \r\n\t "}):
+        payment = PaymentCreate.model_validate({**BASE, **fields})
+        assert (payment.transaction_reference, payment.notes) == (None, None), fields
+
+
+def test_reference_is_one_trimmed_line_and_notes_keep_their_line_breaks() -> None:
+    payment = PaymentCreate.model_validate(
+        {**BASE, "transaction_reference": "  TRF \n 2026-10-0042 ", "notes": "  Pagó en la portería.\r\nTrajo el soporte.\t "}
+    )
+    assert payment.transaction_reference == "TRF 2026-10-0042"
+    assert payment.notes == "Pagó en la portería.\nTrajo el soporte."
+    assert PaymentCreate.model_validate({**BASE, "transaction_reference": "x" * 100, "notes": "y" * 500}).notes == "y" * 500
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("transaction_reference", "x" * 101, "La referencia de transacción no puede superar 100 caracteres."),
+        ("transaction_reference", 42, "La referencia de transacción debe ser un texto."),
+        ("transaction_reference", "TRF\x00042", "La referencia de transacción contiene caracteres no válidos."),
+        ("notes", "y" * 501, "Las notas no pueden superar 500 caracteres."),
+        ("notes", ["nota"], "Las notas deben ser un texto."),
+        ("notes", "nota\x07", "Las notas contienen caracteres no válidos."),
+    ],
+)
+def test_invalid_reference_and_notes(field: str, value: Any, message: str) -> None:
+    assert errors(**{field: value}) == [{"field": field, "message": message}]
+
+
 @pytest.mark.parametrize("field", ["unit_id", "registered_at", "receipt_number", "status", "allocations", "credit_amount", "role"])
 def test_unknown_fields_are_rejected(field: str) -> None:
     assert errors(**{field: "x"}) == [{"field": field, "message": "Este campo no está permitido."}]

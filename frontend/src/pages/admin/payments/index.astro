@@ -8,6 +8,8 @@ import {
   DESCRIPTION_MAX_LENGTH,
   METHOD_LABELS,
   METHODS,
+  NOTES_MAX_LENGTH,
+  REFERENCE_MAX_LENGTH,
   bogotaToday
 } from '../../../lib/payments/payment-form';
 import { LOADING_MESSAGE, PAGE_SIZES, SEARCH_MAX_LENGTH, parseQuery } from '../../../lib/payments/payments-list';
@@ -139,6 +141,38 @@ const secondaryButton =
             class={inputClass}
           />
           <p id="payment-concept_description-error" data-error-for="concept_description" class={errorClass}></p>
+        </div>
+
+        <div class="sm:col-span-2">
+          <label for="payment-reference" class={labelClass}>
+            Referencia de transacción <span class="font-normal text-slate-500">(opcional)</span>
+          </label>
+          <input
+            id="payment-reference"
+            name="transaction_reference"
+            type="text"
+            autocomplete="off"
+            maxlength={REFERENCE_MAX_LENGTH}
+            placeholder="Ej.: número de la transferencia o del comprobante"
+            aria-describedby="payment-reference-hint"
+            class={inputClass}
+          />
+          <p id="payment-reference-hint" class="mt-1 text-sm text-slate-500">Déjala vacía si el pago no tiene una referencia externa.</p>
+          <p id="payment-transaction_reference-error" data-error-for="transaction_reference" class={errorClass}></p>
+        </div>
+
+        <div class="sm:col-span-2">
+          <label for="payment-notes" class={labelClass}>Notas <span class="font-normal text-slate-500">(opcional)</span></label>
+          <textarea
+            id="payment-notes"
+            name="notes"
+            rows="3"
+            maxlength={NOTES_MAX_LENGTH}
+            aria-describedby="payment-notes-hint"
+            class={inputClass}
+          ></textarea>
+          <p id="payment-notes-hint" class="mt-1 text-sm text-slate-500">Nota visible para el residente (opcional).</p>
+          <p id="payment-notes-error" data-error-for="notes" class={errorClass}></p>
         </div>
 
         <div class="sm:col-span-2">
@@ -286,6 +320,8 @@ const secondaryButton =
   const conceptSelect = $<HTMLSelectElement>('#payment-concept');
   const descriptionBox = $<HTMLElement>('[data-description]');
   const descriptionInput = $<HTMLInputElement>('#payment-description');
+  const referenceInput = $<HTMLInputElement>('#payment-reference');
+  const notesInput = $<HTMLTextAreaElement>('#payment-notes');
   const confirmation = $<HTMLElement>('[data-confirmation]');
   const emailWarning = $<HTMLElement>('[data-email-warning]');
 
@@ -301,7 +337,9 @@ const secondaryButton =
     method: methodSelect,
     concept: conceptSelect,
     concept_description: descriptionInput,
-    payment_date: dateInput
+    payment_date: dateInput,
+    transaction_reference: referenceInput,
+    notes: notesInput
   };
 
   function showFieldErrors(errors: FieldErrors): void {
@@ -440,7 +478,9 @@ const secondaryButton =
         method: methodSelect.value,
         concept: conceptSelect.value,
         description: descriptionInput.value,
-        paymentDate: dateInput.value
+        paymentDate: dateInput.value,
+        transactionReference: referenceInput.value,
+        notes: notesInput.value
       },
       bogotaToday()
     );

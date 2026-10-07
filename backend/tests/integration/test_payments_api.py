@@ -113,6 +113,8 @@ async def test_administrator_registers_a_payment(
         "concept_description": None,
         "payment_date": TODAY.isoformat(),
         "registered_at": body["registered_at"],
+        "transaction_reference": None,
+        "notes": None,
         "applied_amount": "0.00",
         "credit_amount": "150000.00",
         "status": "CREDIT",
@@ -519,6 +521,72 @@ async def test_nothing_sensitive_in_responses_audit_or_logs(
     assert "laura@example.com" not in caplog.text
 
 
+# --- HU-008: transaction reference and notes (optional, entered with the payment) ---------------------------------
+
+
+async def test_reference_and_notes_are_persisted_and_returned(
+    client: AsyncClient, headers: dict[str, str], laura: int, db_session: AsyncSession
+) -> None:
+    response = await pay(client, headers, laura, "150000", transaction_reference="  TRF   2026-10-0042 ",
+                         notes=" Pagó en la portería.\r\nTrajo el soporte. ")
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert (body["transaction_reference"], body["notes"]) == ("TRF 2026-10-0042", "Pagó en la portería.\nTrajo el soporte.")
+    # The receipt number stays its own datum, derived from the id.
+    assert body["receipt_number"] == f"RC-{body['id']:08d}" != body["transaction_reference"]
+    stored = await db_session.get(Payment, body["id"], populate_existing=True)
+    assert stored is not None
+    assert (stored.transaction_reference, stored.notes) == ("TRF 2026-10-0042", "Pagó en la portería.\nTrajo el soporte.")
+    [listed] = (await client.get(URL)).json()["items"]
+    assert (listed["transaction_reference"], listed["notes"]) == ("TRF 2026-10-0042", "Pagó en la portería.\nTrajo el soporte.")
+
+
+@pytest.mark.parametrize("fields", [{}, {"transaction_reference": None, "notes": None}, {"transaction_reference": "  ", "notes": "\n "}])
+async def test_reference_and_notes_may_stay_null(
+    client: AsyncClient, headers: dict[str, str], laura: int, db_session: AsyncSession, fields: dict[str, Any]
+) -> None:
+    body = (await pay(client, headers, laura, "150000", **fields)).json()
+
+    assert (body["transaction_reference"], body["notes"]) == (None, None)
+    stored = await db_session.get(Payment, body["id"], populate_existing=True)
+    assert stored is not None and (stored.transaction_reference, stored.notes) == (None, None)
+
+
+async def test_reference_and_notes_never_change_fifo_or_credit(
+    client: AsyncClient, headers: dict[str, str], laura: int, db_session: AsyncSession
+) -> None:
+    # The FIFO example of the design, now with both optional fields: same allocations, credit and balance.
+    unit_id = await unit_of(db_session, laura)
+    january = await charge(db_session, unit_id, "100000", date(2026, 1, 5))
+    late = await charge(db_session, unit_id, "20000", date(2026, 1, 20), "LATE_FEE")
+    february = await charge(db_session, unit_id, "100000", date(2026, 2, 5))
+
+    body = (await pay(client, headers, laura, "150000", transaction_reference="TRF-1", notes="Con soporte")).json()
+    assert await allocations(db_session, body["id"]) == [
+        (january, Decimal("100000.00")), (late, Decimal("20000.00")), (february, Decimal("30000.00"))
+    ]
+    assert (body["applied_amount"], body["credit_amount"], body["status"]) == ("150000.00", "0.00", "APPLIED")
+    assert body["account"] == {"pending_balance": "70000.00", "credit_balance": "0.00"}
+
+    excess = (await pay(client, headers, laura, "100000", transaction_reference="TRF-2", notes="Anticipo")).json()
+    assert (excess["applied_amount"], excess["credit_amount"], excess["status"]) == ("70000.00", "30000.00", "PARTIALLY_APPLIED")
+    assert excess["account"] == {"pending_balance": "0.00", "credit_balance": "30000.00"}
+
+
+async def test_invalid_reference_and_notes_point_at_the_field(
+    client: AsyncClient, headers: dict[str, str], laura: int, db_session: AsyncSession
+) -> None:
+    response = await pay(client, headers, laura, transaction_reference="x" * 101, notes="y" * 501)
+
+    assert response.status_code == 422
+    assert response.json()["error"]["details"] == [
+        {"field": "transaction_reference", "message": "La referencia de transacción no puede superar 100 caracteres."},
+        {"field": "notes", "message": "Las notas no pueden superar 500 caracteres."},
+    ]
+    assert await db_session.scalar(select(func.count(Payment.id))) == 0
+
+
 # --- 31-38. Summary table -------------------------------------------------------------------------------------------
 
 
@@ -559,7 +627,8 @@ async def test_summary_columns_and_default_order(client: AsyncClient, history: d
     assert amounts(result) == ["10000.00", "80000.00", "20000.00", "75000.00", "50000.00", "100000.00"]  # newest first
     item = result["items"][-1]
     assert set(item) == {"id", "receipt_number", "resident", "unit", "amount", "method", "concept", "concept_description",
-                         "payment_date", "registered_at", "applied_amount", "credit_amount", "status", "receipt_email_status"}
+                         "payment_date", "registered_at", "transaction_reference", "notes", "applied_amount",
+                         "credit_amount", "status", "receipt_email_status"}
     assert (item["resident"]["full_name"], item["concept"], item["method"], item["status"]) == ("Ana Pérez", "MONTHLY_FEE", "CASH", "CREDIT")
     bruno_first = next(i for i in result["items"] if i["amount"] == "50000.00")
     assert bruno_first["status"] == "APPLIED"

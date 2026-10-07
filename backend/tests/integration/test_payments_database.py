@@ -50,6 +50,9 @@ async def test_payment_columns(db_session: AsyncSession) -> None:
         ("concept", "varchar(20)", "NO", None),
         ("concept_description", "varchar(200)", "YES", None),
         ("source", "varchar(20)", "NO", "MANUAL"),
+        # HU-008 (4385fd452231): optional, entered by the administrator.
+        ("transaction_reference", "varchar(100)", "YES", None),
+        ("notes", "varchar(500)", "YES", None),
         ("payment_date", "date", "NO", None),
         ("registered_at", "datetime(6)", "NO", None),
         ("resident_name_snapshot", "varchar(150)", "NO", None),
@@ -77,8 +80,10 @@ async def test_constraints_indexes_and_foreign_keys(db_session: AsyncSession) ->
         ("payment_allocations", "ck_payment_allocations_amount_positive"),
         ("payments", "ck_payments_amount_positive"), ("payments", "ck_payments_concept_valid"),
         ("payments", "ck_payments_description_only_for_other"), ("payments", "ck_payments_method_valid"),
+        ("payments", "ck_payments_notes_not_blank"),  # HU-008
         ("payments", "ck_payments_receipt_email_status_valid"), ("payments", "ck_payments_sent_has_timestamp"),
         ("payments", "ck_payments_source_valid"),
+        ("payments", "ck_payments_transaction_reference_not_blank"),  # HU-008
     ]
     assert await rows(
         db_session,
@@ -148,6 +153,7 @@ CHECK_VIOLATED = 3819
 FK_PARENT_MISSING = 1452
 FK_ROW_REFERENCED = 1451
 DUPLICATE = 1062
+DATA_TOO_LONG = 1406
 
 
 async def test_check_constraints(db_session: AsyncSession, ids: dict[str, int]) -> None:
@@ -163,6 +169,23 @@ async def test_check_constraints(db_session: AsyncSession, ids: dict[str, int]) 
     await rejects(db_session, "UPDATE payments SET source = 'GATEWAY' WHERE id = :p", CHECK_VIOLATED, p=p)
     await rejects(db_session, "UPDATE payments SET receipt_email_status = 'SENT' WHERE id = :p", CHECK_VIOLATED, p=p)
     await rejects(db_session, "INSERT INTO payment_allocations (payment_id, charge_id, amount) VALUES (:p, :c, 0)", CHECK_VIOLATED, p=p, c=ids["charge"])
+    # HU-008: "nothing" is NULL, never a blank text.
+    for column in ("transaction_reference", "notes"):
+        for blank in ("", "   "):
+            await rejects(db_session, f"UPDATE payments SET {column} = :v WHERE id = :p", CHECK_VIOLATED, p=p, v=blank)
+
+
+async def test_reference_and_notes_are_optional_with_explicit_limits(db_session: AsyncSession, ids: dict[str, int]) -> None:
+    p = ids["payment"]
+    # A payment inserted without them (as every payment before HU-008) has both NULL.
+    assert await rows(db_session, "SELECT transaction_reference, notes FROM payments WHERE id = :p", p=p) == [(None, None)]
+    await db_session.execute(text("UPDATE payments SET transaction_reference = :r, notes = :n WHERE id = :p"),
+                             {"r": "R" * 100, "n": "N" * 500, "p": p})
+    assert await rows(db_session, "SELECT CHAR_LENGTH(transaction_reference), CHAR_LENGTH(notes) FROM payments WHERE id = :p",
+                      p=p) == [(100, 500)]
+    # One more character does not fit (strict mode: error, never truncated).
+    await rejects(db_session, "UPDATE payments SET transaction_reference = :v WHERE id = :p", DATA_TOO_LONG, p=p, v="R" * 101)
+    await rejects(db_session, "UPDATE payments SET notes = :v WHERE id = :p", DATA_TOO_LONG, p=p, v="N" * 501)
 
 
 async def test_foreign_keys_and_uniqueness(db_session: AsyncSession, ids: dict[str, int]) -> None:

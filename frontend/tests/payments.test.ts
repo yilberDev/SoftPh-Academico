@@ -84,7 +84,9 @@ const VALID: PaymentFormValues = {
   method: 'TRANSFER',
   concept: 'MONTHLY_FEE',
   description: '',
-  paymentDate: TODAY
+  paymentDate: TODAY,
+  transactionReference: '',
+  notes: ''
 };
 
 function registered(overrides: Partial<RegisteredPayment> = {}): RegisteredPayment {
@@ -99,6 +101,8 @@ function registered(overrides: Partial<RegisteredPayment> = {}): RegisteredPayme
     concept_description: null,
     payment_date: TODAY,
     registered_at: '2026-10-02T20:05:00Z',
+    transaction_reference: null,
+    notes: null,
     applied_amount: '220000.00',
     credit_amount: '30000.00',
     status: 'PARTIALLY_APPLIED',
@@ -149,14 +153,36 @@ describe('form validation (format only)', () => {
     const { errors, payload } = validatePaymentForm(VALID, TODAY);
     assert.deepEqual(errors, {});
     assert.deepEqual(payload, {
-      resident_id: 7, amount: '150000', method: 'TRANSFER', concept: 'MONTHLY_FEE', concept_description: null, payment_date: TODAY
+      resident_id: 7, amount: '150000', method: 'TRANSFER', concept: 'MONTHLY_FEE', concept_description: null, payment_date: TODAY,
+      transaction_reference: null, notes: null
     } satisfies PaymentPayload);
-    assert.deepEqual(Object.keys(payload!).sort(), ['amount', 'concept', 'concept_description', 'method', 'payment_date', 'resident_id']);
+    assert.deepEqual(Object.keys(payload!).sort(), [
+      'amount', 'concept', 'concept_description', 'method', 'notes', 'payment_date', 'resident_id', 'transaction_reference'
+    ]);
+  });
+
+  it('transaction reference and notes (HU-008): optional, normalized and limited', () => {
+    const { errors, payload } = validatePaymentForm(
+      { ...VALID, transactionReference: '  TRF   2026-10-0042 ', notes: '  Pagó en la portería.\r\nTrajo el soporte.  ' },
+      TODAY
+    );
+    assert.deepEqual(errors, {});
+    assert.equal(payload?.transaction_reference, 'TRF 2026-10-0042');
+    assert.equal(payload?.notes, 'Pagó en la portería.\nTrajo el soporte.');
+    // Empty or only spaces: null (never an invented reference).
+    const empty = validatePaymentForm({ ...VALID, transactionReference: '   ', notes: ' \n ' }, TODAY).payload;
+    assert.equal(empty?.transaction_reference, null);
+    assert.equal(empty?.notes, null);
+    assert.deepEqual(validatePaymentForm({ ...VALID, transactionReference: 'x'.repeat(101), notes: 'y'.repeat(501) }, TODAY).errors, {
+      transaction_reference: 'La referencia de transacción no puede superar 100 caracteres.',
+      notes: 'Las notas no pueden superar 500 caracteres.'
+    });
+    assert.equal(validatePaymentForm({ ...VALID, transactionReference: 'x'.repeat(100), notes: 'y'.repeat(500) }, TODAY).payload?.notes?.length, 500);
   });
 
   it('every missing field is pointed at (criterion 1.4)', () => {
     const { errors, payload } = validatePaymentForm(
-      { residentId: null, amount: '', method: '', concept: '', description: '', paymentDate: '' },
+      { residentId: null, amount: '', method: '', concept: '', description: '', paymentDate: '', transactionReference: '', notes: '' },
       TODAY
     );
     assert.equal(payload, null);
@@ -309,6 +335,13 @@ describe('registering a payment', () => {
     assert.equal(confirmation.warning, null);
     const applied = confirmationOf(registered({ credit_amount: '0.00', status: 'APPLIED' }));
     assert.equal(applied.lines.some((l) => l.label === 'Saldo a favor'), false);
+    // Without a reference or notes, no empty lines.
+    assert.equal(confirmation.lines.some((l) => l.label === 'Referencia de transacción' || l.label === 'Notas'), false);
+    const withData = confirmationOf(registered({ transaction_reference: 'TRF-0042', notes: 'Soporte en físico.' }));
+    const shown = Object.fromEntries(withData.lines.map((l) => [l.label, l.value]));
+    assert.equal(shown['Referencia de transacción'], 'TRF-0042');
+    assert.equal(shown['Notas'], 'Soporte en físico.');
+    assert.equal(shown['Recibo'], 'RC-00000042', 'the receipt number stays separate');
   });
 
   it('a failed email is a separate warning, never a failed payment', async () => {

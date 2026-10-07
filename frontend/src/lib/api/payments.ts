@@ -16,6 +16,9 @@ export interface PaymentPayload {
   concept: PaymentConcept;
   concept_description: string | null;
   payment_date: string; // YYYY-MM-DD
+  /** HU-008: optional; null when there is none (never the receipt number). */
+  transaction_reference: string | null;
+  notes: string | null;
 }
 
 export interface Payment {
@@ -29,6 +32,8 @@ export interface Payment {
   concept_description: string | null;
   payment_date: string;
   registered_at: string;
+  transaction_reference: string | null;
+  notes: string | null;
   applied_amount: string;
   credit_amount: string;
   status: PaymentStatus;
