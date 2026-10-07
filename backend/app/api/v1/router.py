@@ -9,6 +9,7 @@ from app.api.v1 import (
     invitations,
     password_reset,
     payments,
+    resident_feedback,
     resident_payments,
     residents,
     structure,
@@ -34,3 +35,5 @@ api_router.include_router(feedback.router)
 api_router.include_router(charges.router)
 # HU-008: the signed-in resident's own payments (resident, read-only).
 api_router.include_router(resident_payments.router)
+# HU-009: the signed-in resident's feedback (send and read their own).
+api_router.include_router(resident_feedback.router)

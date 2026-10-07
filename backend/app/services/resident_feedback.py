@@ -14,8 +14,9 @@ this stage), the resolution date, the administrator, the audit or anybody
 else's data. category and urgency are NULL for the feedback stored before
 HU-009 and are returned as NULL (nothing invented).
 
-list  one COUNT and one page (ORDER BY created_at DESC, id DESC, LIMIT, OFFSET in MySQL)
-get   one query
+list    one COUNT and one page (ORDER BY created_at DESC, id DESC, LIMIT, OFFSET in MySQL)
+get     one query
+submit  create_feedback (rules, owner, PENDING, FEEDBACK_CREATED) · COMMIT · get
 """
 
 import math
@@ -30,6 +31,7 @@ from app.core.exceptions import FeedbackNotFoundError, FieldValidationError
 from app.models import Feedback, FeedbackCategory, FeedbackStatus, FeedbackUrgency
 from app.schemas.feedback import PAGE_MAX, PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX
 from app.schemas.invitation import ID_MAX
+from app.services.feedback import create_feedback
 
 # --- Query ---------------------------------------------------------------------------------------------
 
@@ -162,3 +164,23 @@ async def get_resident_feedback(db: AsyncSession, resident_id: int, feedback_id:
         id=row.id, subject=row.subject, message=row.message, category=_category(row.category),
         urgency=_urgency(row.urgency), status=FeedbackStatus(row.status), created_at=row.created_at,
     )
+
+
+async def submit_resident_feedback(
+    db: AsyncSession,
+    resident_id: int,
+    *,
+    subject: Any,
+    message: Any,
+    category: Any,
+    urgency: Any,
+    ip_address: str | None = None,
+) -> ResidentFeedbackDetail:
+    """The resident sends a feedback (criteria 2-4): create_feedback validates the fields and the owner,
+    stores it PENDING and audits FEEDBACK_CREATED once; then it is committed and read back as the resident sees it."""
+    if not _positive_id(resident_id):
+        raise ValueError("resident_id is the signed-in resident (a positive id).")
+    feedback_id = await create_feedback(db, resident_id, subject=subject, message=message, category=category,
+                                        urgency=urgency, ip_address=ip_address)
+    await db.commit()
+    return await get_resident_feedback(db, resident_id, feedback_id)

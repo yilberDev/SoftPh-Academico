@@ -9,7 +9,7 @@ status → role), never from the request.
     AUTHENTICATED  any signed-in role; the data is always the caller's own
     ADMINISTRADOR  require_roles(ADMINISTRADOR): 401 without a session, 403 for a resident
     RESIDENTE      require_roles(RESIDENTE): 401 without a session, 403 for the administrator;
-                   the data is always the session's resident (HU-008: the resident's payments)
+                   the data is always the session's resident (HU-008 payments, HU-009 feedback)
 """
 
 import re
@@ -86,6 +86,10 @@ ACCESS_POLICY: dict[tuple[str, str], Access] = {
     # HU-008: the resident's own payments (read only; the resident is the session's).
     ("GET", "/resident/payments"): Access.RESIDENTE,
     ("GET", "/resident/payments/{payment_id}"): Access.RESIDENTE,
+    # HU-009: the resident's own feedback (the resident is the session's).
+    ("POST", "/resident/feedback"): Access.RESIDENTE,
+    ("GET", "/resident/feedback"): Access.RESIDENTE,
+    ("GET", "/resident/feedback/{feedback_id}"): Access.RESIDENTE,
     # HU-013: physical structure.
     ("GET", "/blocks"): Access.ADMINISTRADOR,
     ("POST", "/blocks"): Access.ADMINISTRADOR,
@@ -118,6 +122,7 @@ BODIES: dict[tuple[str, str], Any] = {
                                  "description": "Ruido"},
     ("POST", "/admin/charges/monthly"): {"billing_period": "2026-10", "amount": "180000", "due_date": "2026-10-10",
                                          "expected_to_create": 0, "preview_fingerprint": "0" * 64},
+    ("POST", "/resident/feedback"): {"subject": "Ruido", "message": "Hay ruido.", "category": "COMPLAINT", "urgency": "HIGH"},
     ("POST", "/blocks"): {"number": 1},
     ("PATCH", "/blocks/{block_id}"): {"number": 2, "version": 1},
     ("POST", "/blocks/{block_id}/towers"): {"number": 1},
@@ -346,6 +351,15 @@ async def test_resident_reaches_every_resident_route(
                                         "&page=1&page_size=10"),
         (("GET", "/resident/payments/{payment_id}"), f"/resident/payments/{payment.id}"),
     ):
+        response = await client.request(route[0], f"{API}{path}", headers=headers)
+        assert response.status_code == 200, (path, response.text)
+        visited.add(route)
+    # HU-009: the resident sends a feedback, then lists and reads it.
+    sent = await client.post(f"{API}/resident/feedback", headers=headers, json=BODIES[("POST", "/resident/feedback")])
+    assert sent.status_code == 201, sent.text
+    visited.add(("POST", "/resident/feedback"))
+    for route, path in ((("GET", "/resident/feedback"), "/resident/feedback?page=1&page_size=10"),
+                        (("GET", "/resident/feedback/{feedback_id}"), f"/resident/feedback/{sent.json()['id']}")):
         response = await client.request(route[0], f"{API}{path}", headers=headers)
         assert response.status_code == 200, (path, response.text)
         visited.add(route)
