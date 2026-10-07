@@ -310,3 +310,13 @@ class MonthlyPreviewOutdatedError(ConflictError):
 class ChargeNotFoundError(NotFoundError):
     code = "CHARGE_NOT_FOUND"
     message = "La obligación no existe."
+
+
+# --- HU-008: payments of the resident ------------------------------------------------------------
+
+
+class PaymentNotFoundError(NotFoundError):
+    """A payment that does not exist and a payment of another resident look exactly the same."""
+
+    code = "PAYMENT_NOT_FOUND"
+    message = "El pago no existe."
