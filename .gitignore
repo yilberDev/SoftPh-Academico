@@ -9,6 +9,10 @@ dist/
 .astro/
 npm-debug.log*
 
+# Playwright E2E evidence (screenshots, traces, videos) and report
+test-results/
+playwright-report/
+
 # Python
 .venv/
 __pycache__/
