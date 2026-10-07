@@ -8,8 +8,8 @@ status → role), never from the request.
     PUBLIC         no session needed (login, logout, activation, password reset, health)
     AUTHENTICATED  any signed-in role; the data is always the caller's own
     ADMINISTRADOR  require_roles(ADMINISTRADOR): 401 without a session, 403 for a resident
-    RESIDENTE      require_roles(RESIDENTE): 403 for the administrator (none published yet;
-                   the dependency is tested in test_require_roles.py)
+    RESIDENTE      require_roles(RESIDENTE): 401 without a session, 403 for the administrator;
+                   the data is always the session's resident (HU-008: the resident's payments)
 """
 
 import re
@@ -28,9 +28,13 @@ from app.core.config import get_settings
 from app.core.sessions import CSRF_HEADER_NAME, SESSION_COOKIE_NAME, derive_csrf_token, generate_session_token, hash_token
 from app.main import app
 from app.models import AuditLog, User, UserRole, UserSession, UserStatus
+from app.schemas.payment import PaymentCreate
 from app.services import feedback as feedback_service
+from app.services import payments as payment_service
 from app.services.sessions import create_session
+from app.services.structure import Actor
 from tests.integration.conftest import PASSWORD, FakeMailSender
+from tests.integration.test_residents_api import Community
 
 pytestmark = pytest.mark.anyio
 
@@ -79,6 +83,9 @@ ACCESS_POLICY: dict[tuple[str, str], Access] = {
     ("GET", "/admin/charges/{charge_id}"): Access.ADMINISTRADOR,
     ("GET", "/admin/charges/monthly/preview"): Access.ADMINISTRADOR,
     ("POST", "/admin/charges/monthly"): Access.ADMINISTRADOR,
+    # HU-008: the resident's own payments (read only; the resident is the session's).
+    ("GET", "/resident/payments"): Access.RESIDENTE,
+    ("GET", "/resident/payments/{payment_id}"): Access.RESIDENTE,
     # HU-013: physical structure.
     ("GET", "/blocks"): Access.ADMINISTRADOR,
     ("POST", "/blocks"): Access.ADMINISTRADOR,
@@ -318,6 +325,45 @@ async def test_resident_is_forbidden_on_every_administrator_route(
         assert await count(db_session, table) == 0
     assert mailer.sent == []
     assert await count(db_session, "audit_logs") == audit_before
+
+
+async def test_resident_reaches_every_resident_route(
+    client: AsyncClient, db_session: AsyncSession, admin: User, mailer: FakeMailSender
+) -> None:
+    # HU-008: a resident with a residence and a payment registered by the administrator (HU-004).
+    resident_id = await Community(db_session, admin.id).resident("Laura Gómez", "1012345678", (1, 1, 101))
+    payment = await payment_service.register_payment(db_session, PaymentCreate(
+        resident_id=resident_id, amount="150000", method="CASH", concept="MONTHLY_FEE", payment_date="2026-01-05",
+    ), Actor(user_id=admin.id, ip_address=None), mailer=mailer)
+    resident = await db_session.get(User, resident_id)
+    assert resident is not None
+    headers = await open_session(client, db_session, resident)
+    visited: set[tuple[str, str]] = set()
+
+    for route, path in (
+        (("GET", "/resident/payments"), "/resident/payments?status=CREDIT&date_from=2026-01-01&search=2026-01-05"
+                                        "&page=1&page_size=10"),
+        (("GET", "/resident/payments/{payment_id}"), f"/resident/payments/{payment.id}"),
+    ):
+        response = await client.request(route[0], f"{API}{path}", headers=headers)
+        assert response.status_code == 200, (path, response.text)
+        visited.add(route)
+
+    assert sorted(visited) == ROUTES_OF[Access.RESIDENTE]
+
+
+@pytest.mark.parametrize("route", ROUTES_OF[Access.RESIDENTE], ids=ids(ROUTES_OF[Access.RESIDENTE]))
+async def test_administrator_is_forbidden_on_every_resident_route(
+    client: AsyncClient, db_session: AsyncSession, admin: User, route: tuple[str, str]
+) -> None:
+    headers = await open_session(client, db_session, admin)
+
+    response = await call(client, route, headers)
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "error": {"code": "FORBIDDEN", "message": "No tienes permiso para realizar esta acción.", "details": []}
+    }
 
 
 @pytest.mark.parametrize("role", [UserRole.ADMINISTRADOR, UserRole.RESIDENTE])

@@ -1,6 +1,18 @@
 from fastapi import APIRouter
 
-from app.api.v1 import activation, auth, charges, feedback, health, invitations, password_reset, payments, residents, structure
+from app.api.v1 import (
+    activation,
+    auth,
+    charges,
+    feedback,
+    health,
+    invitations,
+    password_reset,
+    payments,
+    resident_payments,
+    residents,
+    structure,
+)
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -20,3 +32,5 @@ api_router.include_router(payments.router)
 api_router.include_router(feedback.router)
 # Obligations extension: charges of the apartments (administrator).
 api_router.include_router(charges.router)
+# HU-008: the signed-in resident's own payments (resident, read-only).
+api_router.include_router(resident_payments.router)
