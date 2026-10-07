@@ -282,3 +282,14 @@ class MonthlyFeeExistsError(ConflictError):
 class LateFeeExistsError(ConflictError):
     code = "LATE_FEE_EXISTS"
     message = "La obligación de origen ya tiene una mora."
+
+
+class MonthlyPreviewOutdatedError(ConflictError):
+    """The apartments or the existing monthly fees changed since the preview: nothing was created."""
+
+    code = "MONTHLY_PREVIEW_OUTDATED"
+    message = "Los datos cambiaron desde la vista previa. Revisa y confirma de nuevo."
+
+    def __init__(self, preview: object) -> None:
+        super().__init__()
+        self.preview = preview  # the current preview, for the client to show

@@ -51,6 +51,7 @@ class AuditAction(StrEnum):
     # Obligations extension: charges and the credit (saldo a favor) applied to them.
     CHARGE_CREATED = "CHARGE_CREATED"
     CREDIT_APPLIED = "CREDIT_APPLIED"
+    MONTHLY_CHARGES_GENERATED = "MONTHLY_CHARGES_GENERATED"
 
 
 class AuditLog(Base):
