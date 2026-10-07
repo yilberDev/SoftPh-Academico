@@ -1,0 +1,153 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import AdminHeader from '../../../components/AdminHeader.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import { loadCharge } from '../../../lib/api/charges-server';
+import { isValidId, loadPage } from '../../../lib/api/structure-server';
+import { STACKED_CELL, STACKED_ROW, STACKED_TABLE, STATUS_BADGES, STATUS_LABELS } from '../../../lib/obligations/charge-format';
+import {
+  NO_ALLOCATIONS,
+  NOT_FOUND_MESSAGE,
+  allocationRows,
+  mainLines,
+  relationsOf,
+  titleOf
+} from '../../../lib/obligations/charge-detail';
+
+// Obligations extension. The middleware only renders /admin pages for a valid
+// ADMINISTRADOR session; the API decides exactly which fields are exposed. 404
+// CHARGE_NOT_FOUND (and an invalid id) shows "no encontrada"; 401 → /login.
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const { id } = Astro.params;
+const page = isValidId(id) ? await loadPage(() => loadCharge(id, Astro.request)) : { notFound: true as const };
+if ('unauthenticated' in page) {
+  return Astro.redirect('/login');
+}
+const charge = 'data' in page ? page.data : null;
+if (!charge) {
+  Astro.response.status = 404;
+}
+const relations = charge ? relationsOf(charge) : null;
+const allocations = charge ? allocationRows(charge) : [];
+
+const card = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6';
+const link =
+  'rounded font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+const badge = 'inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset';
+---
+
+<Layout title={charge ? `Obligación n.º ${charge.id} — SoftPh-Académico` : 'Obligación no encontrada — SoftPh-Académico'}>
+  <AdminHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-3xl space-y-6 px-4 py-8" data-charge-detail>
+    <Breadcrumbs items={[{ label: 'Obligaciones', href: '/admin/obligations' }, { label: charge ? `Obligación n.º ${charge.id}` : 'No encontrada' }]} />
+    {
+      !charge || !relations ? (
+        <div class="rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
+          <p class="text-slate-700">{NOT_FOUND_MESSAGE}</p>
+          <a href="/admin/obligations" class:list={['mt-4 inline-block text-sm', link]}>Volver a las obligaciones</a>
+        </div>
+      ) : (
+        <>
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0">
+              <h1 class="break-words text-2xl font-semibold tracking-tight">{titleOf(charge)}</h1>
+              <p class="mt-1 break-all font-mono text-sm text-slate-600">{charge.unit_label}</p>
+            </div>
+            <span class:list={['px-3 py-1 text-sm', badge, STATUS_BADGES[charge.status]]}>{STATUS_LABELS[charge.status]}</span>
+          </div>
+
+          <section aria-labelledby="charge-info-title" class={card}>
+            <h2 id="charge-info-title" class="text-lg font-semibold">Información</h2>
+            <dl class="mt-3 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+              {
+                mainLines(charge).map(({ label, value, mono }) => (
+                  <div class="min-w-0">
+                    <dt class="text-slate-500">{label}</dt>
+                    <dd class:list={['break-words text-slate-900', mono && 'break-all font-mono']}>{value}</dd>
+                  </div>
+                ))
+              }
+            </dl>
+          </section>
+
+          {
+            (relations.source || relations.lateFees.length > 0 || charge.concept === 'LATE_FEE') && (
+              <section aria-labelledby="charge-relations-title" class={card}>
+                <h2 id="charge-relations-title" class="text-lg font-semibold">Relación</h2>
+                {charge.concept === 'LATE_FEE' && (
+                  <div class="mt-3 text-sm">
+                    <p class="text-slate-500">Obligación de origen</p>
+                    {relations.source ? (
+                      <p class="mt-1 flex flex-wrap items-center gap-2">
+                        <a href={relations.source.href} class:list={['break-words', link]}>{relations.source.text}</a>
+                        <span class:list={[badge, STATUS_BADGES[charge.source!.status]]}>{relations.source.status}</span>
+                      </p>
+                    ) : (
+                      <p class="mt-1 italic text-slate-500">Esta mora no tiene obligación de origen.</p>
+                    )}
+                  </div>
+                )}
+                {relations.lateFees.length > 0 && (
+                  <div class="mt-3 text-sm">
+                    <p class="text-slate-500">Moras derivadas</p>
+                    <ul class="mt-1 space-y-1">
+                      {relations.lateFees.map((fee, index) => (
+                        <li class="flex flex-wrap items-center gap-2">
+                          <a href={fee.href} class:list={['break-words', link]}>{fee.text}</a>
+                          <span class:list={[badge, STATUS_BADGES[charge.late_fees[index].status]]}>{fee.status}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </section>
+            )
+          }
+
+          <section aria-labelledby="charge-allocations-title" class={card}>
+            <h2 id="charge-allocations-title" class="text-lg font-semibold">Pagos aplicados</h2>
+            {
+              allocations.length === 0 ? (
+                <p class="mt-3 text-sm text-slate-600">{NO_ALLOCATIONS}</p>
+              ) : (
+                <div class="relative mt-3 sm:overflow-x-auto">
+                  <table class:list={[STACKED_TABLE, 'sm:min-w-[36rem]']}>
+                    <thead class="bg-slate-50 text-slate-700 max-sm:hidden">
+                      <tr>
+                        <th scope="col" class="whitespace-nowrap px-3 py-2 font-medium">Recibo</th>
+                        <th scope="col" class="whitespace-nowrap px-3 py-2 font-medium">Fecha del pago</th>
+                        <th scope="col" class="whitespace-nowrap px-3 py-2 font-medium">Método</th>
+                        <th scope="col" class="whitespace-nowrap px-3 py-2 text-right font-medium">Monto aplicado</th>
+                        <th scope="col" class="whitespace-nowrap px-3 py-2 font-medium">Aplicado el</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 max-sm:block">
+                      {allocations.map((allocation) => (
+                        <tr class={STACKED_ROW}>
+                          <th scope="row" class="px-3 py-2 font-mono font-medium text-slate-900 max-sm:block max-sm:px-0">{allocation.receipt}</th>
+                          <td data-label="Fecha del pago" class:list={[STACKED_CELL, 'px-3 py-2 text-slate-700']}>{allocation.paymentDate}</td>
+                          <td data-label="Método" class:list={[STACKED_CELL, 'px-3 py-2 text-slate-700']}>{allocation.method}</td>
+                          <td data-label="Monto aplicado" class:list={[STACKED_CELL, 'whitespace-nowrap px-3 py-2 font-mono text-slate-900 sm:text-right']}>{allocation.amount}</td>
+                          <td data-label="Aplicado el" class:list={[STACKED_CELL, 'px-3 py-2 text-slate-700']}>{allocation.appliedAt}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            }
+          </section>
+
+          <a href="/admin/obligations" class:list={['inline-block text-sm', link]}>Volver a las obligaciones</a>
+        </>
+      )
+    }
+  </main>
+</Layout>
+
+<script>
+  // Financial data: a page restored from the browser cache is loaded again from the API.
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) window.location.reload();
+  });
+</script>

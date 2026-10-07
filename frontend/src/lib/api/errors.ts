@@ -11,6 +11,8 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details: ApiErrorBody['error']['details'];
+  /** The whole error body: a few errors carry more than code, message and details (e.g. a new preview). */
+  readonly body: ApiErrorBody | null;
 
   constructor(status: number, body: ApiErrorBody | null) {
     super(body?.error.message ?? 'Ocurrió un error inesperado. Intenta de nuevo.');
@@ -18,6 +20,7 @@ export class ApiError extends Error {
     this.status = status;
     this.code = body?.error.code ?? 'UNEXPECTED_RESPONSE';
     this.details = body?.error.details ?? [];
+    this.body = body;
   }
 }
 

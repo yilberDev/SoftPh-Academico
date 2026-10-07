@@ -1,0 +1,921 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import AdminHeader from '../../../components/AdminHeader.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import { CONCEPTS, CONCEPT_LABELS, STACKED_TABLE, STATUSES, STATUS_LABELS } from '../../../lib/obligations/charge-format';
+import { DESCRIPTION_MAX_LENGTH } from '../../../lib/obligations/charge-form';
+import {
+  COLUMNS,
+  EXTRA_SORTS,
+  LOADING_MESSAGE,
+  PAGE_SIZES,
+  SORT_FIELDS,
+  parseQuery
+} from '../../../lib/obligations/obligations-list';
+
+// Obligations extension. The middleware only renders /admin pages for a valid
+// ADMINISTRADOR session; the API authorizes every request on its own (HU-018).
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const initial = parseQuery(Astro.url.searchParams);
+
+const sortLabels = Object.fromEntries([
+  ...COLUMNS.filter((column) => column.field !== null).map((column) => [column.field, column.label]),
+  ...EXTRA_SORTS.map((sort) => [sort.field, sort.label])
+]) as Record<string, string>;
+
+const inputClass =
+  'mt-1 block w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30 disabled:bg-slate-100';
+const labelClass = 'block text-sm font-medium text-slate-700';
+const errorClass = 'mt-1 hidden text-sm text-red-700';
+const hintClass = 'mt-1 text-sm text-slate-500';
+const primaryButton =
+  'rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-60';
+const secondaryButton =
+  'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-50';
+const panelClass = 'group rounded-2xl border border-slate-200 bg-white shadow-sm';
+const summaryClass =
+  'flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-5 py-4 text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 sm:px-6 [&::-webkit-details-marker]:hidden';
+---
+
+<Layout title="Obligaciones — SoftPh-Académico">
+  <AdminHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-5xl space-y-6 px-4 py-8" data-obligations-page data-csrf-token={csrfToken}>
+    <div class="space-y-2">
+      <Breadcrumbs items={[{ label: 'Obligaciones' }]} />
+      <h1 class="text-2xl font-semibold tracking-tight">Obligaciones</h1>
+      <p class="text-slate-600">
+        Mensualidades, moras, penalizaciones y otros cobros de los apartamentos. El estado, lo aplicado y el saldo los
+        calcula el sistema con los pagos registrados.
+      </p>
+    </div>
+
+    <!-- Generar mensualidades ------------------------------------------------------------------------------>
+    <details class={panelClass} data-monthly-panel>
+      <summary class={summaryClass}>
+        <span>Generar mensualidades</span>
+        <span aria-hidden="true" class="text-slate-400 transition-transform group-open:rotate-180">▾</span>
+      </summary>
+      <div class="space-y-4 border-t border-slate-200 px-5 py-5 sm:px-6">
+        <p class="text-sm text-slate-600">
+          Crea la mensualidad del periodo para todos los apartamentos activos que aún no la tienen. Primero revisa la vista
+          previa: no se crea nada hasta que confirmes.
+        </p>
+        <form data-monthly-form class="grid gap-4 sm:grid-cols-3" novalidate>
+          <div>
+            <label for="monthly-period" class={labelClass}>Periodo</label>
+            <input id="monthly-period" name="billing_period" type="month" required placeholder="AAAA-MM" class={inputClass} />
+            <p id="monthly-billing_period-error" data-monthly-error="billing_period" class={errorClass}></p>
+          </div>
+          <div>
+            <label for="monthly-amount" class={labelClass}>Monto por apartamento</label>
+            <input id="monthly-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" maxlength="20"
+              placeholder="180000" aria-describedby="monthly-amount-hint" class={inputClass} />
+            <p id="monthly-amount-hint" class={hintClass}>En pesos, sin puntos de miles.</p>
+            <p id="monthly-amount-error" data-monthly-error="amount" class={errorClass}></p>
+          </div>
+          <div>
+            <label for="monthly-due" class={labelClass}>Vencimiento</label>
+            <input id="monthly-due" name="due_date" type="date" required class={inputClass} />
+            <p id="monthly-due_date-error" data-monthly-error="due_date" class={errorClass}></p>
+          </div>
+          <div class="sm:col-span-3">
+            <button type="submit" data-review class={primaryButton}>Revisar</button>
+          </div>
+        </form>
+
+        <div data-monthly-notice role="alert" class="hidden rounded-lg border px-4 py-3 text-sm"></div>
+
+        <section data-preview aria-labelledby="preview-title" tabindex="-1"
+          class="hidden space-y-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 focus:outline-none sm:px-5">
+          <h3 id="preview-title" class="font-semibold text-slate-900">Vista previa</h3>
+          <p data-preview-text class="break-words text-sm text-slate-800"></p>
+          <dl data-preview-lines class="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2"></dl>
+          <p data-other-amount role="status" class="hidden rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"></p>
+          <p data-all-exist role="status" class="hidden rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"></p>
+          <button type="button" data-confirm class={`hidden ${primaryButton}`}>Confirmar y generar</button>
+        </section>
+
+        <section data-result aria-labelledby="result-title" tabindex="-1"
+          class="hidden space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 focus:outline-none sm:px-5">
+          <h3 id="result-title" class="font-semibold text-emerald-900">Generación terminada</h3>
+          <dl data-result-lines class="grid gap-x-6 gap-y-1 text-sm text-emerald-900 sm:grid-cols-2"></dl>
+          <div data-result-issues role="alert" class="hidden space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
+            <p class="font-medium">Algunos apartamentos no recibieron la mensualidad.</p>
+            <ul data-result-issue-list class="list-disc space-y-1 pl-5 break-words"></ul>
+            <p data-result-hint></p>
+          </div>
+          <a data-result-link href="/admin/obligations"
+            class="inline-block rounded text-sm font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">
+            Ver las obligaciones del periodo
+          </a>
+        </section>
+      </div>
+    </details>
+
+    <!-- Nueva obligación ------------------------------------------------------------------------------------->
+    <details class={panelClass} data-charge-panel>
+      <summary class={summaryClass}>
+        <span>Nueva obligación</span>
+        <span aria-hidden="true" class="text-slate-400 transition-transform group-open:rotate-180">▾</span>
+      </summary>
+      <div class="space-y-4 border-t border-slate-200 px-5 py-5 sm:px-6">
+        <div data-charge-confirmation role="status" class="hidden rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 sm:px-5">
+          <p data-charge-confirmation-title class="font-medium text-emerald-900"></p>
+          <dl data-charge-confirmation-lines class="mt-2 grid gap-x-6 gap-y-1 text-sm text-emerald-900 sm:grid-cols-2"></dl>
+          <ul data-charge-credit class="mt-2 hidden list-disc space-y-1 pl-5 text-sm text-emerald-900"></ul>
+          <a data-charge-link href="/admin/obligations"
+            class="mt-3 inline-block rounded text-sm font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">
+            Ver detalle de la obligación
+          </a>
+        </div>
+
+        <form data-charge-form class="grid gap-4 sm:grid-cols-2" novalidate>
+          <div data-charge-alert role="alert" class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:col-span-2"></div>
+
+          <fieldset class="grid gap-4 sm:col-span-2 sm:grid-cols-3">
+            <legend class="mb-1 text-sm font-medium text-slate-700">Apartamento</legend>
+            <div>
+              <label for="charge-block" class={labelClass}>Bloque</label>
+              <select id="charge-block" data-charge-block class={inputClass}><option value="">Selecciona…</option></select>
+            </div>
+            <div>
+              <label for="charge-tower" class={labelClass}>Torre</label>
+              <select id="charge-tower" data-charge-tower disabled class={inputClass}><option value="">Selecciona…</option></select>
+            </div>
+            <div>
+              <label for="charge-unit" class={labelClass}>Apartamento</label>
+              <select id="charge-unit" data-charge-unit disabled class={inputClass}><option value="">Selecciona…</option></select>
+              <p id="charge-unit_id-error" data-charge-error="unit_id" class={errorClass}></p>
+            </div>
+            <p data-charge-picker-status class="hidden text-sm text-slate-600 sm:col-span-3" aria-live="polite"></p>
+          </fieldset>
+
+          <div>
+            <label for="charge-concept" class={labelClass}>Concepto</label>
+            <select id="charge-concept" name="concept" required class={inputClass}>
+              <option value="">Selecciona…</option>
+              {CONCEPTS.map((concept) => <option value={concept}>{CONCEPT_LABELS[concept]}</option>)}
+            </select>
+            <p id="charge-concept-error" data-charge-error="concept" class={errorClass}></p>
+          </div>
+
+          <div class="hidden" data-charge-period>
+            <label for="charge-period" class={labelClass}>Periodo</label>
+            <input id="charge-period" name="billing_period" type="month" placeholder="AAAA-MM" class={inputClass} />
+            <p id="charge-billing_period-error" data-charge-error="billing_period" class={errorClass}></p>
+          </div>
+
+          <div class="hidden sm:col-span-2" data-charge-source>
+            <label for="charge-source" class={labelClass}>Obligación de origen <span class="font-normal text-slate-500">(opcional)</span></label>
+            <select id="charge-source" name="source_charge_id" disabled aria-describedby="charge-source-hint" class={inputClass}>
+              <option value="">Sin obligación de origen</option>
+            </select>
+            <p id="charge-source-hint" data-charge-source-status class={hintClass} aria-live="polite">Selecciona primero el apartamento.</p>
+            <button type="button" data-charge-source-more class={`mt-2 hidden ${secondaryButton}`}>Cargar más obligaciones</button>
+            <p id="charge-source_charge_id-error" data-charge-error="source_charge_id" class={errorClass}></p>
+          </div>
+
+          <div class="hidden sm:col-span-2" data-charge-description>
+            <label for="charge-description" class={labelClass}>
+              Descripción <span data-charge-description-optional class="font-normal text-slate-500">(opcional)</span>
+            </label>
+            <input id="charge-description" name="description" type="text" autocomplete="off" maxlength={DESCRIPTION_MAX_LENGTH}
+              placeholder="Ej.: Ruido después de las 10 p. m." class={inputClass} />
+            <p id="charge-description-error" data-charge-error="description" class={errorClass}></p>
+          </div>
+
+          <div>
+            <label for="charge-amount" class={labelClass}>Monto</label>
+            <input id="charge-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" maxlength="20"
+              placeholder="50000" aria-describedby="charge-amount-hint" class={inputClass} />
+            <p id="charge-amount-hint" class={hintClass}>En pesos, sin puntos de miles. Centavos con coma.</p>
+            <p id="charge-amount-error" data-charge-error="amount" class={errorClass}></p>
+          </div>
+
+          <div>
+            <label for="charge-due" class={labelClass}>Vencimiento</label>
+            <input id="charge-due" name="due_date" type="date" required class={inputClass} />
+            <p id="charge-due_date-error" data-charge-error="due_date" class={errorClass}></p>
+          </div>
+
+          <div class="sm:col-span-2">
+            <button type="submit" class={primaryButton}>Crear obligación</button>
+          </div>
+        </form>
+      </div>
+    </details>
+
+    <!-- Listado -------------------------------------------------------------------------------------------->
+    <section aria-labelledby="obligations-table-title" class="space-y-4">
+      <h2 id="obligations-table-title" class="text-lg font-semibold">Listado de obligaciones</h2>
+      <form data-filters role="search" aria-label="Filtros de obligaciones"
+        class="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <label for="filter-block" class={labelClass}>Bloque</label>
+          <select id="filter-block" data-filter-block class={inputClass}><option value="">Todos</option></select>
+        </div>
+        <div>
+          <label for="filter-tower" class={labelClass}>Torre</label>
+          <select id="filter-tower" data-filter-tower disabled class={inputClass}><option value="">Todas</option></select>
+        </div>
+        <div>
+          <label for="filter-unit" class={labelClass}>Apartamento</label>
+          <select id="filter-unit" data-filter-unit disabled class={inputClass}><option value="">Todos</option></select>
+        </div>
+        <div>
+          <label for="filter-concept" class={labelClass}>Concepto</label>
+          <select id="filter-concept" class={inputClass}>
+            <option value="" selected={initial.concept === ''}>Todos</option>
+            {CONCEPTS.map((concept) => <option value={concept} selected={initial.concept === concept}>{CONCEPT_LABELS[concept]}</option>)}
+          </select>
+        </div>
+        <div>
+          <label for="filter-status" class={labelClass}>Estado</label>
+          <select id="filter-status" class={inputClass}>
+            <option value="" selected={initial.status === ''}>Todos</option>
+            {STATUSES.map((status) => <option value={status} selected={initial.status === status}>{STATUS_LABELS[status]}</option>)}
+          </select>
+        </div>
+        <div>
+          <label for="filter-period" class={labelClass}>Periodo</label>
+          <input id="filter-period" type="month" placeholder="AAAA-MM" value={initial.period} class={inputClass} />
+        </div>
+        <div>
+          <label for="filter-from" class={labelClass}>Vence desde</label>
+          <input id="filter-from" type="date" value={initial.dueFrom} class={inputClass} />
+        </div>
+        <div>
+          <label for="filter-to" class={labelClass}>Vence hasta</label>
+          <input id="filter-to" type="date" value={initial.dueTo} class={inputClass} />
+        </div>
+        <div>
+          <label for="sort-field" class={labelClass}>Ordenar por</label>
+          <select id="sort-field" class={inputClass}>
+            {SORT_FIELDS.map((field) => <option value={field} selected={initial.sortBy === field}>{sortLabels[field]}</option>)}
+          </select>
+        </div>
+        <div>
+          <label for="sort-order" class={labelClass}>Sentido</label>
+          <select id="sort-order" class={inputClass}>
+            <option value="asc" selected={initial.sortOrder === 'asc'}>Ascendente</option>
+            <option value="desc" selected={initial.sortOrder === 'desc'}>Descendente</option>
+          </select>
+        </div>
+        <div class="flex flex-wrap items-end gap-3 sm:col-span-2">
+          <span data-filter-count class="text-sm text-slate-600" aria-live="polite"></span>
+          <button type="button" data-clear-filters class={secondaryButton}>Limpiar filtros</button>
+        </div>
+        <p data-filter-error role="alert" class="hidden text-sm text-red-700 sm:col-span-2 lg:col-span-4"></p>
+      </form>
+
+      <div data-alert role="alert" class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <p data-alert-message></p>
+        <button type="button" data-retry class={`mt-3 ${secondaryButton}`}>Reintentar</button>
+      </div>
+
+      <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <p data-status-line class="border-b border-slate-200 px-4 py-3 text-sm text-slate-600" aria-live="polite">{LOADING_MESSAGE}</p>
+        <!-- Narrow screens: each row stacks with its labels (no horizontal scroll); wider: a table that scrolls in its card. -->
+        <div class="relative sm:overflow-x-auto">
+          <table class:list={[STACKED_TABLE, 'sm:min-w-[56rem]']} data-table aria-busy="true">
+            <thead class="bg-slate-50 text-slate-700 max-sm:hidden">
+              <tr>
+                {
+                  COLUMNS.map(({ field, label, numeric }) => (
+                    <th scope="col" class:list={['whitespace-nowrap px-4 py-2 font-medium', numeric && 'text-right']}
+                      data-sort-header={field ?? undefined} aria-sort={field ? 'none' : undefined}>
+                      {field ? (
+                        <button type="button" data-sort={field}
+                          class="inline-flex items-center gap-1 rounded hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">
+                          {label}
+                          <span data-sort-icon aria-hidden="true" class="text-slate-400">↕</span>
+                        </button>
+                      ) : (
+                        label
+                      )}
+                    </th>
+                  ))
+                }
+                <th scope="col" class="px-4 py-2 font-medium"><span class="sr-only">Acción</span></th>
+              </tr>
+            </thead>
+            <tbody data-rows class="divide-y divide-slate-100 max-sm:block"></tbody>
+          </table>
+        </div>
+        <p data-message class="hidden px-4 py-10 text-center text-slate-600"></p>
+        <div data-loading class="space-y-3 px-4 py-6" aria-hidden="true">
+          <div class="h-4 w-3/4 animate-pulse rounded bg-slate-100"></div>
+          <div class="h-4 w-2/3 animate-pulse rounded bg-slate-100"></div>
+          <div class="h-4 w-1/2 animate-pulse rounded bg-slate-100"></div>
+        </div>
+        <nav data-pagination aria-label="Paginación de obligaciones"
+          class="hidden flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-sm">
+          <div class="flex items-center gap-2">
+            <label for="obligations-page-size" class="text-slate-600">Por página</label>
+            <select id="obligations-page-size" data-page-size class="rounded-lg border border-slate-300 bg-white px-2 py-1">
+              {PAGE_SIZES.map((size) => <option value={size} selected={initial.pageSize === size}>{size}</option>)}
+            </select>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" data-page="prev" class={secondaryButton}>Anterior</button>
+            <span data-page-info class="whitespace-nowrap text-slate-600"></span>
+            <button type="button" data-page="next" class={secondaryButton}>Siguiente</button>
+          </div>
+        </nav>
+      </div>
+    </section>
+  </main>
+</Layout>
+
+<script>
+  import {
+    createCharge,
+    generateMonthlyCharges,
+    listCharges,
+    previewMonthlyCharges,
+    type Charge,
+    type ChargeConcept,
+    type ChargeSortField,
+    type ChargeStatus
+  } from '../../../lib/api/charges';
+  import { getBlocks, getTowers, getUnits } from '../../../lib/api/structure';
+  import { STACKED_CELL, STACKED_ROW, STATUS_BADGES, isPeriod } from '../../../lib/obligations/charge-format';
+  import {
+    CHARGE_FIELDS,
+    EMPTY_VALUES,
+    NO_SOURCES,
+    createChargeFlow,
+    createSourcePicker,
+    detailPath,
+    fieldsFor,
+    sourceOptionText,
+    type ChargeErrors,
+    type ChargeSubmitState,
+    type SourceState
+  } from '../../../lib/obligations/charge-form';
+  import {
+    ALL_EXIST_MESSAGE,
+    MONTHLY_FIELDS,
+    canConfirm,
+    createMonthlyGeneration,
+    otherAmountWarning,
+    periodListPath,
+    previewLines,
+    previewText,
+    resultIssues,
+    resultLines,
+    type MonthlyErrors,
+    type MonthlyState,
+    type MonthlyValues
+  } from '../../../lib/obligations/monthly-form';
+  import {
+    EMPTY_MESSAGE,
+    LOADING_MESSAGE,
+    NO_RESULTS_MESSAGE,
+    activeFilterCount,
+    chargeCells,
+    createObligationsList,
+    dateRangeError,
+    filtersText,
+    parseQuery,
+    rangeText,
+    type ObligationsListState
+  } from '../../../lib/obligations/obligations-list';
+  import { createUnitPicker, idOf, type PickerOption, type UnitPickerState } from '../../../lib/obligations/unit-picker';
+
+  const page = document.querySelector<HTMLElement>('[data-obligations-page]')!;
+  const csrfToken = page.dataset.csrfToken ?? '';
+  const $ = <T extends Element>(selector: string, root: ParentNode = page) => root.querySelector<T>(selector)!;
+  const show = (element: Element, visible: boolean) => element.classList.toggle('hidden', !visible);
+  const showFlex = (element: Element, visible: boolean) => {
+    element.classList.toggle('hidden', !visible);
+    element.classList.toggle('flex', visible);
+  };
+  const navigate = (path: string) => window.location.assign(path);
+
+  function definitionList(target: HTMLElement, lines: { label: string; value: string }[]): void {
+    target.replaceChildren(
+      ...lines.map(({ label, value }) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'flex min-w-0 flex-wrap justify-between gap-x-3 sm:block';
+        const term = document.createElement('dt');
+        term.className = 'font-medium';
+        term.textContent = label;
+        const description = document.createElement('dd');
+        description.className = 'min-w-0 break-all sm:break-words';
+        description.textContent = value;
+        wrapper.append(term, description);
+        return wrapper;
+      })
+    );
+  }
+
+  /** Shows the field errors next to their controls; with `focus`, moves to the first one. */
+  function fieldErrors(fields: readonly string[], errors: Record<string, string | undefined>, attribute: string,
+                       controls: Record<string, HTMLElement>, focus = true): void {
+    let first: HTMLElement | null = null;
+    for (const field of fields) {
+      const error = page.querySelector<HTMLElement>(`[${attribute}="${field}"]`);
+      const control = controls[field];
+      if (!error || !control) continue;
+      const message = errors[field] ?? null;
+      error.textContent = message ?? '';
+      show(error, Boolean(message));
+      control.setAttribute('aria-invalid', message ? 'true' : 'false');
+      const describedBy = [control.dataset.hint, message ? error.id : null].filter(Boolean).join(' ');
+      if (describedBy) control.setAttribute('aria-describedby', describedBy);
+      else control.removeAttribute('aria-describedby');
+      if (message && !control.closest('.hidden')) first ??= control;
+    }
+    if (focus) first?.focus();
+  }
+
+  const NOTICE_TONES = {
+    error: 'border-red-200 bg-red-50 text-red-800',
+    warning: 'border-amber-200 bg-amber-50 text-amber-900'
+  } as const;
+
+  // --- Generar mensualidades -----------------------------------------------------------------------
+  const monthlyForm = $<HTMLFormElement>('[data-monthly-form]');
+  const periodInput = $<HTMLInputElement>('#monthly-period');
+  const monthlyAmount = $<HTMLInputElement>('#monthly-amount');
+  const monthlyDue = $<HTMLInputElement>('#monthly-due');
+  const reviewButton = $<HTMLButtonElement>('[data-review]');
+  const monthlyNotice = $<HTMLElement>('[data-monthly-notice]');
+  const previewBox = $<HTMLElement>('[data-preview]');
+  const confirmButton = $<HTMLButtonElement>('[data-confirm]');
+  const resultBox = $<HTMLElement>('[data-result]');
+  monthlyAmount.dataset.hint = 'monthly-amount-hint';
+  const monthlyControls: Record<string, HTMLElement> = { billing_period: periodInput, amount: monthlyAmount, due_date: monthlyDue };
+
+  const monthlyValues = (): MonthlyValues => ({ period: periodInput.value, amount: monthlyAmount.value, dueDate: monthlyDue.value });
+  let lastPhase: MonthlyState['phase'] = 'idle';
+  let shownResult: unknown = null;
+  let shownErrors: unknown = null;
+
+  function renderMonthly(state: MonthlyState): void {
+    const generating = state.phase === 'generating';
+    for (const control of [periodInput, monthlyAmount, monthlyDue]) control.disabled = generating;
+    reviewButton.disabled = generating || state.phase === 'reviewing';
+    reviewButton.textContent = state.phase === 'reviewing' ? 'Revisando…' : 'Revisar';
+    // Focus moves only to new errors, never while the administrator is typing.
+    fieldErrors(MONTHLY_FIELDS, state.errors as MonthlyErrors, 'data-monthly-error', monthlyControls, state.errors !== shownErrors);
+    shownErrors = state.errors;
+
+    show(monthlyNotice, state.notice !== null);
+    if (state.notice) {
+      monthlyNotice.className = `rounded-lg border px-4 py-3 text-sm ${NOTICE_TONES[state.notice.tone]}`;
+      monthlyNotice.textContent = state.notice.text;
+    }
+
+    const preview = state.preview;
+    show(previewBox, preview !== null);
+    if (preview) {
+      $('[data-preview-text]').textContent = previewText(preview);
+      definitionList($('[data-preview-lines]'), previewLines(preview));
+      const warning = otherAmountWarning(preview);
+      $('[data-other-amount]').textContent = warning ?? '';
+      show($('[data-other-amount]'), warning !== null);
+      $('[data-all-exist]').textContent = ALL_EXIST_MESSAGE;
+      show($('[data-all-exist]'), !canConfirm(preview));
+      // Never offered when nothing would be created.
+      show(confirmButton, canConfirm(preview));
+      confirmButton.disabled = generating;
+      confirmButton.textContent = generating ? 'Generando…' : 'Confirmar y generar';
+      if (state.phase === 'ready' && lastPhase !== 'ready') previewBox.focus();
+    }
+
+    show(resultBox, state.result !== null);
+    if (state.result && state.result !== shownResult) {
+      shownResult = state.result;
+      definitionList($('[data-result-lines]'), resultLines(state.result));
+      const issues = resultIssues(state.result);
+      show($('[data-result-issues]'), issues !== null);
+      if (issues) {
+        $('[data-result-issue-list]').replaceChildren(
+          ...[...issues.omitted.map((i) => ({ ...i, kind: 'Omitido' })), ...issues.failed.map((i) => ({ ...i, kind: 'Error' }))].map(
+            ({ label, message, kind }) => {
+              const item = document.createElement('li');
+              const name = document.createElement('span');
+              name.className = 'font-mono';
+              name.textContent = label;
+              item.append(`${kind}: `, name, ` — ${message}`);
+              return item;
+            }
+          )
+        );
+        $('[data-result-hint]').textContent = issues.hint;
+      }
+      $<HTMLAnchorElement>('[data-result-link]').href = periodListPath(state.result.billing_period);
+      resultBox.focus();
+    }
+    lastPhase = state.phase;
+  }
+
+  const monthly = createMonthlyGeneration({
+    preview: previewMonthlyCharges,
+    generate: (payload) => generateMonthlyCharges(payload, csrfToken),
+    render: renderMonthly,
+    navigate,
+    onGenerated: () => void list.refresh()
+  });
+
+  monthlyForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void monthly.review(monthlyValues());
+  });
+  // Any change of the parameters discards the preview.
+  for (const control of [periodInput, monthlyAmount, monthlyDue]) {
+    control.addEventListener('input', () => monthly.change());
+    control.addEventListener('change', () => monthly.change());
+  }
+  confirmButton.addEventListener('click', () => void monthly.confirm(monthlyValues()));
+
+  // --- Unit pickers (form and filters) ---------------------------------------------------------------
+  function fillSelect(select: HTMLSelectElement, options: PickerOption[], selected: number | null, empty: string): void {
+    const first = document.createElement('option');
+    first.value = '';
+    first.textContent = empty;
+    select.replaceChildren(
+      first,
+      ...options.map(({ id, text }) => {
+        const option = document.createElement('option');
+        option.value = String(id);
+        option.textContent = text;
+        option.selected = id === selected;
+        return option;
+      })
+    );
+  }
+
+  function pickerRenderer(selects: { block: HTMLSelectElement; tower: HTMLSelectElement; unit: HTMLSelectElement },
+                          empty: { block: string; tower: string; unit: string }, status: HTMLElement | null,
+                          locked: () => boolean) {
+    return (state: UnitPickerState) => {
+      fillSelect(selects.block, state.blocks, state.blockId, empty.block);
+      fillSelect(selects.tower, state.towers, state.towerId, empty.tower);
+      fillSelect(selects.unit, state.units, state.unitId, empty.unit);
+      selects.block.disabled = locked() || state.loading === 'blocks';
+      selects.tower.disabled = locked() || state.blockId === null || state.loading === 'towers';
+      selects.unit.disabled = locked() || state.towerId === null || state.loading === 'units';
+      const text = state.error ?? (state.loading ? 'Cargando…' : '');
+      if (status) {
+        status.textContent = text;
+        show(status, Boolean(text));
+        status.classList.toggle('text-red-700', state.error !== null);
+      }
+    };
+  }
+
+  // --- Nueva obligación ----------------------------------------------------------------------------------
+  const chargeForm = $<HTMLFormElement>('[data-charge-form]');
+  const chargeAlert = $<HTMLElement>('[data-charge-alert]');
+  const chargeSubmit = $<HTMLButtonElement>('button[type="submit"]', chargeForm);
+  const blockSelect = $<HTMLSelectElement>('[data-charge-block]');
+  const towerSelect = $<HTMLSelectElement>('[data-charge-tower]');
+  const unitSelect = $<HTMLSelectElement>('[data-charge-unit]');
+  const conceptSelect = $<HTMLSelectElement>('#charge-concept');
+  const periodBox = $<HTMLElement>('[data-charge-period]');
+  const chargePeriod = $<HTMLInputElement>('#charge-period');
+  const sourceBox = $<HTMLElement>('[data-charge-source]');
+  const sourceSelect = $<HTMLSelectElement>('#charge-source');
+  const sourceStatus = $<HTMLElement>('[data-charge-source-status]');
+  const sourceMore = $<HTMLButtonElement>('[data-charge-source-more]');
+  const descriptionBox = $<HTMLElement>('[data-charge-description]');
+  const descriptionInput = $<HTMLInputElement>('#charge-description');
+  const chargeAmount = $<HTMLInputElement>('#charge-amount');
+  const chargeDue = $<HTMLInputElement>('#charge-due');
+  const chargeConfirmation = $<HTMLElement>('[data-charge-confirmation]');
+  sourceSelect.dataset.hint = 'charge-source-hint';
+  chargeAmount.dataset.hint = 'charge-amount-hint';
+  const chargeControls: Record<string, HTMLElement> = {
+    unit_id: unitSelect,
+    concept: conceptSelect,
+    billing_period: chargePeriod,
+    source_charge_id: sourceSelect,
+    description: descriptionInput,
+    amount: chargeAmount,
+    due_date: chargeDue
+  };
+  let submitting = false;
+
+  const formPicker = createUnitPicker({
+    loadBlocks: getBlocks,
+    loadTowers: getTowers,
+    loadUnits: getUnits,
+    render: pickerRenderer({ block: blockSelect, tower: towerSelect, unit: unitSelect },
+      { block: 'Selecciona…', tower: 'Selecciona…', unit: 'Selecciona…' }, $('[data-charge-picker-status]'), () => submitting),
+    navigate
+  });
+
+  function renderSources(state: SourceState): void {
+    const selected = sourceSelect.value;
+    const first = document.createElement('option');
+    first.value = '';
+    first.textContent = 'Sin obligación de origen';
+    const options = state.kind === 'ready' ? state.options : [];
+    sourceSelect.replaceChildren(
+      first,
+      ...options.map((charge: Charge) => {
+        const option = document.createElement('option');
+        option.value = String(charge.id);
+        option.textContent = sourceOptionText(charge);
+        option.selected = String(charge.id) === selected;
+        return option;
+      })
+    );
+    sourceSelect.disabled = submitting || state.kind !== 'ready';
+    sourceStatus.textContent =
+      state.kind === 'idle' ? 'Selecciona primero el apartamento.'
+        : state.kind === 'loading' ? 'Cargando obligaciones del apartamento…'
+          : state.kind === 'none' ? NO_SOURCES
+            : state.kind === 'error' ? state.message
+              : 'Solo obligaciones de este apartamento que no son moras.';
+    sourceStatus.classList.toggle('text-red-700', state.kind === 'error');
+    show(sourceMore, state.kind === 'ready' && state.hasMore);
+    sourceMore.disabled = submitting || (state.kind === 'ready' && state.loadingMore);
+    sourceMore.textContent = state.kind === 'ready' && state.loadingMore ? 'Cargando…' : 'Cargar más obligaciones';
+  }
+
+  const sources = createSourcePicker({ load: listCharges, render: renderSources, navigate });
+
+  function applyConcept(): void {
+    const fields = fieldsFor(conceptSelect.value);
+    show(periodBox, fields.period);
+    show(sourceBox, fields.source);
+    show(descriptionBox, fields.description !== 'none');
+    show($('[data-charge-description-optional]'), fields.description === 'optional');
+    descriptionInput.required = fields.description === 'required';
+    // Values of fields that do not apply are discarded (never sent).
+    if (!fields.period) chargePeriod.value = '';
+    if (fields.description === 'none') descriptionInput.value = '';
+    if (fields.source) {
+      if (sources.state.kind === 'idle') void sources.forUnit(formPicker.state.unitId);
+    } else {
+      sources.reset();
+    }
+  }
+
+  blockSelect.addEventListener('change', () => {
+    sources.reset();
+    void formPicker.selectBlock(idOf(blockSelect.value));
+  });
+  towerSelect.addEventListener('change', () => {
+    sources.reset();
+    void formPicker.selectTower(idOf(towerSelect.value));
+  });
+  unitSelect.addEventListener('change', () => {
+    formPicker.selectUnit(idOf(unitSelect.value));
+    sources.reset();
+    if (fieldsFor(conceptSelect.value).source) void sources.forUnit(formPicker.state.unitId);
+  });
+  conceptSelect.addEventListener('change', applyConcept);
+  sourceMore.addEventListener('click', () => void sources.more());
+
+  function renderCharge(state: ChargeSubmitState): void {
+    submitting = state.kind === 'submitting';
+    for (const control of chargeForm.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('input, select, button')) {
+      if (submitting) control.disabled = true;
+    }
+    if (!submitting) {
+      for (const control of [conceptSelect, chargePeriod, descriptionInput, chargeAmount, chargeDue, chargeSubmit]) control.disabled = false;
+      formPicker.redraw(); // the selects again with their own rules
+      renderSources(sources.state);
+    }
+    chargeSubmit.textContent = submitting ? 'Creando…' : 'Crear obligación';
+    show(chargeAlert, state.kind === 'error' && Boolean(state.message));
+    if (state.kind === 'error') chargeAlert.textContent = state.message ?? '';
+    if (state.kind === 'invalid' || state.kind === 'error') {
+      fieldErrors(CHARGE_FIELDS, state.errors as ChargeErrors, 'data-charge-error', chargeControls);
+      if (state.kind === 'error' && state.message && Object.keys(state.errors).length === 0) chargeAlert.focus();
+    }
+    if (state.kind === 'submitting') show(chargeConfirmation, false);
+    if (state.kind === 'done') {
+      fieldErrors(CHARGE_FIELDS, {}, 'data-charge-error', chargeControls);
+      const { title, href, lines, credit } = state.confirmation;
+      $('[data-charge-confirmation-title]').textContent = title;
+      definitionList($('[data-charge-confirmation-lines]'), lines);
+      const creditList = $<HTMLElement>('[data-charge-credit]');
+      creditList.replaceChildren(...credit.map((text) => Object.assign(document.createElement('li'), { textContent: text })));
+      show(creditList, credit.length > 0);
+      $<HTMLAnchorElement>('[data-charge-link]').href = href;
+      show(chargeConfirmation, true);
+      chargeConfirmation.scrollIntoView({ block: 'nearest' });
+      // The result is visible: the form is ready for the next obligation (same apartment kept).
+      conceptSelect.value = '';
+      chargeAmount.value = '';
+      chargeDue.value = '';
+      applyConcept();
+    }
+  }
+  chargeAlert.tabIndex = -1;
+
+  const chargeFlow = createChargeFlow({
+    create: (payload) => createCharge(payload, csrfToken),
+    render: renderCharge,
+    navigate,
+    onCreated: () => void list.refresh()
+  });
+
+  chargeForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void chargeFlow.submit({
+      ...EMPTY_VALUES,
+      unitId: formPicker.state.unitId,
+      concept: conceptSelect.value,
+      amount: chargeAmount.value,
+      dueDate: chargeDue.value,
+      description: descriptionInput.value,
+      period: chargePeriod.value,
+      sourceId: idOf(sourceSelect.value)
+    });
+  });
+
+  // --- Listado -------------------------------------------------------------------------------------------
+  const table = $<HTMLTableElement>('[data-table]');
+  const rows = $<HTMLElement>('[data-rows]');
+  const statusLine = $<HTMLElement>('[data-status-line]');
+  const message = $<HTMLElement>('[data-message]');
+  const loading = $<HTMLElement>('[data-loading]');
+  const alert = $<HTMLElement>('[data-alert]');
+  const pagination = $<HTMLElement>('[data-pagination]');
+  const pageInfo = $<HTMLElement>('[data-page-info]');
+  const prev = $<HTMLButtonElement>('[data-page="prev"]');
+  const next = $<HTMLButtonElement>('[data-page="next"]');
+  const pageSize = $<HTMLSelectElement>('[data-page-size]');
+  const filterBlock = $<HTMLSelectElement>('[data-filter-block]');
+  const filterTower = $<HTMLSelectElement>('[data-filter-tower]');
+  const filterUnit = $<HTMLSelectElement>('[data-filter-unit]');
+  const filterConcept = $<HTMLSelectElement>('#filter-concept');
+  const filterStatus = $<HTMLSelectElement>('#filter-status');
+  const filterPeriod = $<HTMLInputElement>('#filter-period');
+  const filterFrom = $<HTMLInputElement>('#filter-from');
+  const filterTo = $<HTMLInputElement>('#filter-to');
+  const sortField = $<HTMLSelectElement>('#sort-field');
+  const sortOrder = $<HTMLSelectElement>('#sort-order');
+  const filterError = $<HTMLElement>('[data-filter-error]');
+
+  function row(charge: Charge): HTMLTableRowElement {
+    const tr = document.createElement('tr');
+    tr.className = `${STACKED_ROW} max-sm:px-4`;
+    chargeCells(charge).forEach((cell, index) => {
+      const element = document.createElement(index === 0 ? 'th' : 'td');
+      if (element instanceof HTMLTableCellElement && index === 0) element.scope = 'row';
+      element.dataset.label = cell.label;
+      element.className = [
+        'px-4 py-3 align-top',
+        index === 0 ? 'font-medium text-slate-900 max-sm:block max-sm:px-0 max-sm:pb-1 max-sm:text-base' : STACKED_CELL,
+        index > 0 && cell.numeric ? 'whitespace-nowrap font-mono text-slate-900 sm:text-right' : '',
+        index > 0 && !cell.numeric ? 'text-slate-700' : '',
+        index === 3 ? 'whitespace-nowrap' : ''
+      ].join(' ');
+      if (index === 7) {
+        const badge = document.createElement('span');
+        badge.className = `inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_BADGES[charge.status]}`;
+        badge.textContent = cell.text;
+        element.append(badge);
+      } else {
+        const text = document.createElement('span');
+        text.className = index === 0 ? 'font-mono break-all' : 'min-w-0 break-words';
+        text.textContent = cell.text;
+        element.append(text);
+      }
+      if (cell.note) {
+        const note = document.createElement('span');
+        note.className = 'block text-xs font-normal text-slate-500';
+        note.textContent = cell.note;
+        element.append(note);
+      }
+      tr.append(element);
+    });
+    const action = document.createElement('td');
+    action.className = 'px-4 py-3 text-right max-sm:block max-sm:px-0 max-sm:pt-2 max-sm:text-left';
+    const link = document.createElement('a');
+    link.href = detailPath(charge.id);
+    link.className =
+      'whitespace-nowrap rounded font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+    link.textContent = 'Ver detalle';
+    link.setAttribute('aria-label', `Ver detalle de la obligación n.º ${charge.id} de ${charge.unit_label}`);
+    action.append(link);
+    tr.append(action);
+    return tr;
+  }
+
+  function render(state: ObligationsListState): void {
+    const { query } = state;
+    page.querySelectorAll<HTMLElement>('[data-sort-header]').forEach((header) => {
+      const active = header.dataset.sortHeader === query.sortBy;
+      header.setAttribute('aria-sort', active ? (query.sortOrder === 'asc' ? 'ascending' : 'descending') : 'none');
+      header.querySelector('[data-sort-icon]')!.textContent = active ? (query.sortOrder === 'asc' ? '↑' : '↓') : '↕';
+    });
+    sortField.value = query.sortBy;
+    sortOrder.value = query.sortOrder;
+    $('[data-filter-count]').textContent = filtersText(activeFilterCount(query));
+    table.setAttribute('aria-busy', String(state.kind === 'loading'));
+    show(loading, state.kind === 'loading');
+    show(alert, state.kind === 'error');
+    show(message, state.kind === 'empty' || state.kind === 'no-results');
+    if (state.kind !== 'results') rows.replaceChildren();
+    showFlex(pagination, state.kind === 'results');
+    switch (state.kind) {
+      case 'loading':
+        statusLine.textContent = LOADING_MESSAGE;
+        break;
+      case 'results':
+        rows.replaceChildren(...state.page.items.map(row));
+        statusLine.textContent = rangeText(state.page);
+        pageInfo.textContent = `Página ${state.page.page} de ${state.page.total_pages}`;
+        prev.disabled = state.page.page <= 1;
+        next.disabled = state.page.page >= state.page.total_pages;
+        pageSize.value = String(state.page.page_size);
+        break;
+      case 'empty':
+      case 'no-results':
+        statusLine.textContent = '0 obligaciones';
+        message.textContent = state.kind === 'empty' ? EMPTY_MESSAGE : NO_RESULTS_MESSAGE;
+        break;
+      case 'error':
+        statusLine.textContent = 'No se pudo consultar el listado.';
+        $('[data-alert-message]').textContent = state.message;
+        break;
+    }
+  }
+
+  const initial = parseQuery(new URLSearchParams(window.location.search));
+  const list = createObligationsList(initial, {
+    load: listCharges,
+    render,
+    remember: (queryString) =>
+      history.replaceState(null, '', queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname),
+    navigate
+  });
+
+  const filterPicker = createUnitPicker({
+    loadBlocks: getBlocks,
+    loadTowers: getTowers,
+    loadUnits: getUnits,
+    render: pickerRenderer({ block: filterBlock, tower: filterTower, unit: filterUnit },
+      { block: 'Todos', tower: 'Todas', unit: 'Todos' }, null, () => false),
+    navigate
+  });
+
+  $('[data-filters]').addEventListener('submit', (event) => event.preventDefault());
+  filterBlock.addEventListener('change', () => {
+    const blockId = idOf(filterBlock.value);
+    void filterPicker.selectBlock(blockId);
+    void list.filter({ blockId, towerId: null, unitId: null });
+  });
+  filterTower.addEventListener('change', () => {
+    const towerId = idOf(filterTower.value);
+    void filterPicker.selectTower(towerId);
+    void list.filter({ towerId, unitId: null });
+  });
+  filterUnit.addEventListener('change', () => {
+    filterPicker.selectUnit(idOf(filterUnit.value));
+    void list.filter({ unitId: idOf(filterUnit.value) });
+  });
+  filterConcept.addEventListener('change', () => void list.filter({ concept: filterConcept.value as ChargeConcept | '' }));
+  filterStatus.addEventListener('change', () => void list.filter({ status: filterStatus.value as ChargeStatus | '' }));
+  filterPeriod.addEventListener('change', () => {
+    const period = filterPeriod.value;
+    if (period === '' || isPeriod(period)) void list.filter({ period });
+  });
+  const onDates = () => {
+    const error = dateRangeError(filterFrom.value, filterTo.value);
+    filterError.textContent = error ?? '';
+    show(filterError, Boolean(error));
+    if (!error) void list.filter({ dueFrom: filterFrom.value, dueTo: filterTo.value });
+  };
+  filterFrom.addEventListener('change', onDates);
+  filterTo.addEventListener('change', onDates);
+  sortField.addEventListener('change', () => void list.sortExactly(sortField.value as ChargeSortField, sortOrder.value === 'desc' ? 'desc' : 'asc'));
+  sortOrder.addEventListener('change', () => void list.sortExactly(sortField.value as ChargeSortField, sortOrder.value === 'desc' ? 'desc' : 'asc'));
+  $('[data-clear-filters]').addEventListener('click', () => {
+    filterConcept.value = '';
+    filterStatus.value = '';
+    filterPeriod.value = '';
+    filterFrom.value = '';
+    filterTo.value = '';
+    show(filterError, false);
+    filterPicker.clear();
+    void list.clearFilters();
+  });
+  page.querySelectorAll<HTMLButtonElement>('[data-sort]').forEach((button) => {
+    button.addEventListener('click', () => list.sort(button.dataset.sort as ChargeSortField));
+  });
+  prev.addEventListener('click', () => list.goToPage(list.query.page - 1));
+  next.addEventListener('click', () => list.goToPage(list.query.page + 1));
+  pageSize.addEventListener('change', () => list.setPageSize(Number(pageSize.value)));
+  $('[data-retry]').addEventListener('click', () => list.refresh());
+  // Financial data changes with every payment: shown again when the page comes back.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void list.refresh();
+  });
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) void list.refresh();
+  });
+
+  void list.start();
+  void formPicker.start();
+  void filterPicker.start({ blockId: initial.blockId, towerId: initial.towerId, unitId: initial.unitId });
+</script>

@@ -75,3 +75,16 @@ export function renumberStructureItem(
 export function deleteStructureItem(itemPath: string, version: number, csrfToken: string): Promise<unknown> {
   return apiFetch(`${itemPath}?version=${encodeURIComponent(version)}`, { method: 'DELETE', csrfToken });
 }
+
+/** Browser only. Active blocks, towers of a block and apartments of a tower (the obligations pickers). */
+export function getBlocks(): Promise<BlockList> {
+  return apiFetch<BlockList>('/blocks', { cache: 'no-store' });
+}
+
+export function getTowers(blockId: number): Promise<TowerList> {
+  return apiFetch<TowerList>(`/blocks/${blockId}/towers`, { cache: 'no-store' });
+}
+
+export function getUnits(towerId: number): Promise<UnitList> {
+  return apiFetch<UnitList>(`/towers/${towerId}/units`, { cache: 'no-store' });
+}
