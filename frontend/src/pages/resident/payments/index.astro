@@ -1,0 +1,344 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import ResidentHeader from '../../../components/ResidentHeader.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import { STACKED_TABLE } from '../../../lib/obligations/charge-format';
+import { STATUSES, STATUS_BADGES, STATUS_CHANGES_NOTE, STATUS_HELP, STATUS_LABELS } from '../../../lib/resident/payment-format';
+import { COLUMNS, LOADING_MESSAGE, PAGE_SIZES, SEARCH_MAX_LENGTH, parseQuery } from '../../../lib/resident/payments-list';
+
+// HU-008. The middleware only renders /resident pages for a valid RESIDENTE
+// session; the API decides whose payments are listed (always the session's
+// resident) and authorizes every request on its own (HU-018).
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const initial = parseQuery(Astro.url.searchParams);
+
+const inputClass =
+  'mt-1 block w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30 aria-[invalid=true]:border-red-500';
+const labelClass = 'block text-sm font-medium text-slate-700';
+const errorClass = 'mt-1 hidden text-sm text-red-700';
+const hintClass = 'mt-1 text-sm text-slate-500';
+const primaryButton =
+  'rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-60';
+const secondaryButton =
+  'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-50';
+const link =
+  'rounded font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+const badge = 'inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset';
+---
+
+<Layout title="Mis pagos — SoftPh-Académico">
+  <ResidentHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-5xl space-y-6 px-4 py-8" data-payments-page>
+    <div class="space-y-2">
+      <Breadcrumbs items={[{ label: 'Inicio', href: '/resident' }, { label: 'Mis pagos' }]} />
+      <h1 class="text-2xl font-semibold tracking-tight">Mis pagos</h1>
+      <p class="text-slate-600">Consulta los pagos registrados en tu cuenta y revisa su estado.</p>
+    </div>
+
+    <form data-filters role="search" aria-label="Filtros de mis pagos" novalidate
+      class="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
+      <div class="sm:col-span-2">
+        <label for="filter-search" class={labelClass}>Buscar</label>
+        <input id="filter-search" name="search" type="search" autocomplete="off" maxlength={SEARCH_MAX_LENGTH}
+          value={initial.search} placeholder="RC-00000012, 12 o 2026-01-15" aria-describedby="filter-search-hint" class={inputClass} />
+        <p id="filter-search-hint" class={hintClass}>Número de recibo o fecha del pago (AAAA-MM-DD).</p>
+        <p id="filter-search-error" data-filter-error="search" class={errorClass}></p>
+      </div>
+      <div class="sm:col-span-2">
+        <label for="filter-status" class={labelClass}>Estado</label>
+        <select id="filter-status" name="status" class={inputClass}>
+          <option value="" selected={initial.status === ''}>Todos</option>
+          {STATUSES.map((status) => <option value={status} selected={initial.status === status}>{STATUS_LABELS[status]}</option>)}
+        </select>
+        <p id="filter-status-error" data-filter-error="status" class={errorClass}></p>
+      </div>
+      <div class="sm:col-span-1 lg:col-span-2">
+        <label for="filter-from" class={labelClass}>Fecha desde</label>
+        <input id="filter-from" name="date_from" type="date" value={initial.dateFrom} class={inputClass} />
+        <p id="filter-date_from-error" data-filter-error="date_from" class={errorClass}></p>
+      </div>
+      <div class="sm:col-span-1 lg:col-span-2">
+        <label for="filter-to" class={labelClass}>Fecha hasta</label>
+        <input id="filter-to" name="date_to" type="date" value={initial.dateTo} class={inputClass} />
+        <p id="filter-date_to-error" data-filter-error="date_to" class={errorClass}></p>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-4">
+        <button type="submit" class={primaryButton}>Aplicar</button>
+        <button type="button" data-clear-filters class={`hidden ${secondaryButton}`}>Limpiar filtros</button>
+        <span data-filter-count class="text-sm text-slate-600" aria-live="polite"></span>
+      </div>
+    </form>
+
+    <details class="group rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <summary
+        class="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 [&::-webkit-details-marker]:hidden">
+        <span>¿Qué significa el estado de un pago?</span>
+        <span aria-hidden="true" class="text-slate-400 transition-transform group-open:rotate-180">▾</span>
+      </summary>
+      <div class="space-y-3 border-t border-slate-200 px-4 py-4 text-sm">
+        <dl class="space-y-2">
+          {
+            STATUSES.map((status) => (
+              <div class="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
+                <dt class="shrink-0 sm:w-44">
+                  <span class:list={[badge, STATUS_BADGES[status]]}>{STATUS_LABELS[status]}</span>
+                </dt>
+                <dd class="text-slate-700">{STATUS_HELP[status]}</dd>
+              </div>
+            ))
+          }
+        </dl>
+        <p class="text-slate-600">{STATUS_CHANGES_NOTE}</p>
+      </div>
+    </details>
+
+    <div data-alert role="alert" class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+      <p data-alert-message></p>
+      <button type="button" data-retry class={`mt-3 hidden ${secondaryButton}`}>Reintentar</button>
+      <a data-login href="/login" class:list={['mt-3 hidden text-sm', link]}>Iniciar sesión</a>
+    </div>
+
+    <section aria-labelledby="payments-table-title" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <h2 id="payments-table-title" class="sr-only">Listado de mis pagos</h2>
+      <p data-status-line class="border-b border-slate-200 px-4 py-3 text-sm text-slate-600" aria-live="polite">{LOADING_MESSAGE}</p>
+      <!-- Narrow screens: each row stacks with its labels (no horizontal scroll); wider: a table that scrolls in its card. -->
+      <div class="relative sm:overflow-x-auto">
+        <table class:list={[STACKED_TABLE, 'sm:min-w-[46rem]']} data-table aria-busy="true">
+          <caption class="sr-only">Mis pagos, del más reciente al más antiguo</caption>
+          <thead class="bg-slate-50 text-slate-700 max-sm:hidden">
+            <tr>
+              {COLUMNS.map(({ label, numeric }) => (
+                <th scope="col" class:list={['whitespace-nowrap px-4 py-2 font-medium', numeric && 'text-right']}>{label}</th>
+              ))}
+              <th scope="col" class="whitespace-nowrap px-4 py-2 font-medium"><span class="sr-only">Acción</span></th>
+            </tr>
+          </thead>
+          <tbody data-rows class="divide-y divide-slate-100 max-sm:block"></tbody>
+        </table>
+      </div>
+      <p data-message class="hidden px-4 py-10 text-center text-slate-600"></p>
+      <div data-loading class="space-y-3 px-4 py-6" aria-hidden="true">
+        <div class="h-4 w-3/4 animate-pulse rounded bg-slate-100"></div>
+        <div class="h-4 w-2/3 animate-pulse rounded bg-slate-100"></div>
+        <div class="h-4 w-1/2 animate-pulse rounded bg-slate-100"></div>
+      </div>
+      <nav data-pagination aria-label="Paginación de mis pagos"
+        class="hidden flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-sm">
+        <div class="flex items-center gap-2">
+          <label for="payments-page-size" class="text-slate-600">Por página</label>
+          <select id="payments-page-size" data-page-size class="rounded-lg border border-slate-300 bg-white px-2 py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">
+            {PAGE_SIZES.map((size) => <option value={size} selected={initial.pageSize === size}>{size}</option>)}
+          </select>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" data-page="prev" class={secondaryButton}>Anterior</button>
+          <span data-page-info aria-current="page" class="whitespace-nowrap text-slate-600"></span>
+          <button type="button" data-page="next" class={secondaryButton}>Siguiente</button>
+        </div>
+      </nav>
+    </section>
+  </main>
+</Layout>
+
+<script>
+  import { listMyPayments, type PaymentStatus } from '../../../lib/api/resident-payments';
+  import { STACKED_CELL, STACKED_ROW } from '../../../lib/obligations/charge-format';
+  import { STATUS_BADGES } from '../../../lib/resident/payment-format';
+  import {
+    EMPTY_MESSAGE,
+    FILTER_FIELDS,
+    LOADING_MESSAGE,
+    NO_RESULTS_MESSAGE,
+    activeFilterCount,
+    createResidentPaymentsList,
+    dateRangeError,
+    filtersText,
+    pageText,
+    parseQuery,
+    paymentRow,
+    rangeText,
+    type FilterErrors,
+    type ResidentPaymentFilters,
+    type ResidentPaymentsState
+  } from '../../../lib/resident/payments-list';
+
+  const page = document.querySelector<HTMLElement>('[data-payments-page]')!;
+  const $ = <T extends Element>(selector: string, root: ParentNode = page) => root.querySelector<T>(selector)!;
+  const show = (element: Element, visible: boolean) => element.classList.toggle('hidden', !visible);
+
+  const form = $<HTMLFormElement>('[data-filters]');
+  const searchInput = $<HTMLInputElement>('#filter-search');
+  const statusSelect = $<HTMLSelectElement>('#filter-status');
+  const fromInput = $<HTMLInputElement>('#filter-from');
+  const toInput = $<HTMLInputElement>('#filter-to');
+  const clearButton = $<HTMLButtonElement>('[data-clear-filters]');
+  const table = $<HTMLTableElement>('[data-table]');
+  const rows = $<HTMLElement>('[data-rows]');
+  const statusLine = $<HTMLElement>('[data-status-line]');
+  const message = $<HTMLElement>('[data-message]');
+  const loading = $<HTMLElement>('[data-loading]');
+  const alert = $<HTMLElement>('[data-alert]');
+  const retry = $<HTMLButtonElement>('[data-retry]');
+  const login = $<HTMLAnchorElement>('[data-login]');
+  const pagination = $<HTMLElement>('[data-pagination]');
+  const pageInfo = $<HTMLElement>('[data-page-info]');
+  const prev = $<HTMLButtonElement>('[data-page="prev"]');
+  const next = $<HTMLButtonElement>('[data-page="next"]');
+  const pageSize = $<HTMLSelectElement>('[data-page-size]');
+  const controls: Record<string, HTMLElement> = { search: searchInput, status: statusSelect, date_from: fromInput, date_to: toInput };
+  searchInput.dataset.hint = 'filter-search-hint';
+
+  /** Shows each message next to its control (aria-invalid + aria-describedby); with `focus`, moves to the first. */
+  function showFieldErrors(errors: FilterErrors, focus: boolean): void {
+    let first: HTMLElement | null = null;
+    for (const field of FILTER_FIELDS) {
+      const error = $<HTMLElement>(`[data-filter-error="${field}"]`);
+      const control = controls[field];
+      const text = errors[field] ?? null;
+      error.textContent = text ?? '';
+      show(error, Boolean(text));
+      control.setAttribute('aria-invalid', text ? 'true' : 'false');
+      const describedBy = [control.dataset.hint, text ? error.id : null].filter(Boolean).join(' ');
+      if (describedBy) control.setAttribute('aria-describedby', describedBy);
+      else control.removeAttribute('aria-describedby');
+      if (text) first ??= control;
+    }
+    if (focus) first?.focus();
+  }
+
+  function filtersOfForm(): ResidentPaymentFilters {
+    return {
+      search: searchInput.value,
+      status: statusSelect.value as PaymentStatus | '',
+      dateFrom: fromInput.value,
+      dateTo: toInput.value
+    };
+  }
+
+  function row(payment: Parameters<typeof paymentRow>[0]): HTMLTableRowElement {
+    const view = paymentRow(payment);
+    const tr = document.createElement('tr');
+    tr.className = `${STACKED_ROW} max-sm:px-4`;
+    view.cells.forEach((cell, index) => {
+      // The payment date names the row (a heading for the stacked card on narrow screens).
+      const element = document.createElement(index === 0 ? 'th' : 'td');
+      if (element instanceof HTMLTableCellElement && index === 0) element.scope = 'row';
+      element.dataset.label = cell.label;
+      element.className = [
+        'px-4 py-3 align-top',
+        index === 0 ? 'whitespace-nowrap font-medium text-slate-900 max-sm:block max-sm:px-0 max-sm:pb-1 max-sm:text-base' : STACKED_CELL,
+        index > 0 && cell.numeric ? 'whitespace-nowrap font-mono text-slate-900 sm:text-right' : '',
+        index > 0 && !cell.numeric ? 'text-slate-700' : '',
+        index === 5 ? 'whitespace-nowrap font-mono' : ''
+      ].join(' ');
+      if (index === 4) {
+        const badge = document.createElement('span');
+        badge.className = `inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_BADGES[view.status]}`;
+        badge.textContent = cell.text;
+        element.append(badge);
+      } else {
+        const text = document.createElement('span');
+        text.className = index === 0 ? '' : 'min-w-0 break-words';
+        text.textContent = cell.text;
+        element.append(text);
+      }
+      tr.append(element);
+    });
+    const action = document.createElement('td');
+    action.className = 'px-4 py-3 text-right align-top max-sm:block max-sm:px-0 max-sm:pt-2 max-sm:text-left';
+    const anchor = document.createElement('a');
+    anchor.href = view.href;
+    anchor.className =
+      'whitespace-nowrap rounded font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+    anchor.textContent = 'Ver detalle';
+    anchor.setAttribute('aria-label', view.linkLabel);
+    action.append(anchor);
+    tr.append(action);
+    return tr;
+  }
+
+  let shownErrors: FilterErrors | null = null;
+
+  function render(state: ResidentPaymentsState): void {
+    const count = activeFilterCount(state.query);
+    $('[data-filter-count]').textContent = filtersText(count);
+    show(clearButton, count > 0);
+    table.setAttribute('aria-busy', String(state.kind === 'loading'));
+    show(loading, state.kind === 'loading');
+    show(message, state.kind === 'empty' || state.kind === 'no-results');
+    if (state.kind !== 'results') rows.replaceChildren();
+    show(pagination, state.kind === 'results');
+    pagination.classList.toggle('flex', state.kind === 'results');
+    const fieldErrors = state.kind === 'error' ? state.fieldErrors : {};
+    const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+    if (state.kind !== 'loading') {
+      // Focus moves only to new errors.
+      showFieldErrors(fieldErrors, hasFieldErrors && fieldErrors !== shownErrors);
+      shownErrors = fieldErrors;
+    }
+    show(alert, state.kind === 'error');
+    switch (state.kind) {
+      case 'loading':
+        statusLine.textContent = LOADING_MESSAGE;
+        prev.disabled = true;
+        next.disabled = true;
+        break;
+      case 'results':
+        rows.replaceChildren(...state.page.items.map(row));
+        statusLine.textContent = rangeText(state.page);
+        pageInfo.textContent = pageText(state.page);
+        prev.disabled = state.page.page <= 1;
+        next.disabled = state.page.page >= state.page.total_pages;
+        pageSize.value = String(state.page.page_size);
+        break;
+      case 'empty':
+      case 'no-results':
+        statusLine.textContent = '0 pagos';
+        message.textContent = state.kind === 'empty' ? EMPTY_MESSAGE : NO_RESULTS_MESSAGE;
+        break;
+      case 'error':
+        statusLine.textContent = state.sessionExpired ? 'Sesión terminada.' : 'No se pudo consultar el listado.';
+        $('[data-alert-message]').textContent = state.message;
+        show(retry, !state.sessionExpired && !hasFieldErrors);
+        show(login, state.sessionExpired);
+        break;
+    }
+  }
+
+  const list = createResidentPaymentsList(parseQuery(new URLSearchParams(window.location.search)), {
+    load: listMyPayments,
+    render,
+    remember: (queryString) =>
+      history.replaceState(null, '', queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname)
+  });
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    // Only the range is checked here (the same rule as the API); the search is read by the API.
+    const rangeError = dateRangeError(fromInput.value, toInput.value);
+    if (rangeError) {
+      showFieldErrors({ date_to: rangeError }, true);
+      return;
+    }
+    void list.apply(filtersOfForm());
+  });
+  clearButton.addEventListener('click', () => {
+    searchInput.value = '';
+    statusSelect.value = '';
+    fromInput.value = '';
+    toInput.value = '';
+    showFieldErrors({}, false);
+    void list.clear();
+    searchInput.focus();
+  });
+  prev.addEventListener('click', () => void list.goToPage(list.query.page - 1));
+  next.addEventListener('click', () => void list.goToPage(list.query.page + 1));
+  pageSize.addEventListener('change', () => void list.setPageSize(Number(pageSize.value)));
+  retry.addEventListener('click', () => void list.refresh());
+  // Financial data: shown again when the page comes back from the browser cache.
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) void list.refresh();
+  });
+
+  void list.start();
+</script>

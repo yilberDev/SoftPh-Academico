@@ -1,0 +1,160 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import ResidentHeader from '../../../components/ResidentHeader.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import { loadMyPayment } from '../../../lib/api/resident-payments-server';
+import { STACKED_CELL, STACKED_ROW, STACKED_TABLE } from '../../../lib/obligations/charge-format';
+import {
+  FORBIDDEN_MESSAGE,
+  LOAD_ERROR,
+  NOTES_SOURCE,
+  NOT_FOUND_HINT,
+  NOT_FOUND_MESSAGE,
+  NO_ALLOCATIONS,
+  allocationRows,
+  financialLines,
+  loadDetailPage,
+  mainLines,
+  notesOf
+} from '../../../lib/resident/payment-detail';
+import { STATUS_BADGES, STATUS_CHANGES_NOTE, STATUS_HELP, STATUS_LABELS } from '../../../lib/resident/payment-format';
+
+// HU-008. The middleware only renders /resident pages for a valid RESIDENTE
+// session; the API only answers with a payment of the session's resident. A
+// payment of another resident, a missing one and an invalid id all show
+// "Pago no encontrado." (404), without any data. 401 → /login.
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const result = await loadDetailPage(Astro.params.id, (id) => loadMyPayment(id, Astro.request));
+if (result.kind === 'unauthenticated') {
+  return Astro.redirect('/login');
+}
+const payment = result.kind === 'payment' ? result.payment : null;
+Astro.response.status = { payment: 200, 'not-found': 404, forbidden: 403, error: 502 }[result.kind];
+const problem =
+  result.kind === 'not-found' ? { title: NOT_FOUND_MESSAGE, text: NOT_FOUND_HINT }
+    : result.kind === 'forbidden' ? { title: FORBIDDEN_MESSAGE, text: null }
+      : { title: LOAD_ERROR, text: null };
+const notes = payment ? notesOf(payment) : null;
+const allocations = payment ? allocationRows(payment) : [];
+
+const card = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6';
+const link =
+  'rounded font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+const badge = 'inline-flex whitespace-nowrap rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset';
+---
+
+<Layout title={payment ? `Pago ${payment.receipt_number} — SoftPh-Académico` : `${problem.title.replace(/\.$/, '')} — SoftPh-Académico`}>
+  <ResidentHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-3xl space-y-6 px-4 py-8" data-payment-detail>
+    <Breadcrumbs items={[{ label: 'Mis pagos', href: '/resident/payments' }, { label: payment ? payment.receipt_number : 'Pago no disponible' }]} />
+    {
+      !payment || !notes ? (
+        <div class="rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm" role={result.kind === 'error' ? 'alert' : undefined}>
+          <h1 class="text-xl font-semibold tracking-tight">{problem.title}</h1>
+          {problem.text && <p class="mt-2 text-sm text-slate-600">{problem.text}</p>}
+          <div class="mt-5 flex flex-wrap justify-center gap-4 text-sm">
+            {result.kind === 'error' && <a href={Astro.url.pathname} class={link}>Intentar de nuevo</a>}
+            <a href="/resident/payments" class={link}>Volver a Mis pagos</a>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0">
+              <h1 class="text-2xl font-semibold tracking-tight">Detalle del pago</h1>
+              <p class="mt-1 text-sm text-slate-600">
+                Recibo <span class="break-all font-mono font-medium text-slate-900">{payment.receipt_number}</span>
+              </p>
+            </div>
+            <p>
+              <span class="sr-only">Estado: </span>
+              <span class:list={[badge, STATUS_BADGES[payment.status]]}>{STATUS_LABELS[payment.status]}</span>
+            </p>
+          </div>
+          <p class="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+            <span class="font-medium">{STATUS_LABELS[payment.status]}:</span> {STATUS_HELP[payment.status]}
+            <span class="mt-1 block text-slate-500">{STATUS_CHANGES_NOTE}</span>
+          </p>
+
+          <section aria-labelledby="payment-info-title" class={card}>
+            <h2 id="payment-info-title" class="text-lg font-semibold">Información del pago</h2>
+            <dl class="mt-3 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+              {
+                mainLines(payment).map(({ label, value, mono }) => (
+                  <div class="min-w-0">
+                    <dt class="text-slate-500">{label}</dt>
+                    <dd class:list={['break-words text-slate-900', mono && 'break-all font-mono']}>{value}</dd>
+                  </div>
+                ))
+              }
+            </dl>
+          </section>
+
+          <section aria-labelledby="payment-notes-title" class={card}>
+            <h2 id="payment-notes-title" class="text-lg font-semibold">Nota de la administración</h2>
+            <p class="mt-1 text-sm text-slate-500">{NOTES_SOURCE}</p>
+            <p class:list={['mt-3 whitespace-pre-line break-words text-sm', notes.empty ? 'italic text-slate-500' : 'text-slate-900']}>{notes.text}</p>
+          </section>
+
+          <section aria-labelledby="payment-result-title" class={card}>
+            <h2 id="payment-result-title" class="text-lg font-semibold">Resultado del pago</h2>
+            <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+              {
+                financialLines(payment).map(({ label, value }) => (
+                  <div class="min-w-0 rounded-xl bg-slate-50 px-4 py-3">
+                    <dt class="text-slate-500">{label}</dt>
+                    <dd class="mt-1 break-words font-mono text-base font-medium text-slate-900">{value}</dd>
+                  </div>
+                ))
+              }
+            </dl>
+          </section>
+
+          <section aria-labelledby="payment-allocations-title" class={card}>
+            <h2 id="payment-allocations-title" class="text-lg font-semibold">Obligaciones cubiertas</h2>
+            {
+              allocations.length === 0 ? (
+                <p class="mt-3 text-sm text-slate-600">{NO_ALLOCATIONS}</p>
+              ) : (
+                <div class="relative mt-3 sm:overflow-x-auto">
+                  <table class:list={[STACKED_TABLE, 'sm:min-w-[36rem]']}>
+                    <caption class="sr-only">Obligaciones cubiertas por el pago {payment.receipt_number}</caption>
+                    <thead class="bg-slate-50 text-slate-700 max-sm:hidden">
+                      <tr>
+                        <th scope="col" class="px-3 py-2 font-medium">Concepto</th>
+                        <th scope="col" class="whitespace-nowrap px-3 py-2 font-medium">Periodo</th>
+                        <th scope="col" class="whitespace-nowrap px-3 py-2 font-medium">Vencimiento</th>
+                        <th scope="col" class="whitespace-nowrap px-3 py-2 text-right font-medium">Valor de la obligación</th>
+                        <th scope="col" class="whitespace-nowrap px-3 py-2 text-right font-medium">Valor aplicado</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 max-sm:block">
+                      {allocations.map((allocation) => (
+                        <tr class={STACKED_ROW}>
+                          <th scope="row" class="break-words px-3 py-2 font-medium text-slate-900 max-sm:block max-sm:px-0">{allocation.concept}</th>
+                          <td data-label="Periodo" class:list={[STACKED_CELL, 'px-3 py-2 text-slate-700']}>{allocation.period}</td>
+                          <td data-label="Vencimiento" class:list={[STACKED_CELL, 'whitespace-nowrap px-3 py-2 text-slate-700']}>{allocation.dueDate}</td>
+                          <td data-label="Valor de la obligación" class:list={[STACKED_CELL, 'whitespace-nowrap px-3 py-2 font-mono text-slate-900 sm:text-right']}>{allocation.chargeAmount}</td>
+                          <td data-label="Valor aplicado" class:list={[STACKED_CELL, 'whitespace-nowrap px-3 py-2 font-mono text-slate-900 sm:text-right']}>{allocation.allocatedAmount}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            }
+          </section>
+
+          <a href="/resident/payments" class:list={['inline-block text-sm', link]}>Volver a Mis pagos</a>
+        </>
+      )
+    }
+  </main>
+</Layout>
+
+<script>
+  // Financial data: a page restored from the browser cache is loaded again from the API.
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) window.location.reload();
+  });
+</script>
