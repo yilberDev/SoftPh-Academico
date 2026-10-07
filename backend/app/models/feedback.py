@@ -1,6 +1,8 @@
 """Feedback of residents (HU-005, created by HU-009).
 
-The original message (subject, message) is immutable. admin_response is what
+The original message (subject, message, category, urgency) is immutable.
+category and urgency are NULL only for the feedback stored before HU-009:
+every feedback created since has both (create_feedback requires them). admin_response is what
 the resident receives; resolution_note is the administrator's internal note,
 required to resolve. Only PENDING → RESOLVED (no reopening). version is the
 optimistic lock of every change. The history of actions is audit_logs.
@@ -24,6 +26,27 @@ class FeedbackStatus(StrEnum):
     RESOLVED = "RESOLVED"
 
 
+class FeedbackCategory(StrEnum):
+    """HU-009 criterion 2.2: queja, sugerencia, solicitud u otros."""
+
+    COMPLAINT = "COMPLAINT"
+    SUGGESTION = "SUGGESTION"
+    REQUEST = "REQUEST"
+    OTHER = "OTHER"
+
+
+class FeedbackUrgency(StrEnum):
+    """HU-009 criterion 2.3: alta, media o baja."""
+
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+
+
+def _in_list(column: str, values: type[StrEnum]) -> str:
+    return f"{column} IN ({', '.join(repr(v.value) for v in values)})"
+
+
 class Feedback(Base):
     __tablename__ = "feedback"
     __table_args__ = (
@@ -31,6 +54,10 @@ class Feedback(Base):
         CheckConstraint("version >= 1", name="version_positive"),
         CheckConstraint("CHAR_LENGTH(TRIM(message)) > 0", name="message_not_blank"),
         CheckConstraint("subject IS NULL OR CHAR_LENGTH(TRIM(subject)) > 0", name="subject_not_blank"),
+        # HU-009: NULL only before HU-009; both or neither.
+        CheckConstraint(f"category IS NULL OR {_in_list('category', FeedbackCategory)}", name="category_valid"),
+        CheckConstraint(f"urgency IS NULL OR {_in_list('urgency', FeedbackUrgency)}", name="urgency_valid"),
+        CheckConstraint("(category IS NULL) = (urgency IS NULL)", name="category_urgency_together"),
         CheckConstraint("(status = 'RESOLVED') = (resolved_at IS NOT NULL)", name="resolved_has_timestamp"),
         CheckConstraint("status <> 'RESOLVED' OR resolution_note IS NOT NULL", name="resolved_has_note"),
         CheckConstraint("resolved_at IS NULL OR resolved_at >= created_at", name="resolved_after_creation"),
@@ -43,6 +70,9 @@ class Feedback(Base):
     resident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="RESTRICT"))
     subject: Mapped[str | None] = mapped_column(String(SUBJECT_MAX_LENGTH))
     message: Mapped[str] = mapped_column(String(TEXT_MAX_LENGTH))
+    # Exact (binary) comparison: the CHECKs accept only the codes, never 'complaint'.
+    category: Mapped[str | None] = mapped_column(String(20, collation="utf8mb4_0900_bin"))
+    urgency: Mapped[str | None] = mapped_column(String(20, collation="utf8mb4_0900_bin"))
     status: Mapped[str] = mapped_column(String(20), server_default=text("'PENDING'"))
     admin_response: Mapped[str | None] = mapped_column(String(TEXT_MAX_LENGTH))
     resolution_note: Mapped[str | None] = mapped_column(String(TEXT_MAX_LENGTH))

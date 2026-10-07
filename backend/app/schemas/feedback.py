@@ -3,6 +3,10 @@
 Only two changes exist, each with its own endpoint and optimistic lock
 (version): the response to the resident and the resolution (internal note).
 The original message, the resident and the status are never set by the client.
+
+HU-009: the rules of a new feedback (clean_subject, clean_text for the message,
+clean_category, clean_urgency) live here too, shared by create_feedback and the
+resident's API.
 """
 
 from datetime import datetime
@@ -12,7 +16,7 @@ from typing import Annotated, Any
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictInt, field_validator
 
 from app.core.validation import invalid
-from app.models.feedback import TEXT_MAX_LENGTH, FeedbackStatus
+from app.models.feedback import SUBJECT_MAX_LENGTH, TEXT_MAX_LENGTH, FeedbackCategory, FeedbackStatus, FeedbackUrgency
 
 SEARCH_MAX_LENGTH = 100
 PAGE_SIZE_DEFAULT = 10
@@ -42,6 +46,39 @@ def clean_text(value: Any, *, required: str, label: str) -> Any:
     if len(text) > TEXT_MAX_LENGTH:
         raise invalid("text_too_long", f"{label} no puede superar {TEXT_MAX_LENGTH} caracteres.")
     return text
+
+
+CATEGORY_MESSAGE = "Selecciona una categoría: queja, sugerencia, solicitud u otros."
+URGENCY_MESSAGE = "Selecciona la urgencia: alta, media o baja."
+MESSAGE_REQUIRED = "Escribe el mensaje."
+
+
+def clean_subject(value: Any) -> str | None:
+    """HU-009: optional, one line (spaces collapsed), at most SUBJECT_MAX_LENGTH characters; empty is None."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise invalid("subject_format", "El asunto debe ser un texto.")
+    subject = " ".join(value.split())
+    if not subject:
+        return None
+    if len(subject) > SUBJECT_MAX_LENGTH:
+        raise invalid("subject_too_long", f"El asunto no puede superar {SUBJECT_MAX_LENGTH} caracteres.")
+    return subject
+
+
+def clean_category(value: Any) -> FeedbackCategory:
+    """HU-009: required, one of COMPLAINT, SUGGESTION, REQUEST, OTHER."""
+    if not isinstance(value, str) or value not in {c.value for c in FeedbackCategory}:
+        raise invalid("category_invalid", CATEGORY_MESSAGE)
+    return FeedbackCategory(value)
+
+
+def clean_urgency(value: Any) -> FeedbackUrgency:
+    """HU-009: required, one of HIGH, MEDIUM, LOW."""
+    if not isinstance(value, str) or value not in {u.value for u in FeedbackUrgency}:
+        raise invalid("urgency_invalid", URGENCY_MESSAGE)
+    return FeedbackUrgency(value)
 
 
 class FeedbackResponse(BaseModel):

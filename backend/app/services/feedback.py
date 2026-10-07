@@ -11,16 +11,21 @@ A failed notification never undoes the change. The original message, the
 resident and the status are never taken from the client. The history of
 actions is audit_logs (entity_type 'feedback'); reading is not audited.
 
-create_feedback is the domain rule for who can own a feedback (an activated,
-non-deleted RESIDENTE). HU-005 has no endpoint for it: the tests use it to
-create data, and HU-009 will use it for the resident's form.
+create_feedback is the domain rule of a new feedback (HU-009): who can own it
+(an activated, non-deleted RESIDENTE), its fields (optional subject, required
+message, category and urgency) and its status (always PENDING). The caller
+never sets the status, the response, the note or the dates. It records
+FEEDBACK_CREATED (actor: the resident) in the same transaction.
 """
 
 import logging
 import math
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from pydantic_core import PydanticCustomError
 from sqlalchemy import ColumnElement, Select, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -31,6 +36,7 @@ from app.core.exceptions import (
     FeedbackNotFoundError,
     FeedbackResidentNotValidError,
     FeedbackVersionConflictError,
+    FieldValidationError,
 )
 from app.core.unit_labels import unit_label
 from app.models import (
@@ -38,7 +44,9 @@ from app.models import (
     AuditLog,
     Block,
     Feedback,
+    FeedbackCategory,
     FeedbackStatus,
+    FeedbackUrgency,
     ResidentUnit,
     Tower,
     Unit,
@@ -47,6 +55,7 @@ from app.models import (
     UserStatus,
 )
 from app.schemas.feedback import (
+    MESSAGE_REQUIRED,
     FeedbackAction,
     FeedbackActionResult,
     FeedbackActor,
@@ -61,6 +70,10 @@ from app.schemas.feedback import (
     NotificationStatus,
     ResidentRef,
     SortOrder,
+    clean_category,
+    clean_subject,
+    clean_text,
+    clean_urgency,
 )
 from app.services.audit import record_audit
 from app.services.feedback_email import FeedbackNotice, build_feedback_email
@@ -95,16 +108,69 @@ def can_own_feedback(user: User | None) -> bool:
     )
 
 
-async def create_feedback(db: AsyncSession, resident_id: int, *, subject: str | None, message: str) -> int:
-    """Adds a PENDING feedback of an activated resident to the caller's transaction (no commit)."""
+@dataclass(frozen=True)
+class NewFeedback:
+    """The fields of a new feedback, already checked (HU-009)."""
+
+    subject: str | None
+    message: str
+    category: FeedbackCategory
+    urgency: FeedbackUrgency
+
+
+def _field(field: str, clean: Callable[[Any], Any], value: Any) -> Any:
+    try:
+        return clean(value)
+    except PydanticCustomError as exc:  # the same rules and messages as the API
+        raise FieldValidationError(field, exc.message()) from None
+
+
+def new_feedback(*, subject: Any, message: Any, category: Any, urgency: Any) -> NewFeedback:
+    """The rules of a new feedback; the first invalid field raises FieldValidationError (422).
+
+    subject   optional, one line, at most 150 characters (blank is None)
+    message   required, trimmed (inner line breaks kept), at most 2000 characters
+    category  required: COMPLAINT, SUGGESTION, REQUEST or OTHER
+    urgency   required: HIGH, MEDIUM or LOW
+    """
+    return NewFeedback(
+        subject=_field("subject", clean_subject, subject),
+        message=_field("message", lambda v: clean_text(v, required=MESSAGE_REQUIRED, label="El mensaje"), message),
+        category=_field("category", clean_category, category),
+        urgency=_field("urgency", clean_urgency, urgency),
+    )
+
+
+async def create_feedback(
+    db: AsyncSession,
+    resident_id: int,
+    *,
+    subject: Any,
+    message: Any,
+    category: Any,
+    urgency: Any,
+    ip_address: str | None = None,
+) -> int:
+    """Adds a PENDING feedback of an activated resident, and its FEEDBACK_CREATED entry, to the
+    caller's transaction (no commit). resident_id is the owner (HU-009: the session's resident)."""
+    fields = new_feedback(subject=subject, message=message, category=category, urgency=urgency)
     resident = await db.scalar(
         select(User).where(User.id == resident_id).with_for_update(read=True).execution_options(populate_existing=True)
     )
     if not can_own_feedback(resident):
         raise FeedbackResidentNotValidError()
-    feedback = Feedback(resident_id=resident_id, subject=subject, message=message, status=FeedbackStatus.PENDING)
+    feedback = Feedback(
+        resident_id=resident_id, subject=fields.subject, message=fields.message, category=fields.category,
+        urgency=fields.urgency, status=FeedbackStatus.PENDING,
+    )
     db.add(feedback)
     await db.flush()
+    # The texts are not copied to the audit (as in HU-005): only what was chosen.
+    record_audit(
+        db, action=AuditAction.FEEDBACK_CREATED, entity_type=ENTITY, entity_id=feedback.id, actor_user_id=resident_id,
+        context={"category": fields.category.value, "urgency": fields.urgency.value, "with_subject": fields.subject is not None},
+        ip_address=ip_address,
+    )
     return feedback.id
 
 

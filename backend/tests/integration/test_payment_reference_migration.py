@@ -1,4 +1,4 @@
-"""HU-008 migration (4385fd452231): head, round trip from f3c8fc28babe, existing
+"""HU-008 migration (4385fd452231): place in the chain, round trip from f3c8fc28babe, existing
 payments kept with NULL, protected downgrade and no drift (alembic check).
 
 Only ever runs on the dedicated *_test database, and always leaves it at head.
@@ -84,11 +84,11 @@ def database(migrated_test_database: URL) -> Iterator[URL]:
         command.upgrade(config, "head")
 
 
-def test_revision_is_the_head_after_the_obligations_extension(migrated_test_database: URL) -> None:
+def test_revision_follows_the_obligations_extension(migrated_test_database: URL) -> None:
     script = ScriptDirectory.from_config(alembic_config(migrated_test_database))
-    assert script.get_heads() == [REVISION]
     assert script.get_revision(REVISION).down_revision == PREVIOUS
-    assert current_revision(migrated_test_database) == REVISION
+    # HU-009 (3e565db40412) comes after it; that migration's tests check the head.
+    assert REVISION in {revision.revision for revision in script.walk_revisions()}
 
 
 def test_models_match_the_database(migrated_test_database: URL) -> None:

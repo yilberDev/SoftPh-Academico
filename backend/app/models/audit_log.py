@@ -43,6 +43,8 @@ class AuditAction(StrEnum):
     PAYMENT_REGISTERED = "PAYMENT_REGISTERED"
     RECEIPT_EMAIL_SENT = "RECEIPT_EMAIL_SENT"
     RECEIPT_EMAIL_FAILED = "RECEIPT_EMAIL_FAILED"
+    # HU-009: a resident creates a feedback (the actor is the resident).
+    FEEDBACK_CREATED = "FEEDBACK_CREATED"
     # HU-005: feedback management (writes only; reading a feedback is not audited).
     FEEDBACK_RESPONDED = "FEEDBACK_RESPONDED"
     FEEDBACK_RESOLVED = "FEEDBACK_RESOLVED"

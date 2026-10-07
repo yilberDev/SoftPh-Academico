@@ -41,7 +41,8 @@ async def headers(client: AsyncClient, db_session: AsyncSession, admin: User) ->
 
 async def new_feedback(db: AsyncSession, resident_id: int, subject: str | None = "Ruido en la torre 2",
                        message: str = "Hay ruido después de las 10 p. m.", created_at: datetime | None = None) -> int:
-    feedback_id = await feedback_service.create_feedback(db, resident_id, subject=subject, message=message)
+    feedback_id = await feedback_service.create_feedback(db, resident_id, subject=subject, message=message,
+                                                         category="COMPLAINT", urgency="MEDIUM")
     if created_at is not None:
         await db.execute(update(Feedback).where(Feedback.id == feedback_id).values(created_at=created_at))
     return feedback_id
@@ -468,7 +469,8 @@ async def test_only_an_activated_resident_can_own_feedback(db_session: AsyncSess
         user_id = await community.resident("Otra Persona", None, None, status=status, deleted=case == "deleted")
 
     with pytest.raises(FeedbackResidentNotValidError):
-        await feedback_service.create_feedback(db_session, user_id, subject=None, message="Hola")
+        await feedback_service.create_feedback(db_session, user_id, subject=None, message="Hola",
+                                               category="COMPLAINT", urgency="MEDIUM")
     assert await db_session.scalar(select(func.count()).select_from(Feedback)) == 0
 
 
@@ -497,12 +499,16 @@ async def test_history_comes_from_audit_logs(client: AsyncClient, headers: dict[
 
     rows = (await db_session.execute(text(
         "SELECT action FROM audit_logs WHERE entity_type = 'feedback' AND entity_id = :id ORDER BY id"), {"id": item})).all()
-    assert [h["action"] for h in history] == [row[0] for row in rows] == ["FEEDBACK_RESPONDED", "FEEDBACK_NOTIFICATION_SENT"]
+    # The creation by the resident (HU-009) is audited too, but the history shows the administrator's actions.
+    assert [row[0] for row in rows] == ["FEEDBACK_CREATED", "FEEDBACK_RESPONDED", "FEEDBACK_NOTIFICATION_SENT"]
+    assert [h["action"] for h in history] == ["FEEDBACK_RESPONDED", "FEEDBACK_NOTIFICATION_SENT"]
     assert all(set(h) == {"action", "actor", "at"} and h["at"].endswith("Z") for h in history)
     assert "context" not in str(history) and "ip_address" not in str(history)
 
 
 async def test_reading_is_not_audited(client: AsyncClient, headers: dict[str, str], item: int, db_session: AsyncSession) -> None:
+    audited = text("SELECT action FROM audit_logs WHERE entity_type = 'feedback'")
+    assert (await db_session.execute(audited)).scalars().all() == ["FEEDBACK_CREATED"]  # its creation (HU-009)
     await client.get(URL)
     await client.get(f"{URL}/{item}")
-    assert await db_session.scalar(text("SELECT COUNT(*) FROM audit_logs WHERE entity_type = 'feedback'")) == 0
+    assert (await db_session.execute(audited)).scalars().all() == ["FEEDBACK_CREATED"]

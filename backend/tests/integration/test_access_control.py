@@ -275,7 +275,8 @@ async def test_administrator_reaches_every_administrator_route(
         "payment_date": "2026-01-05"})
     await ok("GET", "/admin/payments", "/admin/payments?date_from=2026-01-01&sort_by=amount&sort_order=asc", 200)
     # HU-005: a feedback of that resident (HU-009 will create them; here, the domain function).
-    feedback_id = await feedback_service.create_feedback(db_session, resident_id, subject="Ruido", message="Hay ruido.")
+    feedback_id = await feedback_service.create_feedback(db_session, resident_id, subject="Ruido", message="Hay ruido.",
+                                                         category="COMPLAINT", urgency="MEDIUM")
     await ok("GET", "/admin/feedback", "/admin/feedback?status=PENDING&search=Ruido&sort_by=resident&sort_order=asc", 200)
     await ok("GET", "/admin/feedback/{feedback_id}", f"/admin/feedback/{feedback_id}", 200)
     await ok("POST", "/admin/feedback/{feedback_id}/response", f"/admin/feedback/{feedback_id}/response", 200,
@@ -443,7 +444,8 @@ async def test_resident_cannot_reach_resources_by_changing_identifiers(
     invitation = (await client.post(f"{API}/resident-invitations", headers=admin_headers, json={
         "email": "otra@example.com", "full_name": "Otra Persona", "unit_id": unit["id"], "validity_days": 7,
     })).json()
-    feedback_id = await feedback_service.create_feedback(db_session, resident.id, subject="Mío", message="Hola")
+    feedback_id = await feedback_service.create_feedback(db_session, resident.id, subject="Mío", message="Hola",
+                                                         category="COMPLAINT", urgency="MEDIUM")
     charge = (await client.post(f"{API}/admin/charges", headers=admin_headers, json={
         "unit_id": unit["id"], "concept": "OTHER", "amount": "1000", "due_date": "2026-10-20", "description": "Llave",
     })).json()

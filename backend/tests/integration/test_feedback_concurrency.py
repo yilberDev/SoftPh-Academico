@@ -35,7 +35,8 @@ async def setup(committed_session_factory: Factory) -> dict[str, int]:
         session.add_all(admins)
         await session.flush()
         resident = await Community(session, admins[0].id).resident("Laura Gómez", "1012345678", (1, 1, 101))
-        feedback_id = await feedback_service.create_feedback(session, resident, subject="Ruido", message="Hay ruido.")
+        feedback_id = await feedback_service.create_feedback(session, resident, subject="Ruido", message="Hay ruido.",
+                                                             category="COMPLAINT", urgency="MEDIUM")
         ids = {"admin1": admins[0].id, "admin2": admins[1].id, "feedback": feedback_id}
         await session.commit()
     return ids
