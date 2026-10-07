@@ -155,6 +155,15 @@ No hay dinero real ni pasarelas externas. HU-004 no genera cargos (mensualidades
 | `POST /api/v1/admin/payments` | Registra un pago: `{resident_id, amount, method, concept, concept_description, payment_date}` (requiere `Origin` y `X-CSRF-Token`) |
 | `GET /api/v1/admin/payments?page=1&page_size=10&search=&date_from=&date_to=&sort_by=date&sort_order=desc` | Resumen de pagos (`sort_by`: `date`, `resident`, `amount`, `concept`, `method`, `status`) |
 
+## Pagos del residente (HU-008)
+
+En `http://localhost:4321/resident/payments` (solo residente, "Mis pagos" en su panel) el residente consulta los pagos registrados en su cuenta, del más reciente al más antiguo: fecha, concepto, monto, método, estado (Aplicado, Aplicado parcialmente o Saldo a favor) y número de recibo. Filtra por estado y fechas, busca por número de recibo (`RC-00000012` o `12`) o por fecha (`AAAA-MM-DD`) y pagina; las opciones quedan en la URL. "Ver detalle" muestra la referencia de transacción, la nota de la administración, el monto aplicado, el saldo a favor y las obligaciones que cubrió el pago. Solo consulta: los pagos los registra el administrador (HU-004), que puede indicar una referencia y una nota visible para el residente.
+
+| Endpoint | Uso |
+|---|---|
+| `GET /api/v1/resident/payments?page=1&page_size=10&status=&date_from=&date_to=&search=` | Pagos del residente de la sesión (`status`: `APPLIED`, `PARTIALLY_APPLIED`, `CREDIT`; `page_size` de 1 a 100) |
+| `GET /api/v1/resident/payments/{id}` | Detalle de un pago propio; un pago de otro residente o inexistente responde 404 `PAYMENT_NOT_FOUND` |
+
 ## Residentes registrados (HU-006)
 
 En `http://localhost:4321/admin/residents` (solo administrador) se consultan los residentes registrados: nombre, documento, apartamento (`B1-TO2-APTO-104`), teléfono, correo y estado (Activo o Inactivo). Búsqueda por nombre o documento, filtro por estado, orden por columna y paginación, todo resuelto en el servidor. Las opciones quedan en la URL. Solo consulta: la edición de residentes es HU-015.
