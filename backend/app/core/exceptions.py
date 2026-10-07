@@ -308,4 +308,5 @@ class MonthlyPreviewOutdatedError(ConflictError):
 
 
 class ChargeNotFoundError(NotFoundError):
+    code = "CHARGE_NOT_FOUND"
     message = "La obligación no existe."
