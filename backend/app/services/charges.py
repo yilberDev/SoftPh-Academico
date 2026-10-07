@@ -41,18 +41,21 @@ Status, applied amount and balances are derived from payment_allocations, never 
 """
 
 import logging
+import math
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
+from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import ColumnElement, Select, and_, case, func, literal, select
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import bogota_today
 from app.core.exceptions import (
+    ChargeNotFoundError,
     FieldValidationError,
     ForbiddenError,
     LateFeeExistsError,
@@ -69,13 +72,14 @@ from app.models import (
     FinancialConcept,
     Payment,
     PaymentAllocation,
+    PaymentMethod,
     Tower,
     Unit,
     User,
     UserRole,
     UserStatus,
 )
-from app.schemas.payment import AccountBalance
+from app.schemas.payment import AccountBalance, SortOrder
 from app.services.allocation import (
     AvailableCredit,
     ChargeStatus,
@@ -94,7 +98,7 @@ from app.services.monthly_rules import (
     preview_fingerprint,
     summarize,
 )
-from app.services.payments import _check_invariants, _pending_charges, money, unit_balance
+from app.services.payments import _CONCEPT_ORDER, _check_invariants, _covered, _pending_charges, money, unit_balance
 from app.services.structure import Actor, lock_unit_path
 
 logger = logging.getLogger(__name__)
@@ -693,3 +697,314 @@ async def generate_monthly(db: AsyncSession, data: MonthlyGenerationInput, actor
     totals = summarize(outcomes)
     recorded = await _record_generation(db, params, totals, actor)
     return MonthlyGenerationResult(params.billing_period, money(params.amount), params.due_date, totals, recorded)
+
+
+# --- List and detail (read only) -------------------------------------------------------------------------
+#
+# Plain consistent reads: no locks and no writes. applied = SUM(payment_allocations.amount) of the
+# charge (the correlated subquery of HU-004), outstanding = amount - applied, and the status is
+# computed in SQL with the same rules as charge_status (PAID > OVERDUE > PARTIAL > PENDING) for the
+# "today" given by the caller (Bogotá). Nothing is stored.
+
+LIST_PAGE_SIZE_DEFAULT = 10
+LIST_PAGE_SIZE_MAX = 100
+LIST_PAGE_MAX = 10_000
+_ID_MAX = 2**63 - 1
+
+
+class ChargeSortField(StrEnum):
+    DUE_DATE = "due_date"
+    UNIT = "unit"
+    CONCEPT = "concept"
+    AMOUNT = "amount"
+    OUTSTANDING = "outstanding"
+    STATUS = "status"
+    CREATED = "created"
+
+
+@dataclass(frozen=True)
+class ChargeListQuery:
+    page: int = 1
+    page_size: int = LIST_PAGE_SIZE_DEFAULT
+    unit_id: int | None = None
+    block_id: int | None = None
+    tower_id: int | None = None
+    concept: FinancialConcept | None = None
+    status: ChargeStatus | None = None
+    billing_period: date | None = None  # first day of the month
+    due_from: date | None = None  # inclusive
+    due_to: date | None = None  # inclusive
+    sort_by: ChargeSortField = ChargeSortField.DUE_DATE
+    sort_order: SortOrder = SortOrder.ASC
+
+
+@dataclass(frozen=True)
+class ChargeUnit:
+    id: int
+    label: str  # current label, derived from the structure (HU-013)
+    deleted: bool
+
+
+@dataclass(frozen=True)
+class ChargeSummary:
+    id: int
+    unit: ChargeUnit
+    concept: FinancialConcept
+    description: str | None
+    billing_period: date | None
+    due_date: date
+    amount: Decimal
+    applied_amount: Decimal
+    outstanding_amount: Decimal
+    status: ChargeStatus
+    source_charge_id: int | None
+    created_at: datetime  # UTC
+
+
+@dataclass(frozen=True)
+class ChargePage:
+    items: tuple[ChargeSummary, ...]
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+
+
+@dataclass(frozen=True)
+class ChargeAllocation:
+    payment_id: int
+    receipt_number: str
+    payment_date: date
+    payment_method: PaymentMethod
+    applied_amount: Decimal
+    allocation_date: datetime  # UTC (payment_allocations.created_at)
+
+
+@dataclass(frozen=True)
+class ChargeDetail:
+    charge: ChargeSummary
+    created_by_user_id: int
+    source: ChargeSummary | None  # the obligation that originated this late fee
+    late_fees: tuple[ChargeSummary, ...]  # every LATE_FEE whose origin is this charge
+    allocations: tuple[ChargeAllocation, ...]
+
+
+# Spanish labels in alphabetical order: Pagada, Parcial, Pendiente, Vencida.
+_STATUS_ORDER = {ChargeStatus.PAID: 1, ChargeStatus.PARTIAL: 2, ChargeStatus.PENDING: 3, ChargeStatus.OVERDUE: 4}
+
+
+def _positive_id(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= _ID_MAX
+
+
+def _validated_query(query: ChargeListQuery, today: date) -> ChargeListQuery:
+    """The service never trusts its caller: the future API validates too, with the same rules."""
+    if not _is_date(today):
+        raise ValueError("today is a calendar date (Bogotá).")
+    for field, value in (("page", query.page), ("page_size", query.page_size)):
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise FieldValidationError(field, "El valor no es válido.")
+    if not 1 <= query.page <= LIST_PAGE_MAX:
+        raise FieldValidationError("page", f"La página debe estar entre 1 y {LIST_PAGE_MAX}.")
+    if not 1 <= query.page_size <= LIST_PAGE_SIZE_MAX:
+        raise FieldValidationError("page_size", f"El tamaño de página debe estar entre 1 y {LIST_PAGE_SIZE_MAX}.")
+    for field, value in (("unit_id", query.unit_id), ("block_id", query.block_id), ("tower_id", query.tower_id)):
+        if value is not None and not _positive_id(value):
+            raise FieldValidationError(field, "El identificador no es válido.")
+    try:
+        concept = None if query.concept is None else FinancialConcept(query.concept)
+    except ValueError:
+        raise FieldValidationError("concept", "Selecciona un concepto válido.") from None
+    try:
+        status = None if query.status is None else ChargeStatus(query.status)
+    except ValueError:
+        raise FieldValidationError("status", "Selecciona un estado válido.") from None
+    if query.billing_period is not None and (not _is_date(query.billing_period) or query.billing_period.day != 1):
+        raise FieldValidationError("billing_period", "El periodo no es válido.")
+    for field, value in (("due_from", query.due_from), ("due_to", query.due_to)):
+        if value is not None and not _is_date(value):
+            raise FieldValidationError(field, "La fecha no es válida.")
+    if query.due_from is not None and query.due_to is not None and query.due_from > query.due_to:
+        raise FieldValidationError("due_to", "La fecha final no puede ser anterior a la inicial.")
+    try:
+        sort_by = ChargeSortField(query.sort_by)
+    except ValueError:
+        raise FieldValidationError("sort_by", "El campo de orden no es válido.") from None
+    try:
+        sort_order = SortOrder(query.sort_order)
+    except ValueError:
+        raise FieldValidationError("sort_order", "El sentido del orden no es válido.") from None
+    return ChargeListQuery(query.page, query.page_size, query.unit_id, query.block_id, query.tower_id, concept, status,
+                           query.billing_period, query.due_from, query.due_to, sort_by, sort_order)
+
+
+def _status_expression(applied: Any, today: date) -> Any:
+    """charge_status in SQL: PAID > OVERDUE (due date already ended) > PARTIAL > PENDING."""
+    return case(
+        (applied >= Charge.amount, literal(ChargeStatus.PAID.value)),
+        (Charge.due_date < today, literal(ChargeStatus.OVERDUE.value)),
+        (applied > 0, literal(ChargeStatus.PARTIAL.value)),
+        else_=literal(ChargeStatus.PENDING.value),
+    )
+
+
+def _charge_columns(today: date) -> tuple[Select[Any], Any, Any]:
+    """One row per charge with its apartment, applied amount and status (joins, no N+1)."""
+    applied = _covered()
+    status = _status_expression(applied, today)
+    statement = (
+        select(
+            Charge.id,
+            Charge.unit_id,
+            Unit.deleted_at.label("unit_deleted_at"),
+            Block.number.label("block_number"),
+            Tower.number.label("tower_number"),
+            Unit.number.label("unit_number"),
+            Charge.concept,
+            Charge.description,
+            Charge.billing_period,
+            Charge.due_date,
+            Charge.amount,
+            applied.label("applied"),
+            status.label("status"),
+            Charge.source_charge_id,
+            Charge.created_by_user_id,
+            Charge.created_at,
+        )
+        .select_from(Charge)
+        .join(Unit, Unit.id == Charge.unit_id)
+        .join(Tower, Tower.id == Unit.tower_id)
+        .join(Block, Block.id == Tower.block_id)
+    )
+    return statement, applied, status
+
+
+def _summary(row: Any) -> ChargeSummary:
+    amount, applied = money(row.amount), money(row.applied)
+    return ChargeSummary(
+        id=row.id,
+        unit=ChargeUnit(row.unit_id, unit_label(row.block_number, row.tower_number, row.unit_number),
+                        row.unit_deleted_at is not None),
+        concept=FinancialConcept(row.concept),
+        description=row.description,
+        billing_period=row.billing_period,
+        due_date=row.due_date,
+        amount=amount,
+        applied_amount=applied,
+        outstanding_amount=amount - applied,
+        status=ChargeStatus(row.status),
+        source_charge_id=row.source_charge_id,
+        created_at=row.created_at,
+    )
+
+
+def _conditions(query: ChargeListQuery, status: Any) -> list[ColumnElement[bool]]:
+    conditions: list[ColumnElement[bool]] = []
+    if query.unit_id is not None:
+        conditions.append(Charge.unit_id == query.unit_id)
+    if query.tower_id is not None:
+        conditions.append(Unit.tower_id == query.tower_id)
+    if query.block_id is not None:
+        conditions.append(Tower.block_id == query.block_id)
+    if query.concept is not None:
+        conditions.append(Charge.concept == query.concept.value)
+    if query.status is not None:
+        conditions.append(status == query.status.value)
+    if query.billing_period is not None:
+        conditions.append(Charge.billing_period == query.billing_period)
+    if query.due_from is not None:
+        conditions.append(Charge.due_date >= query.due_from)
+    if query.due_to is not None:
+        conditions.append(Charge.due_date <= query.due_to)
+    return conditions
+
+
+def _sort_keys(field: ChargeSortField, applied: Any, status: Any) -> tuple[Any, ...]:
+    # Never built from the client's text: each whitelisted value maps to expressions.
+    match field:
+        case ChargeSortField.DUE_DATE:
+            return (Charge.due_date,)
+        case ChargeSortField.UNIT:
+            return (Block.number, Tower.number, Unit.number)
+        case ChargeSortField.CONCEPT:  # by its Spanish name, as HU-004
+            return (case(*((Charge.concept == k.value, v) for k, v in _CONCEPT_ORDER.items())),)
+        case ChargeSortField.AMOUNT:
+            return (Charge.amount,)
+        case ChargeSortField.OUTSTANDING:
+            return (Charge.amount - applied,)
+        case ChargeSortField.STATUS:  # by its Spanish name
+            return (case(*((status == k.value, v) for k, v in _STATUS_ORDER.items())),)
+        case ChargeSortField.CREATED:
+            return (Charge.created_at,)
+
+
+async def list_charges(db: AsyncSession, query: ChargeListQuery, today: date) -> ChargePage:
+    """Paginated obligations: one COUNT and one page (ORDER BY, LIMIT, OFFSET in MySQL)."""
+    query = _validated_query(query, today)
+    statement, applied, status = _charge_columns(today)
+    conditions = _conditions(query, status)
+    counted = (
+        select(func.count(Charge.id))
+        .select_from(Charge)
+        .join(Unit, Unit.id == Charge.unit_id)
+        .join(Tower, Tower.id == Unit.tower_id)
+        .where(*conditions)
+    )
+    total = int(await db.scalar(counted) or 0)
+    total_pages = math.ceil(total / query.page_size)
+    items: tuple[ChargeSummary, ...] = ()
+    if query.page <= total_pages:
+        descending = query.sort_order == SortOrder.DESC
+        # charges.id breaks ties in the same direction: a stable order across pages.
+        keys = [*_sort_keys(query.sort_by, applied, status), Charge.id]
+        rows = (
+            await db.execute(
+                statement.where(*conditions)
+                .order_by(*(key.desc() if descending else key.asc() for key in keys))
+                .limit(query.page_size)
+                .offset((query.page - 1) * query.page_size)
+            )
+        ).all()
+        items = tuple(_summary(row) for row in rows)
+    return ChargePage(items=items, page=query.page, page_size=query.page_size, total=total, total_pages=total_pages)
+
+
+async def get_charge(db: AsyncSession, charge_id: int, today: date) -> ChargeDetail:
+    """One obligation with its apartment, origin, derived late fees and allocations (4 queries at most)."""
+    if not _is_date(today):
+        raise ValueError("today is a calendar date (Bogotá).")
+    if not _positive_id(charge_id):
+        raise ChargeNotFoundError()
+    statement, _, _ = _charge_columns(today)
+    row = (await db.execute(statement.where(Charge.id == charge_id))).first()
+    if row is None:
+        raise ChargeNotFoundError()
+    source = None
+    if row.source_charge_id is not None:
+        source_row = (await db.execute(statement.where(Charge.id == row.source_charge_id))).first()
+        source = _summary(source_row) if source_row is not None else None
+    # Every late fee that names this charge as its origin (the query does not assume there is one).
+    late_fees = tuple(
+        _summary(r) for r in (await db.execute(
+            statement.where(Charge.source_charge_id == charge_id).order_by(Charge.due_date, Charge.created_at, Charge.id)
+        )).all()
+    )
+    allocations = tuple(
+        ChargeAllocation(
+            payment_id=r.payment_id,
+            receipt_number=receipt_number(r.payment_id),
+            payment_date=r.payment_date,
+            payment_method=PaymentMethod(r.method),
+            applied_amount=money(r.amount),
+            allocation_date=r.created_at,
+        )
+        for r in (await db.execute(
+            select(PaymentAllocation.payment_id, Payment.payment_date, Payment.method, PaymentAllocation.amount,
+                   PaymentAllocation.created_at)
+            .join(Payment, Payment.id == PaymentAllocation.payment_id)
+            .where(PaymentAllocation.charge_id == charge_id)
+            .order_by(PaymentAllocation.created_at, PaymentAllocation.id)
+        )).all()
+    )
+    return ChargeDetail(charge=_summary(row), created_by_user_id=row.created_by_user_id, source=source,
+                        late_fees=late_fees, allocations=allocations)

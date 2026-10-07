@@ -293,3 +293,7 @@ class MonthlyPreviewOutdatedError(ConflictError):
     def __init__(self, preview: object) -> None:
         super().__init__()
         self.preview = preview  # the current preview, for the client to show
+
+
+class ChargeNotFoundError(NotFoundError):
+    message = "La obligación no existe."
