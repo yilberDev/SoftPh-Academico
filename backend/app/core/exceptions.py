@@ -145,6 +145,18 @@ class UnitInUseError(ConflictError):
         )
 
 
+class UnitHasBalanceError(ConflictError):
+    """Obligations extension (D10): pending balance or credit (saldo a favor) other than zero."""
+
+    code = "UNIT_HAS_BALANCE"
+
+    def __init__(self, label: str) -> None:
+        super().__init__(
+            f"No se puede eliminar {label} porque tiene obligaciones pendientes o saldo a favor. "
+            "Su saldo debe quedar en cero."
+        )
+
+
 # --- HU-003: resident invitations ----------------------------------------------
 
 

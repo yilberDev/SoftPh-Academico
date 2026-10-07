@@ -15,7 +15,12 @@ export const BLOCKED_DELETE_REASONS: ReadonlyMap<string, string> = new Map([
   ['BLOCK_HAS_ACTIVE_TOWERS', 'El bloque tiene torres activas. Elimínalas primero.'],
   ['TOWER_HAS_ACTIVE_UNITS', 'La torre tiene apartamentos activos. Elimínalos primero.'],
   // HU-003: an apartment with a resident or a pending invitation is in use.
-  ['UNIT_IN_USE', 'El apartamento tiene un residente o una invitación pendiente.']
+  ['UNIT_IN_USE', 'El apartamento tiene un residente o una invitación pendiente.'],
+  // Obligations extension (D10): pending obligations or credit (saldo a favor) other than zero.
+  [
+    'UNIT_HAS_BALANCE',
+    'El apartamento tiene obligaciones pendientes o saldo a favor. Su saldo debe quedar en cero antes de eliminarlo.'
+  ]
 ]);
 
 export const CONNECTION_ERROR = 'No fue posible conectar con el servidor. Intenta de nuevo.';

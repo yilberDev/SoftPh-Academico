@@ -111,7 +111,7 @@ describe('delete dialog', () => {
     });
   });
 
-  for (const code of ['BLOCK_HAS_ACTIVE_TOWERS', 'TOWER_HAS_ACTIVE_UNITS', 'UNIT_IN_USE']) {
+  for (const code of ['BLOCK_HAS_ACTIVE_TOWERS', 'TOWER_HAS_ACTIVE_UNITS', 'UNIT_IN_USE', 'UNIT_HAS_BALANCE']) {
     it(`${code}: no further DELETE can be sent from the informative state`, async () => {
       const t = setup(apiError(409, code));
       t.dialog.open('B4', t.remove);
@@ -136,6 +136,20 @@ describe('delete dialog', () => {
       label: 'B1-TO2-APTO-104',
       reason: 'El apartamento tiene un residente o una invitación pendiente.'
     });
+  });
+
+  it('409 UNIT_HAS_BALANCE (obligations extension): informative state with the reason, no amounts', async () => {
+    const t = setup(apiError(409, 'UNIT_HAS_BALANCE'));
+    t.dialog.open('B1-TO2-APTO-104', t.remove);
+
+    await t.dialog.confirm();
+
+    assert.deepEqual(t.dialog.state, {
+      kind: 'blocked',
+      label: 'B1-TO2-APTO-104',
+      reason: 'El apartamento tiene obligaciones pendientes o saldo a favor. Su saldo debe quedar en cero antes de eliminarlo.'
+    });
+    assert.equal(t.calls, 1);
   });
 
   it('closing the informative state sends nothing', async () => {

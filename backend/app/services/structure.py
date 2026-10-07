@@ -33,6 +33,7 @@ from app.core.exceptions import (
     TowerHasActiveUnitsError,
     TowerNotFoundError,
     TowerNumberExistsError,
+    UnitHasBalanceError,
     UnitInUseError,
     UnitNotFoundError,
     UnitNumberExistsError,
@@ -263,21 +264,23 @@ async def _lock_tower_path(db: AsyncSession, tower_id: int, *, share: bool) -> t
 
 
 async def _lock_unit_path(db: AsyncSession, unit_id: int) -> tuple[Block, Tower, Unit]:
-    """Locks block (FOR SHARE) → tower (FOR SHARE) → unit (FOR UPDATE)."""
-    # tower_id and block_id never change, so reading them without a lock is safe.
+    """Locks block (FOR SHARE) → tower (FOR SHARE) → unit (FOR UPDATE).
+
+    Called first by update_unit and delete_unit. The parents are read without a
+    lock (tower_id and block_id never change) and COMMITTED before the locks, so
+    the new transaction starts with a locking read: its consistent reads (e.g.
+    the financial balance of delete_unit) see everything committed before the
+    apartment lock was granted, never an older snapshot.
+    """
     parents = (
         await db.execute(
             select(Unit.tower_id, Tower.block_id).join(Tower, Tower.id == Unit.tower_id).where(Unit.id == unit_id)
         )
     ).first()
+    await db.commit()
     if parents is None:
         raise UnitNotFoundError()
-    block = await _lock_active(db, Block, parents.block_id, share=True)
-    tower = await _lock_active(db, Tower, parents.tower_id, share=True)
-    unit = await _lock_active(db, Unit, unit_id, share=False)
-    if block is None or tower is None or unit is None:
-        raise UnitNotFoundError()
-    return block, tower, unit
+    return await lock_unit_path(db, unit_id, tower_id=parents.tower_id, block_id=parents.block_id)
 
 
 async def lock_unit_path(db: AsyncSession, unit_id: int, *, tower_id: int, block_id: int) -> tuple[Block, Tower, Unit]:
@@ -538,6 +541,21 @@ async def _unit_in_use(db: AsyncSession, unit_id: int) -> bool:
     return expires_at is not None and expires_at > utc_now()
 
 
+async def _has_balance(db: AsyncSession, unit_id: int) -> bool:
+    """Obligations extension (D10): pending balance or credit other than zero.
+
+    The same derived balance as HU-004 (unit_balance), read under the unit lock
+    with consistent reads: every financial write locks the unit first, so the
+    balance cannot change until this transaction ends. No FOR SHARE (see
+    payments._covered: locking reads of allocations deadlock apartments).
+    """
+    # Imported here: payments imports this module (lock_unit_path, Actor).
+    from app.services.payments import unit_balance
+
+    balance = await unit_balance(db, unit_id)
+    return balance.pending_balance != 0 or balance.credit_balance != 0
+
+
 async def delete_unit(db: AsyncSession, unit_id: int, version: int, actor: Actor) -> None:
     block, tower, unit = await _lock_unit_path(db, unit_id)
     _check_version(unit, version)
@@ -545,6 +563,10 @@ async def delete_unit(db: AsyncSession, unit_id: int, version: int, actor: Actor
     # HU-003: an apartment with a resident or a pending invitation is in use.
     if await _unit_in_use(db, unit_id):
         raise UnitInUseError(label)
+    # Obligations extension (D10): only with pending balance and credit at zero; its history stays.
+    if await _has_balance(db, unit_id):
+        await db.rollback()
+        raise UnitHasBalanceError(label)
     unit.deleted_at = utc_now()
     unit.version = version + 1
     await db.flush()

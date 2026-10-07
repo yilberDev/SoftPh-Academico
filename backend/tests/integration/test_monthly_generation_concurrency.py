@@ -18,7 +18,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.clock import bogota_today
-from app.core.exceptions import AppError
+from app.core.exceptions import AppError, UnitHasBalanceError
 from app.models import User, UserRole, UserStatus
 from app.schemas.payment import PaymentCreate
 from app.services import charges as charges_service
@@ -207,12 +207,17 @@ async def test_generation_and_unit_deletion_at_once(
     generated, deleted = await gather(generate(committed_session_factory, setup, seen), delete())
 
     result = consistent(generated)
-    assert deleted is None  # deleted (delete_unit does not check balances yet: a later step)
     fee = await scalar(committed_session_factory,
                        "SELECT COUNT(*) FROM charges WHERE unit_id = :u AND billing_period = '2026-10-01'", u=target)
-    # Either the fee was created before the deletion, or the apartment was omitted: never both, never neither.
-    assert (result.totals.created, result.totals.omitted) in {(UNITS, 0), (UNITS - 1, 1)}
-    assert fee == (1 if result.totals.omitted == 0 else 0)
+    is_deleted = await scalar(committed_session_factory, "SELECT deleted_at IS NOT NULL FROM units WHERE id = :u", u=target)
+    # Either the fee was created first and the deletion is refused (D10: it has a pending balance),
+    # or the apartment was deleted first and omitted: never deleted with its new fee.
+    if result.totals.omitted == 0:
+        assert result.totals.created == UNITS and fee == 1
+        assert isinstance(deleted, UnitHasBalanceError) and not is_deleted
+    else:
+        assert (result.totals.created, result.totals.omitted) == (UNITS - 1, 1) and fee == 0
+        assert deleted is None and is_deleted
 
 
 async def test_apartment_created_during_the_run(
