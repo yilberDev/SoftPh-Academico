@@ -121,6 +121,8 @@ class FeedbackListItem(BaseModel):
     id: int
     resident: ResidentRef
     subject: str | None
+    category: FeedbackCategory | None  # HU-009; null: stored before HU-009
+    urgency: FeedbackUrgency | None  # HU-009; null: stored before HU-009
     status: FeedbackStatus
     created_at: datetime  # UTC (timezone-aware)
     resolved_at: datetime | None
@@ -151,6 +153,8 @@ class FeedbackDetail(BaseModel):
     resident: FeedbackResident
     subject: str | None
     message: str
+    category: FeedbackCategory | None  # HU-009; null: stored before HU-009
+    urgency: FeedbackUrgency | None  # HU-009; null: stored before HU-009
     status: FeedbackStatus
     admin_response: str | None
     resolution_note: str | None

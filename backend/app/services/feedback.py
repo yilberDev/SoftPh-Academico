@@ -193,6 +193,14 @@ async def _history(db: AsyncSession, feedback_id: int) -> list[FeedbackAction]:
     ]
 
 
+def _category(value: str | None) -> FeedbackCategory | None:
+    return None if value is None else FeedbackCategory(value)  # None: stored before HU-009 (never invented)
+
+
+def _urgency(value: str | None) -> FeedbackUrgency | None:
+    return None if value is None else FeedbackUrgency(value)
+
+
 async def get_feedback(db: AsyncSession, feedback_id: int) -> FeedbackDetail:
     row = (
         await db.execute(
@@ -216,6 +224,8 @@ async def get_feedback(db: AsyncSession, feedback_id: int) -> FeedbackDetail:
         resident=FeedbackResident(id=feedback.resident_id, full_name=name, email=email, unit_label=label),
         subject=feedback.subject,
         message=feedback.message,
+        category=_category(feedback.category),
+        urgency=_urgency(feedback.urgency),
         status=FeedbackStatus(feedback.status),
         admin_response=feedback.admin_response,
         resolution_note=feedback.resolution_note,
@@ -378,8 +388,9 @@ async def list_feedback(db: AsyncSession, query: FeedbackListQuery) -> FeedbackP
         rows = (
             await db.execute(
                 _filtered(
-                    select(Feedback.id, Feedback.resident_id, User.full_name, Feedback.subject, Feedback.status,
-                           Feedback.created_at, Feedback.resolved_at).select_from(Feedback),
+                    select(Feedback.id, Feedback.resident_id, User.full_name, Feedback.subject, Feedback.category,
+                           Feedback.urgency, Feedback.status, Feedback.created_at, Feedback.resolved_at)
+                    .select_from(Feedback),
                     query,
                 )
                 .order_by(*keys)
@@ -390,8 +401,8 @@ async def list_feedback(db: AsyncSession, query: FeedbackListQuery) -> FeedbackP
         items = [
             FeedbackListItem(
                 id=row.id, resident=ResidentRef(id=row.resident_id, full_name=row.full_name), subject=row.subject,
-                status=FeedbackStatus(row.status), created_at=_utc(row.created_at),  # type: ignore[arg-type]
-                resolved_at=_utc(row.resolved_at),
+                category=_category(row.category), urgency=_urgency(row.urgency), status=FeedbackStatus(row.status),
+                created_at=_utc(row.created_at), resolved_at=_utc(row.resolved_at),  # type: ignore[arg-type]
             )
             for row in rows
         ]

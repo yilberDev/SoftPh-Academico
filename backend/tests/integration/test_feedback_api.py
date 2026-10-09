@@ -40,12 +40,26 @@ async def headers(client: AsyncClient, db_session: AsyncSession, admin: User) ->
 
 
 async def new_feedback(db: AsyncSession, resident_id: int, subject: str | None = "Ruido en la torre 2",
-                       message: str = "Hay ruido después de las 10 p. m.", created_at: datetime | None = None) -> int:
+                       message: str = "Hay ruido después de las 10 p. m.", created_at: datetime | None = None,
+                       category: str = "COMPLAINT", urgency: str = "MEDIUM") -> int:
     feedback_id = await feedback_service.create_feedback(db, resident_id, subject=subject, message=message,
-                                                         category="COMPLAINT", urgency="MEDIUM")
+                                                         category=category, urgency=urgency)
     if created_at is not None:
         await db.execute(update(Feedback).where(Feedback.id == feedback_id).values(created_at=created_at))
     return feedback_id
+
+
+async def historical_feedback(db: AsyncSession, resident_id: int) -> int:
+    """A feedback stored before HU-009: no category and no urgency (inserted as the old rows were)."""
+    await db.execute(text("INSERT INTO feedback (resident_id, subject, message) VALUES (:r, 'Antes de HU-009', 'Mensaje anterior.')"),
+                     {"r": resident_id})
+    return int(await db.scalar(select(func.max(Feedback.id))) or 0)
+
+
+# The administrator's contracts (HU-005, plus category and urgency of HU-009): no field is lost or added.
+LIST_KEYS = {"id", "resident", "subject", "category", "urgency", "status", "created_at", "resolved_at"}
+DETAIL_KEYS = {"id", "resident", "subject", "message", "category", "urgency", "status", "admin_response",
+               "resolution_note", "created_at", "updated_at", "resolved_at", "version", "action_history"}
 
 
 @pytest.fixture
@@ -162,8 +176,40 @@ async def test_list_columns_and_default_order(client: AsyncClient, several: dict
     assert (result["total"], result["total_pages"], result["page"], result["page_size"]) == (5, 1, 1, 10)
     assert subjects(result) == ["Descuento 100%_especial", "Parqueadero de visitantes", None, "Horario de la piscina", "Ruido nocturno"]
     first = result["items"][-1]
-    assert set(first) == {"id", "resident", "subject", "status", "created_at", "resolved_at"}
+    assert all(set(item) == LIST_KEYS for item in result["items"])
     assert (first["resident"]["full_name"], first["status"], first["created_at"]) == ("Ana Pérez", "PENDING", "2026-09-01T15:00:00Z")
+    assert (first["category"], first["urgency"]) == ("COMPLAINT", "MEDIUM")
+
+
+async def test_list_shows_each_category_and_urgency(client: AsyncClient, headers: dict[str, str], db_session: AsyncSession,
+                                                     laura: int) -> None:
+    stored = [("COMPLAINT", "HIGH"), ("SUGGESTION", "LOW"), ("REQUEST", "MEDIUM"), ("OTHER", "HIGH")]
+    for n, (category, urgency) in enumerate(stored):
+        await new_feedback(db_session, laura, f"Asunto {n}", category=category, urgency=urgency)
+
+    result = await page(client, sort_order="asc")  # oldest first (the id breaks a tie of created_at)
+    assert [(i["subject"], i["category"], i["urgency"]) for i in result["items"]] == [
+        (f"Asunto {n}", category, urgency) for n, (category, urgency) in enumerate(stored)]
+
+
+async def test_historical_feedback_without_category_or_urgency(client: AsyncClient, headers: dict[str, str],
+                                                               db_session: AsyncSession, laura: int) -> None:
+    old = await historical_feedback(db_session, laura)
+    new = await new_feedback(db_session, laura, category="REQUEST", urgency="LOW")
+
+    listed = {i["id"]: i for i in (await page(client))["items"]}
+    assert set(listed[old]) == LIST_KEYS and (listed[old]["category"], listed[old]["urgency"]) == (None, None)
+    assert (listed[old]["subject"], listed[old]["status"]) == ("Antes de HU-009", "PENDING")
+    assert (listed[new]["category"], listed[new]["urgency"]) == ("REQUEST", "LOW")
+    detail = (await client.get(f"{URL}/{old}")).json()
+    assert set(detail) == DETAIL_KEYS and (detail["category"], detail["urgency"]) == (None, None)
+    assert (detail["message"], detail["status"], detail["version"]) == ("Mensaje anterior.", "PENDING", 1)
+    # Still managed as before: answered and resolved without inventing a category or an urgency.
+    assert (await respond(client, headers, old)).status_code == 200
+    resolved = (await resolve(client, headers, old, version=2)).json()["feedback"]
+    assert (resolved["status"], resolved["category"], resolved["urgency"]) == ("RESOLVED", None, None)
+    stored = await db_session.get(Feedback, old, populate_existing=True)
+    assert stored is not None and (stored.category, stored.urgency) == (None, None)
 
 
 async def test_pagination(client: AsyncClient, several: dict[str, int]) -> None:
@@ -236,8 +282,8 @@ async def test_detail(client: AsyncClient, headers: dict[str, str], item: int, l
 
     assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
     body = response.json()
-    assert set(body) == {"id", "resident", "subject", "message", "status", "admin_response", "resolution_note",
-                         "created_at", "updated_at", "resolved_at", "version", "action_history"}
+    assert set(body) == DETAIL_KEYS
+    assert (body["category"], body["urgency"]) == ("COMPLAINT", "MEDIUM")
     assert body["resident"] == {"id": laura, "full_name": "Laura Gómez", "email": "laura@example.com",
                                 "unit_label": "B1-TO2-APTO-104"}
     assert (body["subject"], body["message"], body["status"], body["version"]) == (
@@ -355,6 +401,7 @@ async def test_resolution(client: AsyncClient, headers: dict[str, str], item: in
     feedback = response.json()["feedback"]
     assert (feedback["status"], feedback["version"], feedback["resolution_note"], feedback["admin_response"]) == (
         "RESOLVED", 3, "Se citó al vecino del 204 y se acordó horario.", "Revisaremos el ruido.")
+    assert set(feedback) == DETAIL_KEYS and (feedback["category"], feedback["urgency"]) == ("COMPLAINT", "MEDIUM")
     stored = await db_session.get(Feedback, item, populate_existing=True)
     assert stored is not None and stored.resolved_at is not None and before <= stored.resolved_at <= after
     [entry] = await audits(db_session, AuditAction.FEEDBACK_RESOLVED)
