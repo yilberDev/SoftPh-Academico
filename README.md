@@ -133,9 +133,9 @@ Cada área solo admite su rol (con otro rol se muestra "Acceso no autorizado"), 
 
 ## Feedback de residentes (HU-005)
 
-En `http://localhost:4321/admin/feedback` (solo administrador) se consulta el feedback de los residentes: búsqueda por residente o asunto, filtro por estado (Pendiente o Resuelto), orden y paginación. En el detalle se ve el mensaje original y el residente, se guarda una respuesta (se envía por correo al residente) y se marca como resuelto con una nota interna de gestión (no se envía), con confirmación previa. El historial de acciones sale de la auditoría. Si dos administradores cambian el mismo feedback a la vez, solo un cambio se guarda y el otro ve un aviso para recargar.
+En `http://localhost:4321/admin/feedback` (solo administrador) se consulta el feedback de los residentes, con su categoría y urgencia (HU-009): búsqueda por residente o asunto, filtro por estado (Pendiente o Resuelto), orden y paginación. En el detalle se ve el mensaje original y el residente, se guarda una respuesta (se envía por correo al residente) y se marca como resuelto con una nota interna de gestión (no se envía), con confirmación previa. El historial de acciones sale de la auditoría. Si dos administradores cambian el mismo feedback a la vez, solo un cambio se guarda y el otro ve un aviso para recargar.
 
-El residente todavía no puede enviar feedback (HU-009); para probar la gestión se crean datos con la función de dominio `create_feedback` (ver pruebas).
+El feedback lo envían los residentes (HU-009); las pruebas también crean datos con la función de dominio `create_feedback`.
 
 | Endpoint | Uso |
 |---|---|
@@ -163,6 +163,16 @@ En `http://localhost:4321/resident/payments` (solo residente, "Mis pagos" en su 
 |---|---|
 | `GET /api/v1/resident/payments?page=1&page_size=10&status=&date_from=&date_to=&search=` | Pagos del residente de la sesión (`status`: `APPLIED`, `PARTIALLY_APPLIED`, `CREDIT`; `page_size` de 1 a 100) |
 | `GET /api/v1/resident/payments/{id}` | Detalle de un pago propio; un pago de otro residente o inexistente responde 404 `PAYMENT_NOT_FOUND` |
+
+## Feedback del residente (HU-009)
+
+En `http://localhost:4321/resident/feedback/new` (solo residente, "Enviar feedback" en su panel) el residente envía un feedback a la administración: asunto opcional (hasta 150 caracteres), mensaje obligatorio (hasta 2000), categoría (Queja, Sugerencia, Solicitud u Otros) y urgencia (Alta, Media o Baja). Queda registrado como Pendiente; "Cancelar" no envía nada y, si hay texto, pide confirmar. En `/resident/feedback` ("Mis feedback") consulta los que ha enviado, del más reciente al más antiguo, con su categoría, urgencia y estado (Pendiente o Resuelto), y en el detalle la fecha de envío y el mensaje. La respuesta y la resolución las registra el administrador (HU-005), que notifica al residente por correo.
+
+| Endpoint | Uso |
+|---|---|
+| `POST /api/v1/resident/feedback` | Envía un feedback: `{subject, message, category, urgency}` (`category`: `COMPLAINT`, `SUGGESTION`, `REQUEST`, `OTHER`; `urgency`: `HIGH`, `MEDIUM`, `LOW`; requiere `Origin` y `X-CSRF-Token`) |
+| `GET /api/v1/resident/feedback?page=1&page_size=10` | Feedback del residente de la sesión (`page_size` de 1 a 100) |
+| `GET /api/v1/resident/feedback/{id}` | Detalle de un feedback propio; uno de otro residente o inexistente responde 404 `NOT_FOUND` |
 
 ## Residentes registrados (HU-006)
 

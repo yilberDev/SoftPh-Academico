@@ -44,7 +44,7 @@ No renumerar ni crear identificadores arbitrarios sin actualizar la matriz y la 
 - HU-006 → RF-006 → CU-006 — Visualización de residentes
 - HU-007 → RF-007 → CU-007 — Inicio de sesión del residente
 - HU-008 → RF-008 → CU-008 — Visualización de pagos registrados por el residente
-- HU-009 → RF-009 → CU-009 — Registro y consulta de feedback
+- HU-009 → RF-009 → CU-009 — Realización de feedback por el residente
 - HU-010 → RF-010 → CU-010 — Pago electrónico demo/sandbox
 - HU-011 → RF-011 → CU-011 — Estado de cuenta del residente para administrador
 - HU-012 → RF-012 → CU-012 — Reportes financieros
