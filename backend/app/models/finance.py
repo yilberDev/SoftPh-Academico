@@ -201,3 +201,60 @@ class PaymentAllocation(Base):
     charge_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("charges.id", ondelete="RESTRICT"))
     amount: Mapped[Decimal] = mapped_column(MONEY)
     created_at: Mapped[datetime] = mapped_column(DATETIME(fsp=6), server_default=text("CURRENT_TIMESTAMP(6)"))
+
+
+class DemoPaymentTransactionStatus(StrEnum):
+    """INITIATED until it ends; every other status is final."""
+
+    INITIATED = "INITIATED"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+    EXPIRED = "EXPIRED"
+
+
+DEMO_REFERENCE_MAX_LENGTH = TRANSACTION_REFERENCE_MAX_LENGTH  # fits payments.transaction_reference
+
+
+class DemoPaymentTransaction(Base):
+    """A transaction of the internal demo payment gateway (HU-010); no real money or provider.
+
+    Kept apart from payments, which only holds completed payments: a rejected,
+    failed, cancelled or expired transaction never has a payment (nor a
+    receipt). One selected obligation (charge) per transaction; the apartment
+    is the charge's. Nothing derived is stored: balances and applied amounts
+    come from charges, payments and payment_allocations. No card data.
+
+    - finished_at: NULL exactly while INITIATED.
+    - expires_at: set by the service (creation + 15 minutes).
+    - payment_id: the payment created on approval; present exactly when
+      APPROVED and linked to one transaction at most.
+    """
+
+    __tablename__ = "demo_payment_transactions"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="amount_positive"),
+        CheckConstraint(_in_list("status", DemoPaymentTransactionStatus), name="status_valid"),
+        CheckConstraint("CHAR_LENGTH(TRIM(reference)) > 0", name="reference_not_blank"),
+        CheckConstraint("expires_at > created_at", name="expires_after_creation"),
+        CheckConstraint("(status = 'INITIATED') = (finished_at IS NULL)", name="finished_unless_initiated"),
+        CheckConstraint("(status = 'APPROVED') = (payment_id IS NOT NULL)", name="approved_has_payment"),
+        # Foreign key indexes (payment_id is served by its UNIQUE index).
+        Index("ix_demo_payment_transactions_resident_id", "resident_id"),
+        Index("ix_demo_payment_transactions_charge_id", "charge_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    resident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="RESTRICT"))
+    charge_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("charges.id", ondelete="RESTRICT"))
+    amount: Mapped[Decimal] = mapped_column(MONEY)
+    # Binary collation: exact uniqueness, and the status CHECK rejects 'approved'.
+    reference: Mapped[str] = mapped_column(String(DEMO_REFERENCE_MAX_LENGTH, collation="utf8mb4_0900_bin"), unique=True)
+    status: Mapped[str] = mapped_column(String(20, collation="utf8mb4_0900_bin"))
+    created_at: Mapped[datetime] = mapped_column(DATETIME(fsp=6), server_default=text("CURRENT_TIMESTAMP(6)"))
+    expires_at: Mapped[datetime] = mapped_column(DATETIME(fsp=6))
+    finished_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6))
+    payment_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("payments.id", ondelete="RESTRICT"), unique=True
+    )

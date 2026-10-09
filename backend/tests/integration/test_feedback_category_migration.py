@@ -1,4 +1,4 @@
-"""HU-009 migration (3e565db40412): head, round trip from 4385fd452231, the feedback stored before
+"""HU-009 migration (3e565db40412): place in the chain, round trip from 4385fd452231, the feedback stored before
 HU-009 kept as it was (category and urgency NULL), the database rules, protected downgrade.
 
 Only ever runs on the dedicated *_test database, and always leaves it at head.
@@ -81,11 +81,11 @@ def database(migrated_test_database: URL) -> Iterator[URL]:
         command.upgrade(config, "head")
 
 
-def test_revision_is_the_head_after_hu008(migrated_test_database: URL) -> None:
+def test_revision_follows_hu008(migrated_test_database: URL) -> None:
     script = ScriptDirectory.from_config(alembic_config(migrated_test_database))
-    assert script.get_heads() == [REVISION]
     assert script.get_revision(REVISION).down_revision == PREVIOUS
-    assert current_revision(migrated_test_database) == REVISION
+    # HU-010 (82e81b7ab23d) comes after it; that migration's tests check the head.
+    assert REVISION in {revision.revision for revision in script.walk_revisions()}
 
 
 def test_models_match_the_database(migrated_test_database: URL) -> None:

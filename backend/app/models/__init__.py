@@ -9,6 +9,8 @@ from app.models.audit_log import AuditAction, AuditLog
 from app.models.feedback import Feedback, FeedbackCategory, FeedbackStatus, FeedbackUrgency
 from app.models.finance import (
     Charge,
+    DemoPaymentTransaction,
+    DemoPaymentTransactionStatus,
     FinancialConcept,
     Payment,
     PaymentAllocation,
@@ -30,6 +32,8 @@ __all__ = [
     "Block",
     "Charge",
     "DeliveryStatus",
+    "DemoPaymentTransaction",
+    "DemoPaymentTransactionStatus",
     "Feedback",
     "FeedbackCategory",
     "FeedbackStatus",
