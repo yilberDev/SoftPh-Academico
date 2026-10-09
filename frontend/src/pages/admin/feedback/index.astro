@@ -73,7 +73,7 @@ const secondaryButton =
                 ))
               }
               {/* HU-009: shown, not sortable (the API sorts by the four columns above only). */}
-              <th scope="col" class="whitespace-nowrap px-4 py-2 font-medium">Categoría y urgencia</th>
+              <th scope="col" class="px-4 py-2 font-medium">Categoría y urgencia</th>
               <th scope="col" class="px-4 py-2 font-medium"><span class="sr-only">Acción</span></th>
             </tr>
           </thead>
@@ -149,6 +149,13 @@ const secondaryButton =
     return element;
   }
 
+  function nowrap(text: string): HTMLSpanElement {
+    const span = document.createElement('span');
+    span.className = 'whitespace-nowrap';
+    span.textContent = text;
+    return span;
+  }
+
   function row(item: FeedbackListItem): HTMLTableRowElement {
     const tr = document.createElement('tr');
     const name = document.createElement('th');
@@ -169,19 +176,26 @@ const secondaryButton =
     // HU-009: null before HU-009 ("No registrada", never invented).
     const classification = classificationOf(item);
     const kind = document.createElement('span');
-    kind.className = classification.categoryRecorded ? 'block' : 'block italic text-slate-500';
+    kind.className = classification.categoryRecorded ? 'block whitespace-nowrap' : 'block whitespace-nowrap italic text-slate-500';
     kind.textContent = classification.category;
     const urgency = document.createElement('span');
     urgency.className = `block text-xs ${classification.urgencyRecorded ? 'text-slate-600' : 'italic text-slate-500'}`;
-    urgency.textContent = `Urgencia: ${classification.urgency}`;
+    urgency.append('Urgencia: ', nowrap(classification.urgency)); // "No registrada" is never split
     const classified = document.createDocumentFragment();
     classified.append(kind, urgency);
+    // "9 de septiembre de 2026 a las 12:26 p. m.": when the column is narrow it breaks before the time, never inside it.
+    const date = document.createDocumentFragment();
+    const when = formatDateTime(item.created_at);
+    const time = /\d{1,2}:\d{2}.*$/.exec(when);
+    if (time) date.append(when.slice(0, time.index), nowrap(time[0]));
+    else date.append(when);
     tr.append(
       name,
       cell(subject, 'min-w-[12rem] px-4 py-3 text-slate-700'),
-      cell(formatDateTime(item.created_at), 'whitespace-nowrap px-4 py-3 text-slate-700'),
+      // The date and the classification may wrap: the table fits its card at 1280 px (the action stays visible).
+      cell(date, 'min-w-[9rem] px-4 py-3 text-slate-700'),
       cell(badge, 'px-4 py-3'),
-      cell(classified, 'whitespace-nowrap px-4 py-3 text-slate-700'),
+      cell(classified, 'min-w-[8rem] px-4 py-3 text-slate-700'),
       cell(link, 'px-4 py-3 text-right')
     );
     return tr;
