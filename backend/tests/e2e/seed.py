@@ -9,9 +9,11 @@ it and creates the scenario below; it prints only ids and labels as JSON (never 
 password). "clean" empties it, leaving it as the integration tests expect it.
 
 The financial history is created with the real services (create_charge,
-register_payment), so every invariant holds. The only direct change is ending a
-residence (ended_at): the application has no move-out flow yet, and a former
-resident is the only way an apartment without a resident has a payment history.
+register_payment), so every invariant holds, and so is Pedro's feedback
+(create_feedback). The only direct changes are ending a residence (ended_at):
+the application has no move-out flow yet, and a former resident is the only way
+an apartment without a resident has a payment history; and one feedback stored
+before HU-009 (no category, no urgency), which the application can no longer create.
 
 Scenario (Bogotá "today" = T):
 - ADMINISTRADOR "Administradora Pruebas" and RESIDENTE "Laura Gómez" (B1-TO1-APTO-101),
@@ -20,6 +22,8 @@ Scenario (Bogotá "today" = T):
 - B2-TO1-APTO-204: an "Otro" obligation fully paid by a former resident: balance 0.
 - B2-TO1-APTO-205: a former resident's payment with nothing to cover: credit 50.000.
 - B2-TO1-APTO-206: an unpaid penalty of 30.000 (no resident): pending balance.
+- Feedback (HU-005/HU-009): Pedro has one (COMPLAINT, HIGH) and one stored before
+  HU-009 (category and urgency NULL). Laura has none.
 """
 
 import asyncio
@@ -47,6 +51,7 @@ from app.models.finance import FinancialConcept, PaymentMethod
 from app.schemas.payment import PaymentCreate
 from app.schemas.user import AdminCreate
 from app.services import charges as charge_service
+from app.services import feedback as feedback_service
 from app.services import payments as payment_service
 from app.services.mail import OutgoingEmail
 from app.services.structure import Actor
@@ -163,8 +168,8 @@ async def reset(factory: async_sessionmaker[AsyncSession]) -> dict[str, Any]:
 
         laura = await resident(db, admin.id, "Laura Gómez", RESIDENT_EMAIL, "1012345678", units["B1-TO1-APTO-101"],
                                secret("E2E_RESIDENT_PASSWORD"))
-        await resident(db, admin.id, "Pedro Ruiz", "pedro.e2e@example.com", "1012345679", units["B1-TO1-APTO-102"],
-                       generate_session_token())
+        pedro = await resident(db, admin.id, "Pedro Ruiz", "pedro.e2e@example.com", "1012345679",
+                               units["B1-TO1-APTO-102"], generate_session_token())
 
         # B2-TO1-APTO-204: fully paid history, former resident: balance 0 (it can be deleted).
         jorge = await resident(db, admin.id, "Jorge León", "jorge.e2e@example.com", "1012345680",
@@ -194,6 +199,20 @@ async def reset(factory: async_sessionmaker[AsyncSession]) -> dict[str, Any]:
             actor,
         )
 
+        # Pedro's feedback: one of HU-009 and one stored before it (no category, no urgency).
+        pedro_feedback = await feedback_service.create_feedback(
+            db, pedro, subject="Agua en la torre E2E", message="No hay agua desde la mañana (Pedro E2E).",
+            category="COMPLAINT", urgency="HIGH",
+        )
+        await db.execute(
+            text("INSERT INTO feedback (resident_id, subject, message, created_at, updated_at) "
+                 "VALUES (:id, 'Antes de HU-009 E2E', 'Mensaje anterior a HU-009 (Pedro E2E).', "
+                 "UTC_TIMESTAMP(6) - INTERVAL 30 DAY, UTC_TIMESTAMP(6) - INTERVAL 30 DAY)"),
+            {"id": pedro},
+        )
+        historical = int((await db.execute(text("SELECT LAST_INSERT_ID()"))).scalar_one())
+        await db.commit()
+
     return {
         "today": today.isoformat(),
         "admin_email": ADMIN_EMAIL,
@@ -204,6 +223,7 @@ async def reset(factory: async_sessionmaker[AsyncSession]) -> dict[str, Any]:
         "units": units,
         "charges": {"history": history.id, "debt": debt.id},
         "laura_id": laura,
+        "feedback": {"pedro": pedro_feedback, "historical": historical},
     }
 
 

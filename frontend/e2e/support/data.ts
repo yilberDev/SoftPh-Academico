@@ -19,6 +19,8 @@ export interface Seed {
   units: Record<string, number>;
   charges: { history: number; debt: number };
   laura_id: number;
+  /** Pedro's feedback (HU-009) and one stored before HU-009 (category and urgency null). Laura has none. */
+  feedback: { pedro: number; historical: number };
 }
 
 function seed(action: 'migrate' | 'reset' | 'clean'): string {
