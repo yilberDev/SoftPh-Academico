@@ -1,4 +1,4 @@
-"""HU-010 migration (82e81b7ab23d): head after HU-009, round trip from 3e565db40412 (the table and
+"""HU-010 migration (82e81b7ab23d): place in the chain after HU-009, round trip from 3e565db40412 (the table and
 every constraint, index and foreign key gone, then back), protected downgrade and upgrade, no drift
 (alembic check), existing financial data untouched.
 
@@ -127,11 +127,11 @@ def database(migrated_test_database: URL) -> Iterator[URL]:
         command.upgrade(config, "head")
 
 
-def test_revision_is_the_head_after_hu009(migrated_test_database: URL) -> None:
+def test_revision_follows_hu009(migrated_test_database: URL) -> None:
     script = ScriptDirectory.from_config(alembic_config(migrated_test_database))
-    assert script.get_heads() == [REVISION]
     assert script.get_revision(REVISION).down_revision == PREVIOUS
-    assert current_revision(migrated_test_database) == REVISION
+    # HU-010-B (f697625db563) comes after it; that migration's tests check the head.
+    assert REVISION in {revision.revision for revision in script.walk_revisions()}
 
 
 def test_models_match_the_database(migrated_test_database: URL) -> None:

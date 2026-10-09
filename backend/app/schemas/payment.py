@@ -12,12 +12,22 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Any
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictInt, ValidationInfo, field_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    ValidationInfo,
+    WithJsonSchema,
+    field_validator,
+)
 
 from app.core.clock import bogota_today
 from app.core.money import MONEY_MAX, format_cop
 from app.core.validation import invalid
 from app.models.finance import (
+    MANUAL_PAYMENT_METHODS,
     PAYMENT_NOTES_MAX_LENGTH,
     TRANSACTION_REFERENCE_MAX_LENGTH,
     FinancialConcept,
@@ -95,6 +105,13 @@ def _valid_resident_id(value: int) -> int:
 
 ResidentId = Annotated[StrictInt, AfterValidator(_valid_resident_id)]
 
+# HU-010: the documented choices of a manual payment (OpenAPI only). The value is still a PaymentMethod,
+# validated by PaymentCreate.validate_method; the responses keep PaymentMethod (with DEMO_GATEWAY).
+ManualPaymentMethod = Annotated[
+    PaymentMethod,
+    WithJsonSchema({"type": "string", "enum": [m.value for m in MANUAL_PAYMENT_METHODS], "title": "Method"}),
+]
+
 
 def clean_transaction_reference(value: Any) -> str | None:
     """HU-008: optional, one line (spaces collapsed), printable, at most 100 characters; empty is None."""
@@ -134,7 +151,7 @@ class PaymentCreate(BaseModel):
 
     resident_id: ResidentId
     amount: Decimal
-    method: PaymentMethod
+    method: ManualPaymentMethod
     concept: FinancialConcept
     # Validated even when omitted: required for OTHER, not allowed otherwise.
     concept_description: str | None = Field(default=None, validate_default=True)
@@ -151,8 +168,12 @@ class PaymentCreate(BaseModel):
     @field_validator("method", mode="before")
     @classmethod
     def validate_method(cls, value: Any) -> Any:
-        return _enum_value(value, PaymentMethod, "method_invalid",
-                           "Selecciona un método de pago: efectivo, tarjeta o transferencia.")
+        message = "Selecciona un método de pago: efectivo, tarjeta o transferencia."
+        method = _enum_value(value, PaymentMethod, "method_invalid", message)
+        # HU-010: DEMO_GATEWAY belongs to the resident's demo transactions, never to a manual payment.
+        if method not in MANUAL_PAYMENT_METHODS:
+            raise invalid("method_invalid", message)
+        return method
 
     @field_validator("concept", mode="before")
     @classmethod

@@ -45,6 +45,12 @@ class PaymentMethod(StrEnum):
     CASH = "CASH"
     CARD = "CARD"
     TRANSFER = "TRANSFER"
+    # HU-010: the internal demo gateway (no card or bank is involved); only for DEMO_GATEWAY payments.
+    DEMO_GATEWAY = "DEMO_GATEWAY"
+
+
+# What the administrator can choose when registering a manual payment (HU-004).
+MANUAL_PAYMENT_METHODS = (PaymentMethod.CASH, PaymentMethod.CARD, PaymentMethod.TRANSFER)
 
 
 TRANSACTION_REFERENCE_MAX_LENGTH = 100
@@ -52,8 +58,8 @@ PAYMENT_NOTES_MAX_LENGTH = 500
 
 
 class PaymentSource(StrEnum):
-    # The electronic payment simulated internally (HU-010) will add its own value.
-    MANUAL = "MANUAL"
+    MANUAL = "MANUAL"  # HU-004: registered by the administrator
+    DEMO_GATEWAY = "DEMO_GATEWAY"  # HU-010: approved demo transaction of the resident (internal simulation)
 
 
 class ReceiptEmailStatus(StrEnum):
@@ -129,7 +135,13 @@ class Charge(Base):
 
 
 class Payment(Base):
-    """A payment registered by the administrator.
+    """A completed payment: registered by the administrator (MANUAL, HU-004) or
+    approved in the resident's demo transaction (DEMO_GATEWAY, HU-010).
+
+    registered_by_user_id is who registered it: the administrator, or the
+    resident for DEMO_GATEWAY (never attributed to the administrator). A
+    DEMO_GATEWAY payment always has the DEMO_GATEWAY method and a MANUAL one
+    never has it.
 
     The resident and the apartment are resolved by the backend. The snapshots
     keep the receipt as it was issued, even if the resident or the apartment
@@ -144,7 +156,12 @@ class Payment(Base):
         CheckConstraint(_in_list("method", PaymentMethod), name="method_valid"),
         CheckConstraint(_in_list("concept", FinancialConcept), name="concept_valid"),
         CheckConstraint("(concept = 'OTHER') = (concept_description IS NOT NULL)", name="description_only_for_other"),
-        CheckConstraint(_in_list("source", PaymentSource), name="source_valid"),
+        # The source decides the possible methods and, for HU-010, who registered it.
+        CheckConstraint(
+            "(source = 'MANUAL' AND method IN ('CASH', 'CARD', 'TRANSFER')) OR "
+            "(source = 'DEMO_GATEWAY' AND method = 'DEMO_GATEWAY' AND registered_by_user_id = resident_id)",
+            name="source_valid",
+        ),
         CheckConstraint(_in_list("receipt_email_status", ReceiptEmailStatus), name="receipt_email_status_valid"),
         CheckConstraint("receipt_email_status <> 'SENT' OR receipt_sent_at IS NOT NULL", name="sent_has_timestamp"),
         # HU-008: optional, never blank ("nothing" is NULL).

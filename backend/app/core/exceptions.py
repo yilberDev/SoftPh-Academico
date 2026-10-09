@@ -320,3 +320,40 @@ class PaymentNotFoundError(NotFoundError):
 
     code = "PAYMENT_NOT_FOUND"
     message = "El pago no existe."
+
+
+# --- HU-010: demo payment transactions of the resident ----------------------------------------------
+
+
+class ChargeNotPayableError(ConflictError):
+    code = "CHARGE_NOT_PAYABLE"
+    message = "La obligación no tiene saldo pendiente por pagar."
+
+
+class DemoPaymentInProgressError(ConflictError):
+    code = "DEMO_PAYMENT_IN_PROGRESS"
+    message = "Ya hay un pago en curso para esta obligación. Termínalo o cancélalo antes de iniciar otro."
+
+
+class DemoTransactionNotFoundError(NotFoundError):
+    """A transaction that does not exist and one of another resident look exactly the same."""
+
+    code = "DEMO_TRANSACTION_NOT_FOUND"
+    message = "La transacción no existe."
+
+
+class DemoTransactionExpiredError(ConflictError):
+    code = "DEMO_TRANSACTION_EXPIRED"
+    message = "La transacción venció. El pago no fue aplicado; inicia uno nuevo si aún quieres pagar."
+
+
+class DemoTransactionFinishedError(ConflictError):
+    code = "DEMO_TRANSACTION_FINISHED"
+    message = "La transacción ya terminó y no admite cambios."
+
+
+class DemoPaymentNotAppliedError(ConflictError):
+    """The demo gateway approved, but the payment could not be applied: the transaction ended FAILED."""
+
+    code = "DEMO_PAYMENT_NOT_APPLIED"
+    message = "No fue posible completar la transacción. El pago no fue aplicado y tu cuenta no cambió."
