@@ -9,12 +9,13 @@ status → role), never from the request.
     AUTHENTICATED  any signed-in role; the data is always the caller's own
     ADMINISTRADOR  require_roles(ADMINISTRADOR): 401 without a session, 403 for a resident
     RESIDENTE      require_roles(RESIDENTE): 401 without a session, 403 for the administrator;
-                   the data is always the session's resident (HU-008 payments, HU-009 feedback)
+                   the data is always the session's resident (HU-008 payments, HU-009 feedback,
+                   HU-010 demo payments: published here because the tests enable the demo gateway)
 """
 
 import re
 from collections.abc import Awaitable, Callable
-from datetime import timedelta
+from datetime import date, timedelta
 from enum import StrEnum
 from typing import Any
 
@@ -34,6 +35,7 @@ from app.services import payments as payment_service
 from app.services.sessions import create_session
 from app.services.structure import Actor
 from tests.integration.conftest import PASSWORD, FakeMailSender
+from tests.integration.test_payments_api import charge
 from tests.integration.test_residents_api import Community
 
 pytestmark = pytest.mark.anyio
@@ -90,6 +92,11 @@ ACCESS_POLICY: dict[tuple[str, str], Access] = {
     ("POST", "/resident/feedback"): Access.RESIDENTE,
     ("GET", "/resident/feedback"): Access.RESIDENTE,
     ("GET", "/resident/feedback/{feedback_id}"): Access.RESIDENTE,
+    # HU-010: the resident's demo payment transactions (only with DEMO_PAYMENTS_ENABLED; the resident is the session's).
+    ("POST", "/resident/demo-payments"): Access.RESIDENTE,
+    ("GET", "/resident/demo-payments/{transaction_id}"): Access.RESIDENTE,
+    ("POST", "/resident/demo-payments/{transaction_id}/complete"): Access.RESIDENTE,
+    ("POST", "/resident/demo-payments/{transaction_id}/cancel"): Access.RESIDENTE,
     # HU-013: physical structure.
     ("GET", "/blocks"): Access.ADMINISTRADOR,
     ("POST", "/blocks"): Access.ADMINISTRADOR,
@@ -123,6 +130,8 @@ BODIES: dict[tuple[str, str], Any] = {
     ("POST", "/admin/charges/monthly"): {"billing_period": "2026-10", "amount": "180000", "due_date": "2026-10-10",
                                          "expected_to_create": 0, "preview_fingerprint": "0" * 64},
     ("POST", "/resident/feedback"): {"subject": "Ruido", "message": "Hay ruido.", "category": "COMPLAINT", "urgency": "HIGH"},
+    ("POST", "/resident/demo-payments"): {"charge_id": 1, "amount": "1000"},
+    ("POST", "/resident/demo-payments/{transaction_id}/complete"): {"outcome": "APPROVED"},
     ("POST", "/blocks"): {"number": 1},
     ("PATCH", "/blocks/{block_id}"): {"number": 2, "version": 1},
     ("POST", "/blocks/{block_id}/towers"): {"number": 1},
@@ -363,6 +372,26 @@ async def test_resident_reaches_every_resident_route(
         response = await client.request(route[0], f"{API}{path}", headers=headers)
         assert response.status_code == 200, (path, response.text)
         visited.add(route)
+    # HU-010: an obligation of the resident's apartment, paid in part with the demo gateway, then a cancelled start.
+    unit_id = await db_session.scalar(text("SELECT unit_id FROM resident_units WHERE user_id = :u"), {"u": resident_id})
+    await charge(db_session, int(unit_id), "100000", date(2026, 10, 5))
+    fee = await db_session.scalar(text("SELECT MAX(id) FROM charges"))
+    started = await client.post(f"{API}/resident/demo-payments", headers=headers, json={"charge_id": fee, "amount": "40000"})
+    assert started.status_code == 201, started.text
+    visited.add(("POST", "/resident/demo-payments"))
+    transaction = started.json()["id"]
+    for route, path, body in (
+        (("GET", "/resident/demo-payments/{transaction_id}"), f"/resident/demo-payments/{transaction}", None),
+        (("POST", "/resident/demo-payments/{transaction_id}/complete"), f"/resident/demo-payments/{transaction}/complete",
+         {"outcome": "APPROVED"}),
+    ):
+        response = await client.request(route[0], f"{API}{path}", headers=headers, json=body)
+        assert response.status_code == 200, (path, response.text)
+        visited.add(route)
+    again = await client.post(f"{API}/resident/demo-payments", headers=headers, json={"charge_id": fee, "amount": "1000"})
+    cancelled = await client.post(f"{API}/resident/demo-payments/{again.json()['id']}/cancel", headers=headers)
+    assert cancelled.status_code == 200 and cancelled.json()["status"] == "CANCELLED", cancelled.text
+    visited.add(("POST", "/resident/demo-payments/{transaction_id}/cancel"))
 
     assert sorted(visited) == ROUTES_OF[Access.RESIDENTE]
 

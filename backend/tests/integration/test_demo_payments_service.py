@@ -536,10 +536,13 @@ async def test_an_approved_demo_payment_in_the_histories(db_session: AsyncSessio
     assert [(p.id, p.method, p.status) for p in listed.items] == [(approved.payment_id, "DEMO_GATEWAY", "APPLIED")]
 
 
-def test_no_route_is_published_in_this_phase() -> None:
-    from app.main import app
+def test_no_route_is_published_while_the_demo_gateway_is_disabled() -> None:
+    # HU-010-C publishes the routes only with DEMO_PAYMENTS_ENABLED (see test_demo_payments_api.py).
+    from app.core.config import get_settings
+    from app.main import create_app
 
-    assert not [path for path in app.openapi()["paths"] if "demo" in path or "gateway" in path]
+    disabled = create_app(get_settings().model_copy(update={"demo_payments_enabled": False}))
+    assert not [path for path in disabled.openapi()["paths"] if "demo" in path or "gateway" in path]
 
 
 def test_openapi_offers_only_the_manual_methods_for_a_manual_payment() -> None:

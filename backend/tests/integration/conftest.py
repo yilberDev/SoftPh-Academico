@@ -20,16 +20,23 @@ from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.clock import utc_now
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.passwords import hash_password
 from app.core.sessions import CSRF_HEADER_NAME, SESSION_COOKIE_NAME, derive_csrf_token
 from app.db.session import create_engine, get_db, get_session_factory
-from app.main import app
+from app.main import app, include_demo_payments
 from app.models import User, UserRole, UserStatus
 from app.services.mail import OutgoingEmail, get_mail_sender
 from app.services.sessions import create_session
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+# HU-010: the demo payment gateway is off by default (DEMO_PAYMENTS_ENABLED, never in production).
+# The integration tests publish its routes explicitly on the application under test, with test
+# Settings built (and validated) from the current ones plus the flag; .env is not changed. A
+# production configuration fails here. Its absence when disabled is tested with create_app().
+DEMO_TEST_SETTINGS = Settings(**{**get_settings().model_dump(), "demo_payments_enabled": True})
+include_demo_payments(app, DEMO_TEST_SETTINGS)
 
 
 def alembic_config(database_url: URL) -> Config:

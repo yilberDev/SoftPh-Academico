@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     smtp_from: str = "SoftPh-Académico <no-reply@softph.local>"
     smtp_timeout_seconds: float = Field(default=10, gt=0, le=60)
 
+    # HU-010: the internal demo payment gateway (no real money, no external provider). Its routes are
+    # published only when this is true, and it can never be true in production.
+    demo_payments_enabled: bool = False
+
     @model_validator(mode="after")
     def require_secure_cookie_outside_local_http(self) -> Self:
         """SESSION_COOKIE_SECURE=false is only allowed for local HTTP development."""
@@ -66,6 +70,13 @@ class Settings(BaseSettings):
                 "SESSION_COOKIE_SECURE=false solo se permite en desarrollo HTTP local: "
                 "APP_ORIGIN debe ser http://localhost, http://127.0.0.1 o http://[::1]."
             )
+        return self
+
+    @model_validator(mode="after")
+    def forbid_demo_payments_in_production(self) -> Self:
+        """The demo gateway is an academic simulation: never a way to pay in production."""
+        if self.demo_payments_enabled and self.app_env == "production":
+            raise ValueError("DEMO_PAYMENTS_ENABLED no puede ser true cuando APP_ENV=production.")
         return self
 
     def database_url(self, database: str | None = None) -> URL:
