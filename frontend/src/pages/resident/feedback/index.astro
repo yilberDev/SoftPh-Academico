@@ -1,0 +1,229 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import ResidentHeader from '../../../components/ResidentHeader.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import { STACKED_TABLE } from '../../../lib/obligations/charge-format';
+import { STATUSES, STATUS_BADGES, STATUS_HELP, STATUS_LABELS } from '../../../lib/feedback/feedback-format';
+import { COLUMNS, LOADING_MESSAGE, PAGE_SIZES, parseQuery } from '../../../lib/resident/feedback-list';
+
+// HU-009. The middleware only renders /resident pages for a valid RESIDENTE
+// session; the API decides whose feedback is listed (always the session's
+// resident) and authorizes every request on its own (HU-018).
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const initial = parseQuery(Astro.url.searchParams);
+
+const secondaryButton =
+  'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-50';
+const link =
+  'rounded font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+const badge = 'inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset';
+---
+
+<Layout title="Mis feedback — SoftPh-Académico">
+  <ResidentHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-5xl space-y-6 px-4 py-8" data-feedback-list-page>
+    <div class="flex flex-wrap items-end justify-between gap-4">
+      <div class="min-w-0 space-y-2">
+        <Breadcrumbs items={[{ label: 'Inicio', href: '/resident' }, { label: 'Mis feedback' }]} />
+        <h1 class="text-2xl font-semibold tracking-tight">Mis feedback</h1>
+        <p class="text-slate-600">Consulta los feedback que has enviado y su estado actual.</p>
+      </div>
+      <a href="/resident/feedback/new"
+        class="rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">
+        Enviar feedback
+      </a>
+    </div>
+
+    <details class="group rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <summary
+        class="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 [&::-webkit-details-marker]:hidden">
+        <span>¿Qué significa el estado de un feedback?</span>
+        <span aria-hidden="true" class="text-slate-400 transition-transform group-open:rotate-180">▾</span>
+      </summary>
+      <dl class="space-y-2 border-t border-slate-200 px-4 py-4 text-sm">
+        {
+          STATUSES.map((status) => (
+            <div class="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
+              <dt class="shrink-0 sm:w-28">
+                <span class:list={[badge, STATUS_BADGES[status]]}>{STATUS_LABELS[status]}</span>
+              </dt>
+              <dd class="text-slate-700">{STATUS_HELP[status]}</dd>
+            </div>
+          ))
+        }
+      </dl>
+    </details>
+
+    <div data-alert role="alert" class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+      <p data-alert-message></p>
+      <button type="button" data-retry class={`mt-3 hidden ${secondaryButton}`}>Reintentar</button>
+      <a data-login href="/login" class:list={['mt-3 hidden text-sm', link]}>Iniciar sesión</a>
+    </div>
+
+    <section aria-labelledby="feedback-table-title" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <h2 id="feedback-table-title" class="sr-only">Listado de mis feedback</h2>
+      <p data-status-line class="border-b border-slate-200 px-4 py-3 text-sm text-slate-600" aria-live="polite">{LOADING_MESSAGE}</p>
+      <!-- Narrow screens: each row stacks with its labels (no horizontal scroll); wider: a table that scrolls in its card. -->
+      <div class="relative sm:overflow-x-auto">
+        <table class:list={[STACKED_TABLE, 'sm:min-w-[44rem]']} data-table aria-busy="true">
+          <caption class="sr-only">Mis feedback, del más reciente al más antiguo</caption>
+          <thead class="bg-slate-50 text-slate-700 max-sm:hidden">
+            <tr>
+              {COLUMNS.map((label) => <th scope="col" class="whitespace-nowrap px-4 py-2 font-medium">{label}</th>)}
+              <th scope="col" class="whitespace-nowrap px-4 py-2 font-medium"><span class="sr-only">Acción</span></th>
+            </tr>
+          </thead>
+          <tbody data-rows class="divide-y divide-slate-100 max-sm:block"></tbody>
+        </table>
+      </div>
+      <div data-empty class="hidden px-4 py-10 text-center">
+        <p data-message class="text-slate-600"></p>
+        <a href="/resident/feedback/new" class:list={['mt-3 inline-block text-sm', link]}>Enviar mi primer feedback</a>
+      </div>
+      <div data-loading class="space-y-3 px-4 py-6" aria-hidden="true">
+        <div class="h-4 w-3/4 animate-pulse rounded bg-slate-100"></div>
+        <div class="h-4 w-2/3 animate-pulse rounded bg-slate-100"></div>
+        <div class="h-4 w-1/2 animate-pulse rounded bg-slate-100"></div>
+      </div>
+      <nav data-pagination aria-label="Paginación de mis feedback"
+        class="hidden flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-sm">
+        <div class="flex items-center gap-2">
+          <label for="feedback-page-size" class="text-slate-600">Por página</label>
+          <select id="feedback-page-size" data-page-size class="rounded-lg border border-slate-300 bg-white px-2 py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">
+            {PAGE_SIZES.map((size) => <option value={size} selected={initial.pageSize === size}>{size}</option>)}
+          </select>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" data-page="prev" class={secondaryButton}>Anterior</button>
+          <span data-page-info aria-current="page" class="whitespace-nowrap text-slate-600"></span>
+          <button type="button" data-page="next" class={secondaryButton}>Siguiente</button>
+        </div>
+      </nav>
+    </section>
+  </main>
+</Layout>
+
+<script>
+  import { listMyFeedback } from '../../../lib/api/resident-feedback';
+  import { STATUS_BADGES } from '../../../lib/feedback/feedback-format';
+  import { STACKED_CELL, STACKED_ROW } from '../../../lib/obligations/charge-format';
+  import {
+    EMPTY_MESSAGE,
+    LOADING_MESSAGE,
+    createResidentFeedbackList,
+    feedbackRow,
+    pageText,
+    parseQuery,
+    rangeText,
+    type ResidentFeedbackState
+  } from '../../../lib/resident/feedback-list';
+
+  const page = document.querySelector<HTMLElement>('[data-feedback-list-page]')!;
+  const $ = <T extends Element>(selector: string) => page.querySelector<T>(selector)!;
+  const show = (element: Element, visible: boolean) => element.classList.toggle('hidden', !visible);
+
+  const table = $<HTMLTableElement>('[data-table]');
+  const rows = $<HTMLElement>('[data-rows]');
+  const statusLine = $<HTMLElement>('[data-status-line]');
+  const empty = $<HTMLElement>('[data-empty]');
+  const loading = $<HTMLElement>('[data-loading]');
+  const alert = $<HTMLElement>('[data-alert]');
+  const retry = $<HTMLButtonElement>('[data-retry]');
+  const login = $<HTMLAnchorElement>('[data-login]');
+  const pagination = $<HTMLElement>('[data-pagination]');
+  const pageInfo = $<HTMLElement>('[data-page-info]');
+  const prev = $<HTMLButtonElement>('[data-page="prev"]');
+  const next = $<HTMLButtonElement>('[data-page="next"]');
+  const pageSize = $<HTMLSelectElement>('[data-page-size]');
+
+  function row(feedback: Parameters<typeof feedbackRow>[0]): HTMLTableRowElement {
+    const view = feedbackRow(feedback);
+    const tr = document.createElement('tr');
+    tr.className = `${STACKED_ROW} max-sm:px-4`;
+    view.cells.forEach((cell, index) => {
+      // The sending date names the row (a heading for the stacked card on narrow screens).
+      const element = document.createElement(index === 0 ? 'th' : 'td');
+      if (element instanceof HTMLTableCellElement && index === 0) element.scope = 'row';
+      element.dataset.label = cell.label;
+      element.className = [
+        'px-4 py-3 align-top',
+        index === 0 ? 'whitespace-nowrap font-medium text-slate-900 max-sm:block max-sm:px-0 max-sm:pb-1 max-sm:text-base' : STACKED_CELL,
+        index > 0 ? 'text-slate-700' : ''
+      ].join(' ');
+      const content = document.createElement('span');
+      if (cell.label === 'Estado') {
+        content.className = `inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_BADGES[view.status]}`;
+      } else {
+        content.className = ['min-w-0 break-words', cell.muted ? 'italic text-slate-500' : ''].join(' ');
+      }
+      content.textContent = cell.text;
+      element.append(content);
+      tr.append(element);
+    });
+    const action = document.createElement('td');
+    action.className = 'px-4 py-3 text-right align-top max-sm:block max-sm:px-0 max-sm:pt-2 max-sm:text-left';
+    const anchor = document.createElement('a');
+    anchor.href = view.href;
+    anchor.className =
+      'whitespace-nowrap rounded font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+    anchor.textContent = 'Ver detalle';
+    anchor.setAttribute('aria-label', view.linkLabel);
+    action.append(anchor);
+    tr.append(action);
+    return tr;
+  }
+
+  function render(state: ResidentFeedbackState): void {
+    table.setAttribute('aria-busy', String(state.kind === 'loading'));
+    show(loading, state.kind === 'loading');
+    show(empty, state.kind === 'empty' || state.kind === 'no-results');
+    if (state.kind !== 'results') rows.replaceChildren();
+    show(pagination, state.kind === 'results');
+    pagination.classList.toggle('flex', state.kind === 'results');
+    show(alert, state.kind === 'error');
+    switch (state.kind) {
+      case 'loading':
+        statusLine.textContent = LOADING_MESSAGE;
+        prev.disabled = true;
+        next.disabled = true;
+        break;
+      case 'results':
+        rows.replaceChildren(...state.page.items.map(row));
+        statusLine.textContent = rangeText(state.page);
+        pageInfo.textContent = pageText(state.page);
+        prev.disabled = state.page.page <= 1;
+        next.disabled = state.page.page >= state.page.total_pages;
+        pageSize.value = String(state.page.page_size);
+        break;
+      case 'empty':
+      case 'no-results':
+        statusLine.textContent = '0 feedback';
+        $('[data-message]').textContent = EMPTY_MESSAGE;
+        break;
+      case 'error':
+        statusLine.textContent = state.sessionExpired ? 'Sesión terminada.' : 'No se pudo consultar el listado.';
+        $('[data-alert-message]').textContent = state.message;
+        show(retry, !state.sessionExpired);
+        show(login, state.sessionExpired);
+        break;
+    }
+  }
+
+  const list = createResidentFeedbackList(parseQuery(new URLSearchParams(window.location.search)), {
+    load: listMyFeedback,
+    render,
+    remember: (queryString) =>
+      history.replaceState(null, '', queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname)
+  });
+
+  prev.addEventListener('click', () => void list.goToPage(list.query.page - 1));
+  next.addEventListener('click', () => void list.goToPage(list.query.page + 1));
+  pageSize.addEventListener('change', () => void list.setPageSize(Number(pageSize.value)));
+  retry.addEventListener('click', () => void list.refresh());
+  // Personal data: shown again when the page comes back from the browser cache.
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) void list.refresh();
+  });
+
+  void list.start();
+</script>

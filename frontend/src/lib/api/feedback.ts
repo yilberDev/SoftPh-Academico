@@ -3,6 +3,9 @@ import { apiFetch } from './client';
 /** HU-005: feedback of residents, managed by the administrator. */
 
 export type FeedbackStatus = 'PENDING' | 'RESOLVED';
+/** HU-009: chosen by the resident; null for the feedback sent before HU-009 (never invented). */
+export type FeedbackCategory = 'COMPLAINT' | 'SUGGESTION' | 'REQUEST' | 'OTHER';
+export type FeedbackUrgency = 'HIGH' | 'MEDIUM' | 'LOW';
 export type FeedbackSortField = 'created_at' | 'resident' | 'subject' | 'status';
 export type NotificationStatus = 'SENT' | 'FAILED' | 'UNCONFIRMED';
 
@@ -10,6 +13,8 @@ export interface FeedbackListItem {
   id: number;
   resident: { id: number; full_name: string };
   subject: string | null;
+  category: FeedbackCategory | null;
+  urgency: FeedbackUrgency | null;
   status: FeedbackStatus;
   created_at: string;
   resolved_at: string | null;
@@ -34,6 +39,8 @@ export interface FeedbackDetail {
   resident: { id: number; full_name: string; email: string; unit_label: string | null };
   subject: string | null;
   message: string;
+  category: FeedbackCategory | null;
+  urgency: FeedbackUrgency | null;
   status: FeedbackStatus;
   admin_response: string | null;
   resolution_note: string | null;

@@ -5,12 +5,13 @@ interface Props {
   csrfToken: string;
 }
 
-// The resident's navigation (HU-007 panel; HU-008 payments). Same layout as AdminHeader.
+// The resident's navigation (HU-007 panel; HU-008 payments; HU-009 feedback). Same layout as AdminHeader.
 const { csrfToken } = Astro.props;
 const path = Astro.url.pathname;
 const links = [
   { href: '/resident', label: 'Inicio', active: path === '/resident' || path === '/resident/' },
-  { href: '/resident/payments', label: 'Mis pagos', active: path.startsWith('/resident/payments') }
+  { href: '/resident/payments', label: 'Mis pagos', active: path.startsWith('/resident/payments') },
+  { href: '/resident/feedback', label: 'Mis feedback', active: path.startsWith('/resident/feedback') }
 ];
 ---
 

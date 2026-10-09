@@ -1,0 +1,96 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import ResidentHeader from '../../../components/ResidentHeader.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import { loadMyFeedback } from '../../../lib/api/resident-feedback-server';
+import { STATUS_BADGES, STATUS_HELP, STATUS_LABELS } from '../../../lib/feedback/feedback-format';
+import {
+  FORBIDDEN_MESSAGE,
+  LOAD_ERROR,
+  NOT_FOUND_HINT,
+  NOT_FOUND_MESSAGE,
+  detailLines,
+  loadDetailPage
+} from '../../../lib/resident/feedback-detail';
+
+// HU-009. The middleware only renders /resident pages for a valid RESIDENTE
+// session; the API only answers with a feedback of the session's resident. A
+// feedback of another resident, a missing one and an invalid id all show
+// "Feedback no encontrado." (404), without any data. 401 → /login.
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const result = await loadDetailPage(Astro.params.id, (id) => loadMyFeedback(id, Astro.request));
+if (result.kind === 'unauthenticated') {
+  return Astro.redirect('/login');
+}
+const feedback = result.kind === 'feedback' ? result.feedback : null;
+Astro.response.status = { feedback: 200, 'not-found': 404, forbidden: 403, error: 502 }[result.kind];
+const problem =
+  result.kind === 'not-found' ? { title: NOT_FOUND_MESSAGE, text: NOT_FOUND_HINT }
+    : result.kind === 'forbidden' ? { title: FORBIDDEN_MESSAGE, text: null }
+      : { title: LOAD_ERROR, text: null };
+
+const card = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6';
+const link =
+  'rounded font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+const badge = 'inline-flex whitespace-nowrap rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset';
+---
+
+<Layout title={feedback ? `Feedback #${feedback.id} — SoftPh-Académico` : `${problem.title.replace(/\.$/, '')} — SoftPh-Académico`}>
+  <ResidentHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-3xl space-y-6 px-4 py-8" data-feedback-detail>
+    <Breadcrumbs items={[{ label: 'Mis feedback', href: '/resident/feedback' }, { label: feedback ? `Feedback #${feedback.id}` : 'Feedback no disponible' }]} />
+    {
+      !feedback ? (
+        <div class="rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm" role={result.kind === 'error' ? 'alert' : undefined}>
+          <h1 class="text-xl font-semibold tracking-tight">{problem.title}</h1>
+          {problem.text && <p class="mt-2 text-sm text-slate-600">{problem.text}</p>}
+          <div class="mt-5 flex flex-wrap justify-center gap-4 text-sm">
+            {result.kind === 'error' && <a href={Astro.url.pathname} class={link}>Intentar de nuevo</a>}
+            <a href="/resident/feedback" class={link}>Volver a Mis feedback</a>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <h1 class="text-2xl font-semibold tracking-tight">Detalle del feedback</h1>
+            <p>
+              <span class="sr-only">Estado: </span>
+              <span class:list={[badge, STATUS_BADGES[feedback.status]]}>{STATUS_LABELS[feedback.status]}</span>
+            </p>
+          </div>
+          <p class="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+            <span class="font-medium">{STATUS_LABELS[feedback.status]}:</span> {STATUS_HELP[feedback.status]}
+          </p>
+
+          <section aria-labelledby="feedback-info-title" class={card}>
+            <h2 id="feedback-info-title" class="text-lg font-semibold">Información del feedback</h2>
+            <dl class="mt-3 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+              {
+                detailLines(feedback).map(({ label, value, muted }) => (
+                  <div class="min-w-0">
+                    <dt class="text-slate-500">{label}</dt>
+                    <dd class:list={['break-words', muted ? 'italic text-slate-500' : 'text-slate-900']}>{value}</dd>
+                  </div>
+                ))
+              }
+            </dl>
+          </section>
+
+          <section aria-labelledby="feedback-message-title" class={card}>
+            <h2 id="feedback-message-title" class="text-lg font-semibold">Mensaje</h2>
+            <p class="mt-3 whitespace-pre-wrap break-words text-slate-800">{feedback.message}</p>
+          </section>
+
+          <a href="/resident/feedback" class:list={['inline-block text-sm', link]}>Volver a Mis feedback</a>
+        </>
+      )
+    }
+  </main>
+</Layout>
+
+<script>
+  // Personal data: a page restored from the browser cache is loaded again from the API.
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) window.location.reload();
+  });
+</script>

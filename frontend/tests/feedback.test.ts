@@ -1,5 +1,6 @@
 /**
- * HU-005: feedback list and detail (response, resolution, history). Run with `npm test`.
+ * HU-005: feedback list and detail (response, resolution, history), with the
+ * category and urgency of HU-009. Run with `npm test`.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -37,14 +38,15 @@ import {
   type FeedbackListState,
   type FeedbackQuery
 } from '../src/lib/feedback/feedback-list.ts';
+import { NOT_RECORDED, classificationOf } from '../src/lib/feedback/feedback-format.ts';
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 const apiError = (status: number, code = 'X', message = 'x', details: { field?: string; message: string }[] = []) =>
   new ApiError(status, { error: { code, message, details } });
 
 function item(id: number): FeedbackListItem {
-  return { id, resident: { id: 7, full_name: 'Laura Gómez' }, subject: id % 2 ? 'Ruido' : null, status: 'PENDING',
-           created_at: '2026-10-02T20:05:00Z', resolved_at: null };
+  return { id, resident: { id: 7, full_name: 'Laura Gómez' }, subject: id % 2 ? 'Ruido' : null, category: 'COMPLAINT',
+           urgency: 'HIGH', status: 'PENDING', created_at: '2026-10-02T20:05:00Z', resolved_at: null };
 }
 
 function pageOf(items: FeedbackListItem[], page = 1, pageSize = 10, total = items.length): FeedbackPage {
@@ -55,7 +57,8 @@ function detail(overrides: Partial<FeedbackDetail> = {}): FeedbackDetail {
   return {
     id: 5,
     resident: { id: 7, full_name: 'Laura Gómez', email: 'laura@example.com', unit_label: 'B1-TO2-APTO-104' },
-    subject: 'Ruido', message: 'Hay ruido.', status: 'PENDING', admin_response: null, resolution_note: null,
+    subject: 'Ruido', message: 'Hay ruido.', category: 'REQUEST', urgency: 'LOW', status: 'PENDING', admin_response: null,
+    resolution_note: null,
     created_at: '2026-10-01T15:00:00Z', updated_at: '2026-10-01T15:00:00Z', resolved_at: null, version: 1,
     action_history: [],
     ...overrides
@@ -304,6 +307,43 @@ describe('feedback detail: resolution', () => {
     assert.equal(states.at(-1)?.feedback.status, 'RESOLVED');
     assert.equal(states.at(-1)?.confirming, false);
     assert.deepEqual(states.at(-1)?.notice, { tone: 'warning', text: ALREADY_RESOLVED_MESSAGE });
+  });
+});
+
+describe('category and urgency (HU-009)', () => {
+  it('list rows and detail show them in Spanish, from the codes of the API', () => {
+    assert.deepEqual(classificationOf(item(1)), { category: 'Queja', urgency: 'Alta', categoryRecorded: true, urgencyRecorded: true });
+    assert.deepEqual(classificationOf(detail()), { category: 'Solicitud', urgency: 'Baja', categoryRecorded: true, urgencyRecorded: true });
+    assert.deepEqual(classificationOf({ category: 'SUGGESTION', urgency: 'MEDIUM' }),
+      { category: 'Sugerencia', urgency: 'Media', categoryRecorded: true, urgencyRecorded: true });
+    assert.equal(classificationOf({ category: 'OTHER', urgency: 'LOW' }).category, 'Otros');
+  });
+
+  it('a feedback sent before HU-009 (null): "No registrada", nothing invented', () => {
+    assert.equal(NOT_RECORDED, 'No registrada');
+    const old = { ...item(2), category: null, urgency: null };
+    assert.deepEqual(classificationOf(old), { category: 'No registrada', urgency: 'No registrada', categoryRecorded: false, urgencyRecorded: false });
+    assert.deepEqual(classificationOf(detail({ category: null, urgency: null })),
+      { category: 'No registrada', urgency: 'No registrada', categoryRecorded: false, urgencyRecorded: false });
+  });
+
+  it('the actions answer with category and urgency: kept, with every field of HU-005', async () => {
+    const answered = detail({ ...RESPONDED, category: null, urgency: null });
+    const { controller, states } = detailSetup({ initial: detail({ category: null, urgency: null }),
+                                                 respond: { feedback: answered, notification_status: 'SENT' } });
+    await controller.respond('Revisaremos.');
+    const shown = states.at(-1)!.feedback;
+    assert.deepEqual(shown, answered); // nothing dropped or renamed
+    assert.equal(shown.version, 2);
+    assert.equal(classificationOf(shown).category, NOT_RECORDED);
+
+    const resolved = detailSetup({ resolve: { feedback: RESOLVED, notification_status: 'SENT' } });
+    resolved.controller.askResolve('Nota interna');
+    await resolved.controller.confirmResolve();
+    const last = resolved.states.at(-1)!.feedback;
+    assert.deepEqual([last.category, last.urgency, last.status, last.resolution_note], ['REQUEST', 'LOW', 'RESOLVED', 'Nota interna']);
+    assert.deepEqual(Object.keys(last).sort(), ['action_history', 'admin_response', 'category', 'created_at', 'id', 'message',
+      'resident', 'resolution_note', 'resolved_at', 'status', 'subject', 'updated_at', 'urgency', 'version']);
   });
 });
 

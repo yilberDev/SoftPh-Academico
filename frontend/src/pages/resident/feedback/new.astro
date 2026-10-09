@@ -1,0 +1,228 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import ResidentHeader from '../../../components/ResidentHeader.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import { CATEGORIES, CATEGORY_LABELS, URGENCIES, URGENCY_LABELS } from '../../../lib/feedback/feedback-format';
+import {
+  DISCARD_QUESTION,
+  LIST_PATH,
+  MESSAGE_MAX_LENGTH,
+  SUBJECT_MAX_LENGTH,
+  SUBMIT_LABEL,
+  SUCCESS_DETAIL,
+  SUCCESS_TITLE,
+  counterText
+} from '../../../lib/resident/feedback-form';
+
+// HU-009. The middleware only renders /resident pages for a valid RESIDENTE
+// session; the API decides who sends (always the session's resident), checks
+// Origin and the CSRF token and validates every field again (HU-018).
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+
+const inputClass =
+  'mt-1 block w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30 disabled:bg-slate-100 aria-[invalid=true]:border-red-500';
+const labelClass = 'block text-sm font-medium text-slate-700';
+const errorClass = 'mt-1 hidden text-sm text-red-700';
+const hintClass = 'mt-1 text-sm text-slate-500';
+const primaryButton =
+  'rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-60';
+const secondaryButton =
+  'rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-60';
+const link =
+  'rounded text-sm font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+---
+
+<Layout title="Enviar feedback — SoftPh-Académico">
+  <ResidentHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-2xl space-y-6 px-4 py-8" data-feedback-form-page data-csrf-token={csrfToken}>
+    <div class="space-y-2">
+      <Breadcrumbs items={[{ label: 'Mis feedback', href: LIST_PATH }, { label: 'Enviar feedback' }]} />
+      <h1 class="text-2xl font-semibold tracking-tight">Enviar feedback</h1>
+      <p class="text-slate-600">Comparte una queja, sugerencia o solicitud con la administración.</p>
+    </div>
+
+    <div data-confirmation role="status" aria-live="polite" tabindex="-1"
+      class="hidden rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 focus:outline-none sm:px-5">
+      <p class="font-medium text-emerald-900">{SUCCESS_TITLE}</p>
+      <p class="mt-1 text-sm text-emerald-900">{SUCCESS_DETAIL}</p>
+      <div class="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+        <a data-confirmation-link href={LIST_PATH} class={link}>Ver el feedback enviado</a>
+        <a href={LIST_PATH} class={link}>Volver a Mis feedback</a>
+      </div>
+    </div>
+
+    <form data-feedback-form novalidate class="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div data-form-alert role="alert" tabindex="-1" class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 focus:outline-none">
+        <p data-form-alert-message></p>
+        <a data-login href="/login" class:list={['mt-2 hidden', link]}>Iniciar sesión</a>
+      </div>
+
+      <div>
+        <label for="feedback-subject" class={labelClass}>Asunto <span class="font-normal text-slate-500">(opcional)</span></label>
+        <input id="feedback-subject" name="subject" type="text" autocomplete="off" maxlength={SUBJECT_MAX_LENGTH}
+          data-hint="feedback-subject-hint" aria-describedby="feedback-subject-hint" class={inputClass} />
+        <p id="feedback-subject-hint" class={hintClass}>Un título corto para identificar tu feedback. Máximo {SUBJECT_MAX_LENGTH} caracteres.</p>
+        <p id="feedback-subject-error" data-field-error="subject" class={errorClass}></p>
+      </div>
+
+      <div>
+        <label for="feedback-message" class={labelClass}>Mensaje</label>
+        <textarea id="feedback-message" name="message" rows="6" required aria-required="true" maxlength={MESSAGE_MAX_LENGTH}
+          data-hint="feedback-message-hint feedback-message-counter" aria-describedby="feedback-message-hint feedback-message-counter"
+          class:list={[inputClass, 'resize-y']}></textarea>
+        <div class="mt-1 flex flex-wrap justify-between gap-x-4 gap-y-1">
+          <p id="feedback-message-hint" class="text-sm text-slate-500">Describe la situación con el mayor detalle posible.</p>
+          <p id="feedback-message-counter" data-counter class="text-sm text-slate-500">{counterText('')}</p>
+        </div>
+        <p id="feedback-message-error" data-field-error="message" class={errorClass}></p>
+      </div>
+
+      <div class="grid gap-5 sm:grid-cols-2">
+        <div>
+          <label for="feedback-category" class={labelClass}>Categoría</label>
+          <select id="feedback-category" name="category" required aria-required="true" class={inputClass}>
+            <option value="" selected>Selecciona una categoría</option>
+            {CATEGORIES.map((category) => <option value={category}>{CATEGORY_LABELS[category]}</option>)}
+          </select>
+          <p id="feedback-category-error" data-field-error="category" class={errorClass}></p>
+        </div>
+        <div>
+          <label for="feedback-urgency" class={labelClass}>Urgencia</label>
+          <select id="feedback-urgency" name="urgency" required aria-required="true" class={inputClass}>
+            <option value="" selected>Selecciona la urgencia</option>
+            {URGENCIES.map((urgency) => <option value={urgency}>{URGENCY_LABELS[urgency]}</option>)}
+          </select>
+          <p id="feedback-urgency-error" data-field-error="urgency" class={errorClass}></p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3 border-t border-slate-200 pt-5">
+        <button type="submit" data-submit class={primaryButton}>{SUBMIT_LABEL}</button>
+        <button type="button" data-cancel class={secondaryButton}>Cancelar</button>
+      </div>
+    </form>
+
+    <dialog data-discard-dialog aria-labelledby="discard-title"
+      class="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl p-0 shadow-xl backdrop:bg-slate-900/40">
+      <div class="space-y-3 p-6">
+        <h2 id="discard-title" class="text-lg font-semibold">{DISCARD_QUESTION}</h2>
+        <p class="text-sm text-slate-600">Lo que escribiste no se enviará ni se guardará.</p>
+        <div class="flex flex-wrap justify-end gap-2 pt-2">
+          <button type="button" data-discard-cancel class={secondaryButton}>Seguir escribiendo</button>
+          <button type="button" data-discard-ok class={primaryButton}>Descartar</button>
+        </div>
+      </div>
+    </dialog>
+  </main>
+</Layout>
+
+<script>
+  import { sendFeedback } from '../../../lib/api/resident-feedback';
+  import {
+    FEEDBACK_FIELDS,
+    LIST_PATH,
+    SENDING_LABEL,
+    SUBMIT_LABEL,
+    cancelAction,
+    counterText,
+    createFeedbackFlow,
+    detailPath,
+    type FeedbackErrors,
+    type FeedbackFormValues,
+    type FeedbackSubmitState
+  } from '../../../lib/resident/feedback-form';
+
+  const page = document.querySelector<HTMLElement>('[data-feedback-form-page]')!;
+  const $ = <T extends Element>(selector: string) => page.querySelector<T>(selector)!;
+  const show = (element: Element, visible: boolean) => element.classList.toggle('hidden', !visible);
+  const csrfToken = page.dataset.csrfToken ?? '';
+
+  const form = $<HTMLFormElement>('[data-feedback-form]');
+  const subject = $<HTMLInputElement>('#feedback-subject');
+  const message = $<HTMLTextAreaElement>('#feedback-message');
+  const category = $<HTMLSelectElement>('#feedback-category');
+  const urgency = $<HTMLSelectElement>('#feedback-urgency');
+  const counter = $<HTMLElement>('[data-counter]');
+  const submit = $<HTMLButtonElement>('[data-submit]');
+  const cancel = $<HTMLButtonElement>('[data-cancel]');
+  const alert = $<HTMLElement>('[data-form-alert]');
+  const login = $<HTMLAnchorElement>('[data-login]');
+  const confirmation = $<HTMLElement>('[data-confirmation]');
+  const dialog = $<HTMLDialogElement>('[data-discard-dialog]');
+  const controls: Record<string, HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> = { subject, message, category, urgency };
+
+  const values = (): FeedbackFormValues => ({
+    subject: subject.value,
+    message: message.value,
+    category: category.value,
+    urgency: urgency.value
+  });
+
+  /** Each message next to its control (aria-invalid + aria-describedby); with `focus`, moves to the first. */
+  function showFieldErrors(errors: FeedbackErrors, focus: boolean): void {
+    let first: HTMLElement | null = null;
+    for (const field of FEEDBACK_FIELDS) {
+      const error = $<HTMLElement>(`[data-field-error="${field}"]`);
+      const control = controls[field];
+      const text = errors[field] ?? null;
+      error.textContent = text ?? '';
+      show(error, Boolean(text));
+      control.setAttribute('aria-invalid', text ? 'true' : 'false');
+      const describedBy = [control.dataset.hint, text ? error.id : null].filter(Boolean).join(' ');
+      if (describedBy) control.setAttribute('aria-describedby', describedBy);
+      else control.removeAttribute('aria-describedby');
+      if (text) first ??= control;
+    }
+    if (focus) first?.focus();
+  }
+
+  function render(state: FeedbackSubmitState): void {
+    const submitting = state.kind === 'submitting';
+    // Really disabled while sending: no second POST, no change of the text being sent.
+    for (const control of [...Object.values(controls), submit, cancel]) control.disabled = submitting;
+    submit.textContent = submitting ? SENDING_LABEL : SUBMIT_LABEL;
+    form.setAttribute('aria-busy', String(submitting));
+    show(confirmation, state.kind === 'done');
+    if (submitting) return;
+    const failed = state.kind === 'error';
+    show(alert, failed && Boolean(state.message));
+    $('[data-form-alert-message]').textContent = failed ? (state.message ?? '') : '';
+    show(login, failed && state.sessionExpired);
+    if (state.kind === 'invalid' || state.kind === 'error') {
+      const errors = state.errors;
+      showFieldErrors(errors, true);
+      if (failed && state.message && Object.keys(errors).length === 0) alert.focus();
+    }
+    if (state.kind === 'done') {
+      showFieldErrors({}, false);
+      // The draft was sent: the form starts again, empty (nothing is kept in the browser).
+      form.reset();
+      counter.textContent = counterText('');
+      $<HTMLAnchorElement>('[data-confirmation-link]').href = detailPath(state.feedback.id);
+      confirmation.focus();
+    }
+  }
+
+  const flow = createFeedbackFlow({ send: (payload) => sendFeedback(payload, csrfToken), render });
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void flow.submit(values());
+  });
+  message.addEventListener('input', () => {
+    counter.textContent = counterText(message.value);
+  });
+
+  const leave = () => window.location.assign(LIST_PATH);
+  cancel.addEventListener('click', () => {
+    if (flow.busy) return;
+    if (cancelAction(values()) === 'leave') leave();
+    else dialog.showModal();
+  });
+  $('[data-discard-cancel]').addEventListener('click', () => dialog.close());
+  $('[data-discard-ok]').addEventListener('click', () => {
+    form.reset(); // discarded: nothing is sent or stored
+    dialog.close();
+    leave();
+  });
+</script>

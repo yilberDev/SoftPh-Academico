@@ -6,6 +6,7 @@ import { loadFeedback } from '../../../lib/api/feedback-server';
 import { isValidId, loadPage } from '../../../lib/api/structure-server';
 import { TEXT_MAX_LENGTH, formatDateTime } from '../../../lib/feedback/feedback-detail';
 import { NO_SUBJECT } from '../../../lib/feedback/feedback-list';
+import { classificationOf } from '../../../lib/feedback/feedback-format';
 
 // HU-005 criteria 2-4. The middleware only renders /admin pages for a valid
 // ADMINISTRADOR session; the API decides exactly which fields are exposed.
@@ -21,6 +22,8 @@ if (!feedback) {
 }
 // Initial state for the page script (the detail is admin-only and never cached).
 const initialJson = feedback ? JSON.stringify(feedback).replace(/</g, '\\u003c') : '';
+// HU-009: chosen by the resident and immutable; null before HU-009 ("No registrada").
+const classification = feedback ? classificationOf(feedback) : null;
 
 const textareaClass =
   'mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30 disabled:bg-slate-100';
@@ -72,6 +75,12 @@ const card = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6'
 
           <section aria-labelledby="message-title" class={card}>
             <h2 id="message-title" class="text-lg font-semibold">Mensaje del residente</h2>
+            {classification && (
+              <dl class="mt-3 grid max-w-md grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                <div><dt class="text-slate-500">Categoría</dt><dd class:list={[classification.categoryRecorded ? 'font-medium text-slate-900' : 'italic text-slate-500']}>{classification.category}</dd></div>
+                <div><dt class="text-slate-500">Urgencia</dt><dd class:list={[classification.urgencyRecorded ? 'font-medium text-slate-900' : 'italic text-slate-500']}>{classification.urgency}</dd></div>
+              </dl>
+            )}
             <p class="mt-3 whitespace-pre-wrap break-words text-slate-800" data-message>{feedback.message}</p>
             <p class="mt-3 text-xs text-slate-500">El mensaje original no se puede modificar.</p>
           </section>
