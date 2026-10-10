@@ -6,7 +6,9 @@ Usage (from backend/, started by frontend/playwright.config.ts):
 Nothing in .env changes: DB_NAME is replaced by TEST_DB_NAME for this process
 only (refused unless it ends in "_test" and differs from DB_NAME), and the
 public origin is the E2E frontend's. Email keeps the configured development
-sandbox (Mailpit); no real email or payment provider is involved.
+sandbox (Mailpit); no real email or payment provider is involved. The internal
+demo gateway of HU-010 (DEMO_PAYMENTS_ENABLED) is enabled for this process only,
+with APP_ENV=test (never allowed in production).
 """
 
 import argparse
@@ -28,6 +30,7 @@ def main() -> None:
     os.environ["DB_NAME"] = settings.test_db_name
     os.environ["APP_ENV"] = "test"
     os.environ["APP_ORIGIN"] = args.origin
+    os.environ["DEMO_PAYMENTS_ENABLED"] = "true"
     get_settings.cache_clear()
     if not get_settings().db_name.endswith("_test"):
         raise SystemExit("The E2E API only runs on the *_test database.")

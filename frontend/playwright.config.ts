@@ -6,6 +6,7 @@ import { defineConfig, devices } from '@playwright/test';
  * Playwright starts its own stack and never reuses the development one: the
  * same FastAPI application on the *_test database (backend/tests/e2e/serve.py,
  * port 8100) and Astro dev pointing at it (port 4400). Nothing in .env changes.
+ * Both enable the internal demo gateway of HU-010 (DEMO_PAYMENTS_ENABLED) for these processes only.
  * One worker: every test starts from the same data (backend/tests/e2e/seed.py).
  */
 
@@ -46,7 +47,7 @@ export default defineConfig({
       // --ignore-lock: runs beside a developer's own dev server without touching its lock file.
       command: 'npx astro dev --port 4400 --host localhost --ignore-lock',
       url: E2E_ORIGIN,
-      env: { API_INTERNAL_URL: API_URL },
+      env: { API_INTERNAL_URL: API_URL, DEMO_PAYMENTS_ENABLED: 'true' },
       reuseExistingServer: false,
       timeout: 120_000
     }
