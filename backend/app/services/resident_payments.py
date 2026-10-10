@@ -14,10 +14,14 @@ Nothing financial is computed here in a new way:
 - receipt number: derived from the id (RC-00000001), never stored;
 - covered obligations: the existing payment_allocations rows of the payment.
 
-list  one COUNT and one page (ORDER BY payment_date DESC, id DESC, LIMIT, OFFSET in MySQL)
-get   the payment (with its applied amount) and its allocations: 2 queries
+list     one COUNT and one page (ORDER BY payment_date DESC, id DESC, LIMIT, OFFSET in MySQL)
+get      the payment (with its applied amount) and its allocations: 2 queries
+receipt  HU-010: the data of the receipt of an approved demo payment (3 queries, no locks, no
+         writes, no commit): the payment, its demo transaction and its allocation with the
+         obligation, checked against each other before anything is composed
 """
 
+import logging
 import math
 import re
 from dataclasses import dataclass
@@ -28,12 +32,24 @@ from typing import Any
 from sqlalchemy import ColumnElement, case, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import FieldValidationError, PaymentNotFoundError
-from app.models import Charge, FinancialConcept, Payment, PaymentAllocation, PaymentMethod
+from app.core.exceptions import FieldValidationError, PaymentNotFoundError, ReceiptUnavailableError
+from app.models import (
+    Charge,
+    DemoPaymentTransaction,
+    DemoPaymentTransactionStatus,
+    FinancialConcept,
+    Payment,
+    PaymentAllocation,
+    PaymentMethod,
+    PaymentSource,
+)
 from app.schemas.invitation import ID_MAX
 from app.schemas.payment import PAGE_MAX, PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX, SEARCH_MAX_LENGTH
 from app.services.allocation import RECEIPT_PREFIX, PaymentStatus, payment_status, receipt_number
 from app.services.payments import _applied_amount, money
+from app.services.receipts import DemoReceiptData
+
+logger = logging.getLogger(__name__)
 
 SEARCH_MESSAGE = "Busca por número de recibo (p. ej., RC-00000012 o 12) o por fecha (AAAA-MM-DD)."
 
@@ -350,4 +366,100 @@ async def get_resident_payment(db: AsyncSession, resident_id: int, payment_id: i
         applied_amount=applied_amount,
         credit_amount=amount - applied_amount,
         allocations=allocations,
+    )
+
+
+# --- HU-010: receipt of an approved demo payment ---------------------------------------------------------
+
+
+def _inconsistent(payment_id: int, check: str) -> ReceiptUnavailableError:
+    # Only the payment id and the failed check are logged: never names, amounts or references.
+    logger.error("Demo receipt not generated: inconsistent records (payment_id=%s, check=%s)", payment_id, check)
+    return ReceiptUnavailableError()
+
+
+async def get_demo_receipt(db: AsyncSession, resident_id: int, payment_id: int) -> DemoReceiptData:
+    """The receipt data of the resident's approved demo payment, only from persisted records.
+
+    The payment is found by its id AND the session's resident AND source DEMO_GATEWAY: another
+    resident's payment, a manual payment and a missing one are the same PaymentNotFoundError.
+    Then the payment, its demo transaction (by payment_id) and its single allocation must agree;
+    when they do not, nothing is composed (ReceiptUnavailableError, a generic 500). Read only:
+    no locks, no writes, no commit (payments, allocations and approved transactions are never
+    changed after the approval, so consistent reads are enough).
+    """
+    if not _positive_id(resident_id):
+        raise ValueError("resident_id is the signed-in resident (a positive id).")
+    if not _positive_id(payment_id):
+        raise PaymentNotFoundError()
+    payment = (
+        await db.execute(
+            select(
+                Payment.id, Payment.resident_id, Payment.unit_id, Payment.amount, Payment.method, Payment.concept,
+                Payment.transaction_reference, Payment.payment_date, Payment.registered_at,
+                Payment.resident_name_snapshot, Payment.unit_label_snapshot,
+            ).where(
+                Payment.id == payment_id,
+                Payment.resident_id == resident_id,  # ownership first, always in SQL
+                Payment.source == PaymentSource.DEMO_GATEWAY.value,
+            )
+        )
+    ).first()
+    if payment is None:
+        raise PaymentNotFoundError()
+    if payment.method != PaymentMethod.DEMO_GATEWAY.value:
+        raise _inconsistent(payment.id, "method")
+
+    transactions = (
+        await db.execute(
+            select(
+                DemoPaymentTransaction.resident_id, DemoPaymentTransaction.charge_id, DemoPaymentTransaction.amount,
+                DemoPaymentTransaction.reference, DemoPaymentTransaction.status,
+            ).where(DemoPaymentTransaction.payment_id == payment.id)
+        )
+    ).all()
+    if len(transactions) != 1:
+        raise _inconsistent(payment.id, "transaction_count")
+    [transaction] = transactions
+    if transaction.status != DemoPaymentTransactionStatus.APPROVED.value:
+        raise _inconsistent(payment.id, "transaction_status")
+    if transaction.reference != payment.transaction_reference:
+        raise _inconsistent(payment.id, "reference")
+    if transaction.resident_id != payment.resident_id or money(transaction.amount) != money(payment.amount):
+        raise _inconsistent(payment.id, "transaction_payment")
+
+    allocations = (
+        await db.execute(
+            select(
+                PaymentAllocation.charge_id, PaymentAllocation.amount, Charge.unit_id, Charge.concept,
+                Charge.description, Charge.billing_period, Charge.due_date,
+            )
+            .join(Charge, Charge.id == PaymentAllocation.charge_id)
+            .where(PaymentAllocation.payment_id == payment.id)
+        )
+    ).all()
+    if len(allocations) != 1:
+        raise _inconsistent(payment.id, "allocation_count")
+    [allocation] = allocations
+    if money(allocation.amount) != money(payment.amount):
+        raise _inconsistent(payment.id, "allocation_amount")
+    if allocation.charge_id != transaction.charge_id or allocation.unit_id != payment.unit_id:
+        raise _inconsistent(payment.id, "allocation_charge")
+    if allocation.concept != payment.concept:
+        raise _inconsistent(payment.id, "concept")
+
+    return DemoReceiptData(
+        receipt_number=receipt_number(payment.id),
+        resident_name=payment.resident_name_snapshot,
+        unit_label=payment.unit_label_snapshot,
+        concept=FinancialConcept(allocation.concept),
+        concept_description=allocation.description,
+        billing_period=allocation.billing_period,
+        due_date=allocation.due_date,
+        amount=money(payment.amount),
+        applied_amount=money(allocation.amount),
+        method=PaymentMethod(payment.method),
+        reference=transaction.reference,
+        payment_date=payment.payment_date,
+        registered_at=payment.registered_at,
     )

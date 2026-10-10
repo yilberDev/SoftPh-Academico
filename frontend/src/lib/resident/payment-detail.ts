@@ -1,5 +1,5 @@
 import { ApiError } from '../api/errors.ts';
-import type { ResidentPaymentDetail } from '../api/resident-payments.ts';
+import type { PaymentMethod, ResidentPaymentDetail } from '../api/resident-payments.ts';
 import { conceptText } from '../obligations/charge-format.ts';
 import {
   METHOD_LABELS,
@@ -30,6 +30,23 @@ export const NOTES_SOURCE = 'Registrada por la administración.';
 
 // Database ids are positive BIGINTs; anything else never reaches the API path.
 const ID_PATTERN = /^[1-9]\d{0,18}$/;
+
+/**
+ * HU-010: the PDF receipt exists only for a demo payment (DEMO_GATEWAY), and its URL uses the
+ * persisted payment's id (never the demo transaction's). The backend decides again: another
+ * resident's payment or a manual one is "not found" there.
+ */
+export const DEMO_RECEIPT_LINK = 'Descargar comprobante de pago (demostración)';
+export const DEMO_RECEIPT_HINT =
+  'PDF. Comprobante de una transacción de demostración académica: no corresponde a un cobro real.';
+
+export function demoReceiptPath(paymentId: number): string | null {
+  return Number.isSafeInteger(paymentId) && paymentId > 0 ? `/api/v1/resident/payments/${paymentId}/receipt` : null;
+}
+
+export function demoReceiptOf(payment: { id: number; method: PaymentMethod }): string | null {
+  return payment.method === 'DEMO_GATEWAY' ? demoReceiptPath(payment.id) : null;
+}
 
 export function isPaymentId(value: string | undefined): value is string {
   return value !== undefined && ID_PATTERN.test(value);

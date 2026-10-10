@@ -30,6 +30,15 @@ def _utc(moment: datetime) -> datetime:
     return moment.replace(tzinfo=UTC)
 
 
+class ResidentReceiptQuery(BaseModel):
+    """Query string of GET /resident/payments/{payment_id}/receipt: it takes none (HU-010).
+
+    Unknown parameters are rejected with 422, as in the list (extra="forbid").
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ResidentPaymentListQuery(BaseModel):
     """Query string of GET /resident/payments. Unknown parameters are rejected."""
 

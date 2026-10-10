@@ -673,6 +673,23 @@ async def test_sort_asc_and_desc(client: AsyncClient, history: dict[str, int], s
         assert sorted(descending) == sorted(ascending) and descending != ascending
 
 
+async def test_sort_by_method_with_a_demo_payment(client: AsyncClient, history: dict[str, int],
+                                                  db_session: AsyncSession) -> None:
+    # HU-010: a demo gateway payment of Ana (as the resident registers it: registered by herself).
+    ana = history["ana"]
+    await db_session.execute(text(
+        "INSERT INTO payments (resident_id, unit_id, registered_by_user_id, amount, method, concept, source, "
+        "transaction_reference, payment_date, registered_at, resident_name_snapshot, unit_label_snapshot) "
+        "VALUES (:r, :u, :r, 30000, 'DEMO_GATEWAY', 'MONTHLY_FEE', 'DEMO_GATEWAY', 'DEMO-0000000000000001', :d, "
+        "UTC_TIMESTAMP(6), 'Ana Pérez', 'B1-TO1-APTO-101')"), {"r": ana, "u": await unit_of(db_session, ana), "d": TODAY})
+    # Efectivo, Pasarela de demostración, Tarjeta, Transferencia (Spanish order of the labels).
+    ascending = amounts(await page(client, sort_by="method", sort_order="asc"))
+    assert ascending == ["100000.00", "80000.00", "30000.00", "75000.00", "10000.00", "50000.00", "20000.00"]
+    descending = await page(client, sort_by="method", sort_order="desc")
+    assert amounts(descending) == ["20000.00", "50000.00", "10000.00", "75000.00", "30000.00", "80000.00", "100000.00"]
+    assert [item["method"] for item in descending["items"]][4] == "DEMO_GATEWAY"
+
+
 async def test_pagination(client: AsyncClient, history: dict[str, int]) -> None:
     pages = [await page(client, page=n, page_size=4, sort_by="amount", sort_order="asc") for n in (1, 2, 3)]
     assert [amounts(p) for p in pages] == [

@@ -1,5 +1,6 @@
 """HU-004: pure rules (schema, FIFO, status, receipt number, receipt and email)."""
 
+import hashlib
 import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -21,7 +22,20 @@ from app.services.allocation import (
     payment_status,
     receipt_number,
 )
-from app.services.receipts import ReceiptData, build_receipt_email, build_receipt_pdf, receipt_lines
+from app.services.receipts import (
+    DEMO_RECEIPT_LEGEND,
+    DEMO_RECEIPT_STATUS,
+    DEMO_RECEIPT_TITLE,
+    METHOD_LABELS,
+    DemoReceiptData,
+    ReceiptData,
+    build_demo_receipt_pdf,
+    build_receipt_email,
+    build_receipt_pdf,
+    demo_receipt_filename,
+    demo_receipt_lines,
+    receipt_lines,
+)
 
 TODAY = bogota_today()
 BASE: dict[str, Any] = {"resident_id": 7, "amount": "150000", "method": "TRANSFER", "concept": "MONTHLY_FEE",
@@ -297,3 +311,88 @@ def test_receipt_email() -> None:
         "recibo-RC-00000042.pdf", "application/pdf", b"%PDF-1.4 test")
     for secret in ("password", "token", "contraseña"):
         assert secret not in email.body.lower()
+
+
+# --- HU-010: receipt of an approved demo payment -----------------------------------------------------------------------
+
+# The manual receipt of the fixture above, as HU-004 produced it before HU-010 (reportlab 5.0.1, invariant):
+# the demo receipt is a separate composition and must not change a single byte of it.
+MANUAL_RECEIPT_SHA256 = "ee67834ab0aed4b53289d8a62586b7141685cb07c63f833ca1db1aa5d48f3f43"
+
+DEMO_RECEIPT = DemoReceiptData(
+    receipt_number="RC-00000012", resident_name="Laura Gómez", unit_label="B1-TO1-APTO-101",
+    concept=FinancialConcept.MONTHLY_FEE, concept_description=None, billing_period=date(2026, 10, 1),
+    due_date=date(2026, 10, 5), amount=Decimal("40000.50"), applied_amount=Decimal("40000.50"),
+    method=PaymentMethod.DEMO_GATEWAY, reference="DEMO-0123456789ABCDEF", payment_date=date(2026, 10, 9),
+    registered_at=datetime(2026, 10, 9, 20, 3),
+)
+
+
+def demo_pdf_text(pdf: bytes) -> str:
+    """Like pdf_text, read as WinAnsi (cp1252): the status has an em dash (octal 227)."""
+    parts = re.findall(rb"\((.*?)(?<!\\)\) Tj", pdf)
+    return "\n".join(re.sub(rb"\\([0-7]{3})", lambda m: bytes([int(m.group(1), 8)]), p).replace(b"\\(", b"(")
+                     .replace(b"\\)", b")").decode("cp1252") for p in parts)
+
+
+def test_method_labels() -> None:
+    assert METHOD_LABELS == {PaymentMethod.CASH: "Efectivo", PaymentMethod.CARD: "Tarjeta",
+                             PaymentMethod.TRANSFER: "Transferencia", PaymentMethod.DEMO_GATEWAY: "Pasarela de demostración"}
+
+
+def test_the_manual_receipt_is_unchanged() -> None:
+    assert hashlib.sha256(build_receipt_pdf(RECEIPT)).hexdigest() == MANUAL_RECEIPT_SHA256
+    assert "demostración" not in pdf_text(build_receipt_pdf(RECEIPT)).lower()
+
+
+def test_demo_receipt_fields() -> None:
+    assert demo_receipt_lines(DEMO_RECEIPT) == [
+        ("Número de recibo", "RC-00000012"),
+        ("Residente", "Laura Gómez"),
+        ("Unidad", "B1-TO1-APTO-101"),
+        ("Obligación", "Mensualidad"),
+        ("Periodo", "Octubre de 2026"),
+        ("Vencimiento", "5 de octubre de 2026"),
+        ("Método de pago", "Pasarela de demostración"),
+        ("Monto", "$ 40.000,50"),
+        ("Monto aplicado", "$ 40.000,50"),
+        ("Estado", "Aprobado — aplicado a la obligación"),
+        ("Referencia de la transacción", "DEMO-0123456789ABCDEF"),
+        ("Fecha del pago", "9 de octubre de 2026"),
+        ("Fecha y hora de registro", "9 de octubre de 2026, 3:03 p. m. (hora de Colombia)"),
+    ]
+    # No period for an obligation without one; the description of a penalty or "Otro" is shown.
+    penalty = DemoReceiptData(**{**DEMO_RECEIPT.__dict__, "concept": FinancialConcept.PENALTY,
+                                 "concept_description": "Ruido", "billing_period": None})
+    labels = dict(demo_receipt_lines(penalty))
+    assert "Periodo" not in labels and labels["Obligación"] == "Penalización: Ruido"
+
+
+def test_demo_receipt_pdf() -> None:
+    pdf = build_demo_receipt_pdf(DEMO_RECEIPT)
+    assert pdf.startswith(b"%PDF-") and pdf.rstrip().endswith(b"%%EOF")
+    assert pdf == build_demo_receipt_pdf(DEMO_RECEIPT)  # deterministic
+    text = demo_pdf_text(pdf)
+    for expected in (DEMO_RECEIPT_TITLE, "RC-00000012", "Laura Gómez", "B1-TO1-APTO-101", "Mensualidad", "Octubre de 2026",
+                     "Pasarela de demostración", "$ 40.000,50", DEMO_RECEIPT_STATUS, "DEMO-0123456789ABCDEF",
+                     "9 de octubre de 2026"):
+        assert expected in text, expected
+    assert DEMO_RECEIPT_TITLE == "Comprobante de pago (demostración)"
+    # The legend, in the body and in the footer (wrapped lines joined back).
+    assert " ".join(text.split("\n")).count(DEMO_RECEIPT_LEGEND) == 2
+    assert DEMO_RECEIPT_LEGEND == ("Comprobante de una transacción de demostración académica. "
+                                   "No corresponde a un cobro real ni a una entidad o pasarela financiera.")
+    assert "Recibo de pago" not in text  # never presented as the manual receipt
+
+
+def test_demo_receipt_wraps_long_values_inside_the_page() -> None:
+    long = DemoReceiptData(**{**DEMO_RECEIPT.__dict__, "concept": FinancialConcept.OTHER, "billing_period": None,
+                              "concept_description": "x" * 200})
+    pdf = build_demo_receipt_pdf(long)
+    assert pdf.startswith(b"%PDF-")
+    assert "x" * 200 in demo_pdf_text(pdf).replace("\n", "")  # every character, on several lines
+    assert max(len(line) for line in demo_pdf_text(pdf).split("\n")) < 200
+
+
+def test_demo_receipt_filename() -> None:
+    assert demo_receipt_filename("RC-00000012") == "comprobante-demo-RC-00000012.pdf"

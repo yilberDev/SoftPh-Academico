@@ -3,6 +3,9 @@ import type { DemoOutcome, DemoTransaction, DemoTransactionStatus, PayableObliga
 import { CONNECTION_ERROR, CSRF_MESSAGE, capitalize, conceptText, formatPeriod } from '../obligations/charge-format.ts';
 import { formatCop, formatDate, formatDateTime } from './payment-format.ts';
 import { parseAmount } from '../payments/payment-form.ts';
+import { DEMO_RECEIPT_LINK, demoReceiptPath } from './payment-detail.ts';
+
+export { DEMO_RECEIPT_LINK };
 
 /**
  * HU-010-D: the resident's demo payment flow (pure, tested with node --test).
@@ -127,6 +130,14 @@ export const HISTORY_PATH = '/resident/payments';
 
 export function paymentPath(paymentId: number): string {
   return `${HISTORY_PATH}/${paymentId}`;
+}
+
+/**
+ * HU-010: the receipt of the payment, only when the server answered APPROVED with the persisted
+ * payment's id; never for INITIATED, REJECTED, FAILED, CANCELLED or EXPIRED.
+ */
+export function receiptLinkOf(transaction: DemoTransaction): string | null {
+  return transaction.status === 'APPROVED' && transaction.payment_id !== null ? demoReceiptPath(transaction.payment_id) : null;
 }
 
 // --- Amounts: exact decimal text, compared in cents (BigInt), never binary floating point ------------------

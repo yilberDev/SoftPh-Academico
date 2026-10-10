@@ -325,6 +325,15 @@ class PaymentNotFoundError(NotFoundError):
 # --- HU-010: demo payment transactions of the resident ----------------------------------------------
 
 
+class ReceiptUnavailableError(AppError):
+    """HU-010 (D5): the persisted payment, demo transaction and allocation do not agree, so no receipt
+    is generated. The client sees only the generic 500 (no detail); the server logs which payment."""
+
+    status_code = 500
+    code = "INTERNAL_ERROR"
+    message = "Ocurrió un error interno. Intenta de nuevo más tarde."
+
+
 class ChargeNotPayableError(ConflictError):
     code = "CHARGE_NOT_PAYABLE"
     message = "La obligación no tiene saldo pendiente por pagar."

@@ -398,7 +398,9 @@ async def register_payment(
 _CONCEPT_ORDER = {  # Spanish labels in alphabetical order: Mensualidad, Mora, Otro, Penalización
     FinancialConcept.MONTHLY_FEE: 1, FinancialConcept.LATE_FEE: 2, FinancialConcept.OTHER: 3, FinancialConcept.PENALTY: 4,
 }
-_METHOD_ORDER = {PaymentMethod.CASH: 1, PaymentMethod.CARD: 2, PaymentMethod.TRANSFER: 3}  # Efectivo, Tarjeta, Transferencia
+_METHOD_ORDER = {  # Spanish labels in alphabetical order: Efectivo, Pasarela de demostración, Tarjeta, Transferencia
+    PaymentMethod.CASH: 1, PaymentMethod.DEMO_GATEWAY: 2, PaymentMethod.CARD: 3, PaymentMethod.TRANSFER: 4,
+}
 
 
 def _sort_keys(field: PaymentSortField, applied: Any) -> tuple[Any, ...]:

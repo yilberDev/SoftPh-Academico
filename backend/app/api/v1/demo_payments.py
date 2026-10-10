@@ -15,7 +15,8 @@ never read as a transaction id.
 
 A thin layer over services/demo_payments.py, which owns the rules, the locks, the payment and its
 single allocation, the idempotency and the audit. Reading may persist an expiry (INITIATED past
-expires_at becomes EXPIRED). No email is sent and no receipt document exists yet. Financial data:
+expires_at becomes EXPIRED). No email is sent; the receipt of an approved payment is downloaded from
+GET /resident/payments/{payment_id}/receipt (resident_payments.py). Financial data:
 never cached, not even an error (NoStoreRoute).
 """
 

@@ -88,6 +88,7 @@ ACCESS_POLICY: dict[tuple[str, str], Access] = {
     # HU-008: the resident's own payments (read only; the resident is the session's).
     ("GET", "/resident/payments"): Access.RESIDENTE,
     ("GET", "/resident/payments/{payment_id}"): Access.RESIDENTE,
+    ("GET", "/resident/payments/{payment_id}/receipt"): Access.RESIDENTE,  # HU-010: receipt of a demo payment
     # HU-009: the resident's own feedback (the resident is the session's).
     ("POST", "/resident/feedback"): Access.RESIDENTE,
     ("GET", "/resident/feedback"): Access.RESIDENTE,
@@ -392,6 +393,11 @@ async def test_resident_reaches_every_resident_route(
         response = await client.request(route[0], f"{API}{path}", headers=headers, json=body)
         assert response.status_code == 200, (path, response.text)
         visited.add(route)
+    # HU-010: the receipt of the payment just approved (the manual payment above has none).
+    approved = response.json()["payment_id"]
+    receipt = await client.get(f"{API}/resident/payments/{approved}/receipt", headers=headers)
+    assert receipt.status_code == 200 and receipt.content.startswith(b"%PDF-"), receipt.text
+    visited.add(("GET", "/resident/payments/{payment_id}/receipt"))
     again = await client.post(f"{API}/resident/demo-payments", headers=headers, json={"charge_id": fee, "amount": "1000"})
     cancelled = await client.post(f"{API}/resident/demo-payments/{again.json()['id']}/cancel", headers=headers)
     assert cancelled.status_code == 200 and cancelled.json()["status"] == "CANCELLED", cancelled.text

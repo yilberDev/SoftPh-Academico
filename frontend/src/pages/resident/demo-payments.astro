@@ -5,6 +5,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import { demoPaymentsEnabled } from '../../lib/resident/demo-payment-flag-server';
 import {
   APPROVAL_EFFECT,
+  DEMO_RECEIPT_LINK,
   DEMO_NOTICE,
   DEMO_NOTICE_TITLE,
   EMPTY_HINT,
@@ -191,6 +192,7 @@ const heading = 'text-lg font-semibold focus:outline-none';
 
             <div data-finished class="mt-5 hidden flex-wrap items-center gap-x-5 gap-y-3 border-t border-slate-200 pt-5">
               <a data-payment-link href={HISTORY_PATH} class:list={['hidden', link]}>Ver el pago en Mis pagos</a>
+              <a data-receipt-link href={HISTORY_PATH} download class:list={['hidden', link]}>{DEMO_RECEIPT_LINK}</a>
               <a data-history-link href={HISTORY_PATH} class:list={['hidden', link]}>Ir a Mis pagos</a>
               <button type="button" data-back class={secondaryButton}>Volver a mis obligaciones</button>
             </div>
@@ -235,6 +237,7 @@ const heading = 'text-lg font-semibold focus:outline-none';
     obligationTitle,
     parseTransactionParam,
     paymentPath,
+    receiptLinkOf,
     transactionHeading,
     transactionLines,
     type DemoState
@@ -364,6 +367,11 @@ const heading = 'text-lg font-semibold focus:outline-none';
         const paymentLink = $<HTMLAnchorElement>('[data-payment-link]');
         if (approved) paymentLink.href = paymentPath(transaction.payment_id!);
         show(paymentLink, approved);
+        // The receipt of the persisted payment, only for a confirmed approval.
+        const receiptLink = $<HTMLAnchorElement>('[data-receipt-link]');
+        const receipt = receiptLinkOf(transaction);
+        if (receipt) receiptLink.href = receipt;
+        show(receiptLink, receipt !== null);
         show($('[data-history-link]'), approved);
         for (const button of $$<HTMLButtonElement>('[data-outcome]')) {
           const outcome = button.dataset.outcome as DemoOutcome;

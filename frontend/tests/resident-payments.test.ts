@@ -9,9 +9,13 @@ import { describe, it } from 'node:test';
 import { ApiError, type ApiErrorBody } from '../src/lib/api/errors.ts';
 import type { ResidentPayment, ResidentPaymentDetail, ResidentPaymentPage } from '../src/lib/api/resident-payments.ts';
 import {
+  DEMO_RECEIPT_HINT,
+  DEMO_RECEIPT_LINK,
   FORBIDDEN_MESSAGE as DETAIL_FORBIDDEN,
   NO_ALLOCATIONS,
   allocationRows,
+  demoReceiptOf,
+  demoReceiptPath,
   financialLines,
   isPaymentId,
   loadDetailPage,
@@ -364,5 +368,26 @@ describe('resident payments: detail', () => {
     }
     assert.equal(requested.length, 5);
     assert.equal(DETAIL_FORBIDDEN, 'No tienes permiso para acceder a esta sección.');
+  });
+});
+
+// --- HU-010: the receipt of a demo payment ---------------------------------------------------------------
+
+describe('resident payment detail: receipt of a demo payment', () => {
+  it('only a demo payment links to its receipt, by the persisted payment id', () => {
+    assert.equal(demoReceiptOf({ ...DETAIL, id: 12, method: 'DEMO_GATEWAY' }), '/api/v1/resident/payments/12/receipt');
+    for (const method of ['CASH', 'CARD', 'TRANSFER'] as const) {
+      assert.equal(demoReceiptOf({ ...DETAIL, id: 12, method }), null, method); // never for a manual payment
+    }
+  });
+
+  it('an invalid id never becomes a URL', () => {
+    for (const id of [0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1]) assert.equal(demoReceiptPath(id), null, String(id));
+  });
+
+  it('the link names the demo receipt and says it is not a real charge', () => {
+    assert.equal(DEMO_RECEIPT_LINK, 'Descargar comprobante de pago (demostración)');
+    assert.match(DEMO_RECEIPT_HINT, /^PDF\./);
+    assert.match(DEMO_RECEIPT_HINT, /demostración académica: no corresponde a un cobro real/);
   });
 });

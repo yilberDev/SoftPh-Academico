@@ -41,6 +41,7 @@ import {
   obligationTitle,
   parseTransactionParam,
   paymentPath,
+  receiptLinkOf,
   toCents,
   transactionHeading,
   transactionLines,
@@ -267,6 +268,16 @@ describe('demo payment: what the resident reads', () => {
     assert.ok(approved.every((l) => !/pdf|descarg/i.test(`${l.label} ${l.value}`)));
     assert.ok(transactionLines(ended('REJECTED'), null).every((l) => !l.label.startsWith('Número')));
     assert.equal(paymentPath(12), '/resident/payments/12');
+  });
+
+  it('the receipt link: only for an APPROVED answer with the persisted payment id', () => {
+    assert.equal(receiptLinkOf(APPROVED), '/api/v1/resident/payments/12/receipt'); // the payment's id, not the transaction's (31)
+    for (const status of ['INITIATED', 'REJECTED', 'FAILED', 'CANCELLED', 'EXPIRED'] as const) {
+      assert.equal(receiptLinkOf(status === 'INITIATED' ? transaction() : ended(status)), null, status);
+    }
+    assert.equal(receiptLinkOf({ ...APPROVED, payment_id: null }), null); // never invented
+    // 409 DEMO_PAYMENT_NOT_APPLIED ends FAILED without a payment: no receipt either.
+    assert.equal(receiptLinkOf(ended('FAILED', { payment_id: null })), null);
   });
 
   it('the transaction id of the URL: a positive integer only', () => {
