@@ -8,6 +8,10 @@ path, query parameter or body field selects a resident, and unknown body fields 
 Starting takes only the obligation and the amount; completing takes only the demo gateway's
 outcome: the amount, the reference and the obligation always come from the stored transaction.
 A transaction of another resident is 404 DEMO_TRANSACTION_NOT_FOUND, exactly like a missing one.
+GET /obligations (HU-010-D) lists the obligations of the resident's current apartment that can
+still be paid, only to choose one: starting checks everything again. It takes no query parameter
+and rejects any (422, as HU-008). It is declared before /{transaction_id}, so "obligations" is
+never read as a transaction id.
 
 A thin layer over services/demo_payments.py, which owns the rules, the locks, the payment and its
 single allocation, the idempotency and the audit. Reading may persist an expiry (INITIATED past
@@ -17,12 +21,15 @@ never cached, not even an error (NoStoreRoute).
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Request, status
+from fastapi import APIRouter, Depends, Path, Query, Request, status
 
 from app.api.deps import DbDep, client_ip, require_csrf, require_roles, verify_origin
 from app.api.v1.charges import NoStoreRoute
 from app.models import UserRole
 from app.schemas.demo_payment import (
+    DemoPayableChargeList,
+    DemoPayableChargeQuery,
+    DemoPayableChargeRead,
     DemoPaymentComplete,
     DemoPaymentStart,
     DemoPaymentTransactionRead,
@@ -50,6 +57,14 @@ async def start_demo_payment(
         db, auth.user.id, data.charge_id, data.amount, ip_address=client_ip(request)  # the session's resident
     )
     return DemoPaymentTransactionRead.from_result(started)
+
+
+@router.get("/obligations", response_model=DemoPayableChargeList)
+async def list_payable_obligations(
+    auth: ResidentDep, _query: Annotated[DemoPayableChargeQuery, Query()], db: DbDep
+) -> DemoPayableChargeList:
+    payable = await demo_payment_service.list_payable_charges(db, auth.user.id)  # the session's resident
+    return DemoPayableChargeList(items=[DemoPayableChargeRead.from_payable(item) for item in payable])
 
 
 @router.get("/{transaction_id}", response_model=DemoPaymentTransactionRead)

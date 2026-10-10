@@ -1,16 +1,21 @@
 ---
 import LogoutButton from './LogoutButton.astro';
+import { demoPaymentsEnabled } from '../lib/resident/demo-payment-flag-server';
 
 interface Props {
   csrfToken: string;
 }
 
-// The resident's navigation (HU-007 panel; HU-008 payments; HU-009 feedback). Same layout as AdminHeader.
+// The resident's navigation (HU-007 panel; HU-008 payments; HU-009 feedback; HU-010 demo payment,
+// only while DEMO_PAYMENTS_ENABLED). Same layout as AdminHeader.
 const { csrfToken } = Astro.props;
 const path = Astro.url.pathname;
 const links = [
   { href: '/resident', label: 'Inicio', active: path === '/resident' || path === '/resident/' },
   { href: '/resident/payments', label: 'Mis pagos', active: path.startsWith('/resident/payments') },
+  ...(demoPaymentsEnabled()
+    ? [{ href: '/resident/demo-payments', label: 'Pago de demostración', active: path.startsWith('/resident/demo-payments') }]
+    : []),
   { href: '/resident/feedback', label: 'Mis feedback', active: path.startsWith('/resident/feedback') }
 ];
 ---

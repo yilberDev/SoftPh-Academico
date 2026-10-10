@@ -1,0 +1,448 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import ResidentHeader from '../../components/ResidentHeader.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { demoPaymentsEnabled } from '../../lib/resident/demo-payment-flag-server';
+import {
+  APPROVAL_EFFECT,
+  DEMO_NOTICE,
+  DEMO_NOTICE_TITLE,
+  EMPTY_HINT,
+  EMPTY_MESSAGE,
+  HISTORY_PATH,
+  LOADING_MESSAGE,
+  OUTCOMES,
+  OUTCOME_HINTS,
+  OUTCOME_LABELS,
+  UNAVAILABLE_TEXT,
+  UNAVAILABLE_TITLE
+} from '../../lib/resident/demo-payment';
+
+// HU-010-D. The middleware only renders /resident pages for a valid RESIDENTE session. The
+// API decides everything (whose obligations, the balances, the transaction, the payment) and
+// checks Origin and the CSRF token on every POST (HU-018). DEMO_PAYMENTS_ENABLED (the same
+// variable as the backend's, off by default) only hides this page: with it off there are no
+// controls and no request is made; the backend publishes its routes only when it is on there too.
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const enabled = demoPaymentsEnabled();
+if (!enabled) {
+  Astro.response.status = 404;
+}
+
+const card = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6';
+const inputClass =
+  'mt-1 block w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30 disabled:bg-slate-100 aria-[invalid=true]:border-red-500 sm:max-w-xs';
+const labelClass = 'block text-sm font-medium text-slate-700';
+const hintClass = 'mt-1 text-sm text-slate-500';
+const primaryButton =
+  'rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-60';
+const secondaryButton =
+  'rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-60';
+const dangerButton =
+  'rounded-lg border border-red-300 bg-white px-4 py-2 font-medium text-red-800 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:cursor-not-allowed disabled:opacity-60';
+const link =
+  'rounded text-sm font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+const heading = 'text-lg font-semibold focus:outline-none';
+---
+
+<Layout title="Pago de demostración — SoftPh-Académico">
+  <ResidentHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-3xl space-y-6 px-4 py-8" data-demo-payment-page={enabled ? '' : undefined}
+    data-csrf-token={enabled ? csrfToken : undefined}>
+    <div class="space-y-2">
+      <Breadcrumbs items={[{ label: 'Inicio', href: '/resident' }, { label: 'Pago de demostración' }]} />
+      <h1 class="text-2xl font-semibold tracking-tight">Pago electrónico de demostración</h1>
+      <p class="text-slate-600">Selecciona una obligación pendiente y simula su pago con la pasarela interna de la aplicación.</p>
+    </div>
+
+    <!-- Always visible: what this is, and what it is not. -->
+    <div role="note" aria-labelledby="demo-notice-title" class="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-4 sm:px-5">
+      <p id="demo-notice-title" class="font-semibold text-amber-950">{DEMO_NOTICE_TITLE}</p>
+      <p class="mt-1 text-sm text-amber-950">{DEMO_NOTICE}</p>
+    </div>
+
+    {
+      !enabled ? (
+        <div class="rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
+          <h2 class="text-xl font-semibold tracking-tight">{UNAVAILABLE_TITLE}</h2>
+          <p class="mt-2 text-sm text-slate-600">{UNAVAILABLE_TEXT}</p>
+          <div class="mt-5 flex flex-wrap justify-center gap-4">
+            <a href={HISTORY_PATH} class={link}>Ir a Mis pagos</a>
+            <a href="/resident" class={link}>Volver al inicio</a>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div data-error role="alert" tabindex="-1"
+            class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 focus:outline-none">
+            <p data-error-message></p>
+            <a data-login href="/login" class:list={['mt-2 hidden', link]}>Iniciar sesión</a>
+          </div>
+          <p data-info role="status" class="hidden rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900"></p>
+
+          <section data-section="loading" class={card} aria-busy="true">
+            <p class="text-sm text-slate-600" role="status">{LOADING_MESSAGE}</p>
+            <div class="mt-4 space-y-3" aria-hidden="true">
+              <div class="h-4 w-3/4 animate-pulse rounded bg-slate-100"></div>
+              <div class="h-4 w-2/3 animate-pulse rounded bg-slate-100"></div>
+              <div class="h-4 w-1/2 animate-pulse rounded bg-slate-100"></div>
+            </div>
+          </section>
+
+          <section data-section="unavailable" class="hidden rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
+            <h2 data-focus tabindex="-1" class="text-xl font-semibold tracking-tight focus:outline-none">{UNAVAILABLE_TITLE}</h2>
+            <p class="mt-2 text-sm text-slate-600">{UNAVAILABLE_TEXT}</p>
+            <a href={HISTORY_PATH} class:list={['mt-5 inline-block', link]}>Ir a Mis pagos</a>
+          </section>
+
+          <section data-section="load-error" class="hidden rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
+            <h2 data-focus tabindex="-1" data-load-error-message class="text-lg font-semibold focus:outline-none"></h2>
+            <div class="mt-5 flex flex-wrap justify-center gap-4">
+              <button type="button" data-retry class={secondaryButton}>Reintentar</button>
+              <a data-load-login href="/login" class:list={['hidden self-center', link]}>Iniciar sesión</a>
+            </div>
+          </section>
+
+          <section data-section="list" class="hidden space-y-4" aria-labelledby="demo-list-title">
+            <h2 id="demo-list-title" data-focus tabindex="-1" class={heading}>Obligaciones pendientes</h2>
+            <p data-empty class="hidden rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center text-slate-600 shadow-sm">
+              <span class="block font-medium text-slate-900">{EMPTY_MESSAGE}</span>
+              <span class="mt-1 block text-sm">{EMPTY_HINT}</span>
+            </p>
+            <ul data-obligations class="space-y-3"></ul>
+          </section>
+
+          <section data-section="form" class:list={['hidden', card]} aria-labelledby="demo-form-title">
+            <h2 id="demo-form-title" data-focus tabindex="-1" class={heading}>Monto a pagar</h2>
+            <p data-form-obligation class="mt-1 font-medium text-slate-900"></p>
+            <dl data-form-lines class="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2"></dl>
+            <form data-amount-form novalidate class="mt-5 space-y-4 border-t border-slate-200 pt-5">
+              <div>
+                <label for="demo-amount" class={labelClass}>Monto a pagar (COP)</label>
+                <input id="demo-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
+                  required aria-required="true" aria-describedby="demo-amount-hint" class={inputClass} />
+                <p id="demo-amount-hint" class={hintClass}>
+                  Por defecto, el saldo pendiente completo. Puedes pagar una parte: escribe el monto sin puntos de miles
+                  (p. ej., 150000 o 150000,50).
+                </p>
+                <p id="demo-amount-error" data-amount-error class="mt-1 hidden text-sm text-red-700"></p>
+              </div>
+              <div class="flex flex-wrap items-center gap-3">
+                <button type="submit" class={primaryButton}>Continuar</button>
+                <button type="button" data-back class={secondaryButton}>Volver a la lista</button>
+              </div>
+            </form>
+          </section>
+
+          <section data-section="review" class:list={['hidden', card]} aria-labelledby="demo-review-title">
+            <h2 id="demo-review-title" data-focus tabindex="-1" class={heading}>Confirma el pago de demostración</h2>
+            <p data-review-summary class="mt-2 text-slate-700"></p>
+            <dl class="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+              <div><dt class="text-slate-500">Obligación</dt><dd data-review-obligation class="font-medium text-slate-900"></dd></div>
+              <div><dt class="text-slate-500">Monto a pagar</dt><dd data-review-amount class="font-medium text-slate-900"></dd></div>
+              <div><dt class="text-slate-500">Saldo pendiente actual</dt><dd data-review-outstanding class="font-medium text-slate-900"></dd></div>
+              <div><dt class="text-slate-500">Tipo de pago</dt><dd data-review-kind class="font-medium text-slate-900"></dd></div>
+            </dl>
+            <p class="mt-4 text-sm text-slate-600">
+              Al continuar se inicia una transacción de demostración que vence en 15 minutos. Todavía no se aplica ningún pago.
+            </p>
+            <div class="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-5">
+              <button type="button" data-start class={primaryButton}>Iniciar pago de demostración</button>
+              <button type="button" data-edit class={secondaryButton}>Modificar monto</button>
+              <button type="button" data-back class={secondaryButton}>Volver a la lista</button>
+            </div>
+          </section>
+
+          <section data-section="transaction" class:list={['hidden', card]} aria-labelledby="demo-transaction-title">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <h2 id="demo-transaction-title" data-focus tabindex="-1" data-transaction-title class={heading}></h2>
+              <p>
+                <span class="sr-only">Estado: </span>
+                <span data-transaction-badge class="inline-flex whitespace-nowrap rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset"></span>
+              </p>
+            </div>
+            <p data-transaction-text class="mt-2 text-slate-700"></p>
+            <dl data-transaction-lines class="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2"></dl>
+
+            <div data-gateway class="mt-5 hidden space-y-4 border-t border-slate-200 pt-5">
+              <div>
+                <h3 class="font-semibold text-slate-900">Pasarela de demostración</h3>
+                <p class="mt-1 text-sm text-slate-600">{APPROVAL_EFFECT}</p>
+              </div>
+              <ul class="grid gap-3 sm:grid-cols-3">
+                {
+                  OUTCOMES.map((outcome) => (
+                    <li class="flex flex-col gap-1">
+                      <button type="button" data-outcome={outcome} aria-describedby={`demo-outcome-${outcome}`}
+                        class={outcome === 'APPROVED' ? primaryButton : secondaryButton}>
+                        {OUTCOME_LABELS[outcome]}
+                      </button>
+                      <span id={`demo-outcome-${outcome}`} class="text-xs text-slate-500">{OUTCOME_HINTS[outcome]}</span>
+                    </li>
+                  ))
+                }
+              </ul>
+              <div class="flex flex-wrap items-center gap-3">
+                <button type="button" data-cancel class={dangerButton}>Cancelar operación</button>
+                <button type="button" data-check class={secondaryButton}>Consultar estado</button>
+              </div>
+              <p data-polling class="text-xs text-slate-500" aria-live="polite"></p>
+            </div>
+
+            <div data-finished class="mt-5 hidden flex-wrap items-center gap-x-5 gap-y-3 border-t border-slate-200 pt-5">
+              <a data-payment-link href={HISTORY_PATH} class:list={['hidden', link]}>Ver el pago en Mis pagos</a>
+              <a data-history-link href={HISTORY_PATH} class:list={['hidden', link]}>Ir a Mis pagos</a>
+              <button type="button" data-back class={secondaryButton}>Volver a mis obligaciones</button>
+            </div>
+          </section>
+
+          <dialog data-cancel-dialog aria-labelledby="cancel-title" aria-describedby="cancel-text"
+            class="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl p-0 shadow-xl backdrop:bg-slate-900/40">
+            <div class="space-y-3 p-6">
+              <h2 id="cancel-title" class="text-lg font-semibold">¿Cancelar la operación?</h2>
+              <p id="cancel-text" class="text-sm text-slate-600">
+                No se aplicará ningún pago y esta transacción no podrá retomarse. Podrás iniciar un nuevo pago de demostración.
+              </p>
+              <div class="flex flex-wrap justify-end gap-2 pt-2">
+                <button type="button" data-cancel-keep class={secondaryButton}>Seguir con la operación</button>
+                <button type="button" data-cancel-ok class={dangerButton}>Cancelar operación</button>
+              </div>
+            </div>
+          </dialog>
+        </>
+      )
+    }
+  </main>
+</Layout>
+
+<script>
+  import {
+    cancelDemoPayment,
+    completeDemoPayment,
+    getDemoPayment,
+    listPayableObligations,
+    startDemoPayment,
+    type DemoOutcome,
+    type PayableObligation
+  } from '../../lib/api/demo-payments';
+  import { STATUS_BADGES, STATUS_LABELS } from '../../lib/obligations/charge-format';
+  import {
+    TRANSACTION_STATUS_BADGES,
+    TRANSACTION_STATUS_LABELS,
+    createDemoPaymentFlow,
+    isFullPayment,
+    obligationLines,
+    obligationTitle,
+    parseTransactionParam,
+    paymentPath,
+    transactionHeading,
+    transactionLines,
+    type DemoState
+  } from '../../lib/resident/demo-payment';
+  import { formatCop } from '../../lib/resident/payment-format';
+
+  const page = document.querySelector<HTMLElement>('[data-demo-payment-page]');
+  if (page) setUp(page); // the simulator is disabled: nothing runs, nothing is requested
+
+  function setUp(page: HTMLElement): void {
+    const $ = <T extends Element>(selector: string) => page.querySelector<T>(selector)!;
+    const $$ = <T extends Element>(selector: string) => [...page.querySelectorAll<T>(selector)];
+    const show = (element: Element, visible: boolean) => element.classList.toggle('hidden', !visible);
+    const csrfToken = page.dataset.csrfToken ?? '';
+
+    const errorBox = $<HTMLElement>('[data-error]');
+    const info = $<HTMLElement>('[data-info]');
+    const amount = $<HTMLInputElement>('#demo-amount');
+    const amountError = $<HTMLElement>('[data-amount-error]');
+    const dialog = $<HTMLDialogElement>('[data-cancel-dialog]');
+    const busyButtons = () => $$<HTMLButtonElement>('button:not([data-cancel-keep])');
+
+    function lines(target: HTMLElement, items: { label: string; value: string; mono?: boolean }[]): void {
+      target.replaceChildren(
+        ...items.map(({ label, value, mono }) => {
+          const row = document.createElement('div');
+          const term = document.createElement('dt');
+          term.className = 'text-slate-500';
+          term.textContent = label;
+          const description = document.createElement('dd');
+          description.className = mono ? 'break-all font-mono font-medium text-slate-900' : 'font-medium text-slate-900';
+          description.textContent = value;
+          row.append(term, description);
+          return row;
+        })
+      );
+    }
+
+    function obligationItem(obligation: PayableObligation, disabled: boolean): HTMLLIElement {
+      const item = document.createElement('li');
+      item.className = 'rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5';
+      const top = document.createElement('div');
+      top.className = 'flex flex-wrap items-start justify-between gap-2';
+      const title = document.createElement('h3');
+      title.id = `obligation-${obligation.charge_id}`;
+      title.className = 'min-w-0 break-words font-semibold text-slate-900';
+      title.textContent = obligationTitle(obligation);
+      const badge = document.createElement('span');
+      badge.className = `inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_BADGES[obligation.status]}`;
+      badge.textContent = STATUS_LABELS[obligation.status];
+      top.append(title, badge);
+      const details = document.createElement('dl');
+      details.className = 'mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-sm min-[420px]:grid-cols-2';
+      lines(details, obligationLines(obligation));
+      const action = document.createElement('button');
+      action.type = 'button';
+      action.dataset.select = String(obligation.charge_id);
+      action.disabled = disabled;
+      action.setAttribute('aria-describedby', title.id);
+      const resume = obligation.in_progress_transaction_id !== null;
+      action.className = `mt-4 ${resume ? 'rounded-lg border border-emerald-700 bg-white px-4 py-2 font-medium text-emerald-800 hover:bg-emerald-50' : 'rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800'} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-60`;
+      action.textContent = resume ? 'Continuar pago en curso' : 'Pagar esta obligación';
+      item.append(top, details, action);
+      return item;
+    }
+
+    let shown = '';
+    let notified: DemoState['notice'] = null;
+
+    function render(state: DemoState): void {
+      const { view } = state;
+      const busy = state.busy !== null;
+      for (const section of $$<HTMLElement>('[data-section]')) show(section, section.dataset.section === view.kind);
+
+      // Notices: errors in the alert, information in the status line.
+      const error = state.notice?.tone === 'error' ? state.notice.text : '';
+      $('[data-error-message]').textContent = error;
+      show(errorBox, Boolean(error));
+      show($('[data-login]'), state.sessionExpired && view.kind !== 'load-error');
+      info.textContent = state.notice?.tone === 'info' ? state.notice.text : '';
+      show(info, state.notice?.tone === 'info');
+
+      if (view.kind === 'load-error') {
+        $('[data-load-error-message]').textContent = view.message;
+        show($('[data-retry]'), !state.sessionExpired);
+        show($('[data-load-login]'), state.sessionExpired);
+      }
+      if (view.kind === 'list') {
+        show($('[data-empty]'), state.obligations.length === 0);
+        $('[data-obligations]').replaceChildren(...state.obligations.map((o) => obligationItem(o, busy || state.sessionExpired)));
+      }
+      if (view.kind === 'form') {
+        $('[data-form-obligation]').textContent = obligationTitle(view.obligation);
+        lines($('[data-form-lines]'), obligationLines(view.obligation));
+        if (shown !== `form:${view.obligation.charge_id}`) amount.value = view.amountText;
+        amountError.textContent = view.error ?? '';
+        show(amountError, Boolean(view.error));
+        amount.setAttribute('aria-invalid', view.error ? 'true' : 'false');
+        amount.setAttribute('aria-describedby', view.error ? 'demo-amount-hint demo-amount-error' : 'demo-amount-hint');
+        if (view.error) amount.focus();
+      }
+      if (view.kind === 'review') {
+        const title = obligationTitle(view.obligation);
+        const full = isFullPayment(view.amount, view.obligation.outstanding_amount);
+        $('[data-review-summary]').textContent =
+          `Vas a simular un pago de ${formatCop(view.amount)} para «${title}».`;
+        $('[data-review-obligation]').textContent = title;
+        $('[data-review-amount]').textContent = formatCop(view.amount);
+        $('[data-review-outstanding]').textContent = formatCop(view.obligation.outstanding_amount);
+        $('[data-review-kind]').textContent = full ? 'Pago del saldo completo' : 'Pago parcial';
+        $<HTMLButtonElement>('[data-start]').textContent = state.busy === 'starting' ? 'Iniciando...' : 'Iniciar pago de demostración';
+      }
+      if (view.kind === 'transaction') {
+        const { transaction } = view;
+        const live = transaction.status === 'INITIATED';
+        const { title, text } = transactionHeading(transaction);
+        $('[data-transaction-title]').textContent = title;
+        $('[data-transaction-text]').textContent = text;
+        const badge = $<HTMLElement>('[data-transaction-badge]');
+        badge.className = `inline-flex whitespace-nowrap rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset ${TRANSACTION_STATUS_BADGES[transaction.status]}`;
+        badge.textContent = TRANSACTION_STATUS_LABELS[transaction.status];
+        lines($('[data-transaction-lines]'), transactionLines(transaction, view.obligation));
+        show($('[data-gateway]'), live);
+        $('[data-finished]').classList.toggle('flex', !live);
+        show($('[data-finished]'), !live);
+        const approved = transaction.status === 'APPROVED' && transaction.payment_id !== null;
+        const paymentLink = $<HTMLAnchorElement>('[data-payment-link]');
+        if (approved) paymentLink.href = paymentPath(transaction.payment_id!);
+        show(paymentLink, approved);
+        show($('[data-history-link]'), approved);
+        for (const button of $$<HTMLButtonElement>('[data-outcome]')) {
+          const outcome = button.dataset.outcome as DemoOutcome;
+          button.textContent = state.busy === outcome ? 'Procesando...' : button.dataset.label ?? button.textContent ?? '';
+        }
+        $<HTMLButtonElement>('[data-cancel]').textContent = state.busy === 'cancelling' ? 'Cancelando...' : 'Cancelar operación';
+        $<HTMLButtonElement>('[data-check]').textContent = state.busy === 'checking' ? 'Consultando...' : 'Consultar estado';
+        $('[data-polling]').textContent = live && state.polling ? 'El estado se actualiza automáticamente mientras la transacción está en curso.' : '';
+      }
+
+      // Really disabled while a request runs: no second POST. After an unknown outcome, only "Consultar estado".
+      for (const button of busyButtons()) {
+        const gatewayAction = button.matches('[data-outcome], [data-cancel]');
+        button.disabled = busy || state.sessionExpired || (gatewayAction && state.mustCheck);
+      }
+      amount.disabled = busy;
+      page.setAttribute('aria-busy', String(busy));
+
+      // Focus moves only when the screen changes (a new view, or a transaction that ended).
+      const key = view.kind === 'transaction' ? `transaction:${view.transaction.id}:${view.transaction.status}`
+        : view.kind === 'form' ? `form:${view.obligation.charge_id}` : view.kind;
+      if (key !== shown) {
+        const previous = shown;
+        shown = key;
+        if (previous && view.kind !== 'loading') page.querySelector<HTMLElement>(`[data-section="${view.kind}"] [data-focus]`)?.focus();
+      }
+      // A new error is announced and focused once (not again on every automatic update).
+      if (state.notice !== notified) {
+        notified = state.notice;
+        if (error) errorBox.focus();
+      }
+    }
+
+    for (const button of $$<HTMLButtonElement>('[data-outcome]')) button.dataset.label = button.textContent?.trim() ?? '';
+
+    const flow = createDemoPaymentFlow({
+      api: {
+        list: listPayableObligations,
+        start: (chargeId, value) => startDemoPayment(chargeId, value, csrfToken),
+        get: getDemoPayment,
+        complete: (id, outcome) => completeDemoPayment(id, outcome, csrfToken),
+        cancel: (id) => cancelDemoPayment(id, csrfToken)
+      },
+      render,
+      remember(transactionId) {
+        // Only the id travels in the URL (a reload resumes it); nothing is stored in the browser.
+        const url = new URL(window.location.href);
+        if (transactionId === null) url.searchParams.delete('transaction');
+        else url.searchParams.set('transaction', String(transactionId));
+        if (url.href !== window.location.href) history.replaceState(null, '', url);
+      }
+    });
+
+    $('[data-obligations]').addEventListener('click', (event) => {
+      const button = (event.target as Element).closest<HTMLButtonElement>('[data-select]');
+      if (button) flow.select(Number(button.dataset.select));
+    });
+    $<HTMLFormElement>('[data-amount-form]').addEventListener('submit', (event) => {
+      event.preventDefault();
+      flow.review(amount.value);
+    });
+    for (const button of $$<HTMLButtonElement>('[data-back]')) button.addEventListener('click', () => void flow.back());
+    $('[data-retry]').addEventListener('click', () => void flow.retry());
+    $('[data-edit]').addEventListener('click', () => flow.edit());
+    $('[data-start]').addEventListener('click', () => void flow.start());
+    for (const button of $$<HTMLButtonElement>('[data-outcome]')) {
+      button.addEventListener('click', () => void flow.complete(button.dataset.outcome as DemoOutcome));
+    }
+    $('[data-check]').addEventListener('click', () => void flow.refresh());
+    $('[data-cancel]').addEventListener('click', () => {
+      if (flow.state.busy === null) dialog.showModal();
+    });
+    $('[data-cancel-keep]').addEventListener('click', () => dialog.close());
+    $('[data-cancel-ok]').addEventListener('click', () => {
+      dialog.close();
+      void flow.cancel();
+    });
+    window.addEventListener('pagehide', () => flow.dispose());
+
+    void flow.init(parseTransactionParam(window.location.search));
+  }
+</script>

@@ -6,7 +6,7 @@ dates, the payment) is decided by services/demo_payments.py. Any other field is 
 (extra="forbid"): a resident_id, a reference, another amount or another charge never get in.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Self
 
@@ -20,10 +20,16 @@ from pydantic import (
 )
 
 from app.core.validation import invalid
-from app.models import DemoPaymentTransactionStatus
+from app.models import DemoPaymentTransactionStatus, FinancialConcept
+from app.schemas.charge import period_text
 from app.schemas.invitation import ID_MAX
 from app.schemas.payment import clean_amount
-from app.services.demo_payments import DemoOutcome, DemoPaymentTransactionResult
+from app.services.allocation import ChargeStatus
+from app.services.demo_payments import (
+    DemoOutcome,
+    DemoPaymentTransactionResult,
+    PayableCharge,
+)
 
 AMOUNT_NOT_FLOAT_MESSAGE = 'El monto debe enviarse como texto (p. ej., "150000.50") o como número entero.'
 OUTCOME_MESSAGE = "Selecciona un resultado de la pasarela de demostración: APPROVED, REJECTED o FAILED."
@@ -105,3 +111,46 @@ class DemoPaymentTransactionRead(BaseModel):
             finished_at=_utc(result.finished_at) if result.finished_at is not None else None,
             payment_id=result.payment_id, receipt_number=result.receipt_number,
         )
+
+
+class DemoPayableChargeRead(BaseModel):
+    """An obligation of the resident's current apartment that can still be paid (outstanding > 0).
+
+    Only what choosing one needs: no apartment, author, allocations or other residents. The
+    balances come from the persisted allocations; starting checks them again.
+    """
+
+    charge_id: int
+    concept: FinancialConcept
+    description: str | None
+    billing_period: str | None  # "YYYY-MM"; monthly fees only
+    due_date: date
+    amount: Decimal
+    applied_amount: Decimal
+    outstanding_amount: Decimal
+    status: ChargeStatus  # PENDING, PARTIAL or OVERDUE (due date already ended), never PAID
+    in_progress_transaction_id: int | None  # the resident's own live INITIATED transaction of it
+
+    @classmethod
+    def from_payable(cls, payable: PayableCharge) -> Self:
+        charge = payable.charge
+        return cls(
+            charge_id=charge.id, concept=charge.concept, description=charge.description,
+            billing_period=period_text(charge.billing_period), due_date=charge.due_date, amount=charge.amount,
+            applied_amount=charge.applied_amount, outstanding_amount=charge.outstanding_amount, status=charge.status,
+            in_progress_transaction_id=payable.in_progress_transaction_id,
+        )
+
+
+class DemoPayableChargeQuery(BaseModel):
+    """Query string of GET /resident/demo-payments/obligations: it takes none.
+
+    Unknown parameters are rejected with 422, as in HU-008 (a resident_id, a unit_id or a charge_id
+    never select anything: the resident is the session's).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class DemoPayableChargeList(BaseModel):
+    items: list[DemoPayableChargeRead]  # FIFO: due_date, created_at, id

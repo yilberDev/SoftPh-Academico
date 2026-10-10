@@ -1,11 +1,14 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import ResidentHeader from '../../components/ResidentHeader.astro';
+import { demoPaymentsEnabled } from '../../lib/resident/demo-payment-flag-server';
 
 // HU-007: main panel of the resident. The middleware only renders /resident
 // pages for a valid RESIDENTE session. The resident functions are added by
-// their own HUs (HU-008: "Mis pagos"; HU-009: "Enviar feedback", "Mis feedback").
+// their own HUs (HU-008: "Mis pagos"; HU-009: "Enviar feedback", "Mis feedback"; HU-010: the demo
+// payment, only while DEMO_PAYMENTS_ENABLED).
 const { user, csrf_token: csrfToken } = Astro.locals.auth!;
+const demoPayments = demoPaymentsEnabled();
 
 const cardLink =
   'block h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-emerald-300 hover:bg-emerald-50/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
@@ -24,6 +27,18 @@ const cardLink =
           <span class="mt-1 block text-sm text-slate-600">Consulta los pagos registrados en tu cuenta, su estado y su detalle.</span>
         </a>
       </li>
+      {
+        demoPayments && (
+          <li>
+            <a href="/resident/demo-payments" class={cardLink}>
+              <span class="block font-semibold text-slate-900">Pago de demostración</span>
+              <span class="mt-1 block text-sm text-slate-600">
+                Simula el pago de una obligación pendiente con la pasarela interna. Sin dinero real ni proveedores externos.
+              </span>
+            </a>
+          </li>
+        )
+      }
       <li>
         <div class="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 class="font-semibold text-slate-900">Feedback</h2>

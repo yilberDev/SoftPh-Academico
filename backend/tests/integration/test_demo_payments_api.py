@@ -46,6 +46,7 @@ BASE = f"{API}/resident/demo-payments"
 NO_STORE = "no-store"
 OPERATIONS = {
     ("post", f"{API}/resident/demo-payments"),
+    ("get", f"{API}/resident/demo-payments/obligations"),
     ("get", f"{API}/resident/demo-payments/{{transaction_id}}"),
     ("post", f"{API}/resident/demo-payments/{{transaction_id}}/complete"),
     ("post", f"{API}/resident/demo-payments/{{transaction_id}}/cancel"),
@@ -223,6 +224,7 @@ async def test_invalid_transaction_ids_are_rejected(client: AsyncClient, db_sess
 def requests_for(transaction_id: int, charge_id: int) -> list[tuple[str, str, Any]]:
     return [
         ("POST", BASE, {"charge_id": charge_id, "amount": "1000"}),
+        ("GET", f"{BASE}/obligations", None),
         ("GET", f"{BASE}/{transaction_id}", None),
         ("POST", f"{BASE}/{transaction_id}/complete", {"outcome": "APPROVED"}),
         ("POST", f"{BASE}/{transaction_id}/cancel", None),
@@ -466,7 +468,7 @@ async def test_disabled_the_routes_do_not_exist(disabled_client: AsyncClient, db
     assert response.status_code == 422
 
 
-def test_enabled_exactly_the_four_operations_are_published() -> None:
+def test_enabled_exactly_the_five_operations_are_published() -> None:
     enabled = create_app(get_settings().model_copy(update={"demo_payments_enabled": True}))
     assert demo_operations(enabled) == OPERATIONS
     assert demo_operations(app) == OPERATIONS  # the application under test (enabled by conftest)

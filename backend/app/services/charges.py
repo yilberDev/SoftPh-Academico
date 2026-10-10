@@ -969,6 +969,26 @@ async def list_charges(db: AsyncSession, query: ChargeListQuery, today: date) ->
     return ChargePage(items=items, page=query.page, page_size=query.page_size, total=total, total_pages=total_pages)
 
 
+async def list_outstanding_charges(db: AsyncSession, unit_id: int, today: date) -> tuple[ChargeSummary, ...]:
+    """Every obligation of one apartment not fully covered yet, in FIFO order (due_date, created_at, id).
+
+    The same columns, applied amount and status as list_charges (consistent reads, no locks): a
+    snapshot for display only. Whoever pays checks the balance again under the apartment lock.
+    """
+    if not _is_date(today):
+        raise ValueError("today is a calendar date (Bogotá).")
+    if not _positive_id(unit_id):
+        raise ValueError("unit_id is an apartment (a positive id).")
+    statement, applied, _ = _charge_columns(today)
+    rows = (
+        await db.execute(
+            statement.where(Charge.unit_id == unit_id, applied < Charge.amount)
+            .order_by(Charge.due_date, Charge.created_at, Charge.id)
+        )
+    ).all()
+    return tuple(_summary(row) for row in rows)
+
+
 async def get_charge(db: AsyncSession, charge_id: int, today: date) -> ChargeDetail:
     """One obligation with its apartment, origin, derived late fees and allocations (4 queries at most)."""
     if not _is_date(today):

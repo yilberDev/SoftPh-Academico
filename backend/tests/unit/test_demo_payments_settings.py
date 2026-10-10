@@ -54,7 +54,8 @@ def test_the_app_factory_refuses_production_even_without_the_validator() -> None
 
     assert demo_paths(valid) == []
     assert demo_paths(make(app_env="development", demo_payments_enabled=True)) == [
-        "/api/v1/resident/demo-payments", "/api/v1/resident/demo-payments/{transaction_id}",
+        "/api/v1/resident/demo-payments", "/api/v1/resident/demo-payments/obligations",
+        "/api/v1/resident/demo-payments/{transaction_id}",
         "/api/v1/resident/demo-payments/{transaction_id}/complete",
         "/api/v1/resident/demo-payments/{transaction_id}/cancel",
     ]
@@ -63,7 +64,8 @@ def test_the_app_factory_refuses_production_even_without_the_validator() -> None
 # --- include_demo_payments: checked on every call, whatever built the Settings -----------------------------
 
 DEMO_PATHS = [
-    "/api/v1/resident/demo-payments", "/api/v1/resident/demo-payments/{transaction_id}",
+    "/api/v1/resident/demo-payments", "/api/v1/resident/demo-payments/obligations",
+    "/api/v1/resident/demo-payments/{transaction_id}",
     "/api/v1/resident/demo-payments/{transaction_id}/complete",
     "/api/v1/resident/demo-payments/{transaction_id}/cancel",
 ]
@@ -115,7 +117,7 @@ def test_include_publishes_the_routes_once_outside_production() -> None:
     include_demo_payments(app, enabled)  # repeated: nothing is added (OpenAPI would hide a duplicate; routes do not)
 
     assert once == before + 1 and len(app.routes) == once
-    assert sorted({path for _, path in published(app)}) == sorted(DEMO_PATHS) and len(published(app)) == 4
+    assert sorted({path for _, path in published(app)}) == sorted(DEMO_PATHS) and len(published(app)) == 5
     # Every call checks its Settings again, even when the routes are already there.
     with pytest.raises(RuntimeError, match="DEMO_PAYMENTS_ENABLED no está habilitado"):
         include_demo_payments(app, make(app_env="test"))
@@ -150,7 +152,7 @@ def test_an_application_created_with_the_flag_gets_the_routes_once(app_env: str)
     routes = len(app.routes)
     include_demo_payments(app, enabled)  # again: nothing added
     assert len(app.routes) == routes
-    assert sorted({path for _, path in published(app)}) == sorted(DEMO_PATHS) and len(published(app)) == 4
+    assert sorted({path for _, path in published(app)}) == sorted(DEMO_PATHS) and len(published(app)) == 5
 
 
 def test_an_application_not_created_by_create_app_is_refused() -> None:
@@ -173,3 +175,20 @@ def test_the_real_configuration_with_the_flag_off_publishes_nothing() -> None:
 def test_read_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEMO_PAYMENTS_ENABLED", "true")
     assert make().demo_payments_enabled is True
+
+
+# The frontend reads the same variable with the same rule (frontend/src/lib/resident/demo-payment-flag.ts,
+# tests/demo-payment-flag.test.ts): if this table changes, that one must change too.
+@pytest.mark.parametrize(("value", "expected"), [
+    *((v, True) for v in ("true", "TRUE", "tRuE", "1", "yes", "YES", "y", "Y", "on", "ON", "t", "T")),
+    *((v, False) for v in ("false", "FALSE", "0", "no", "NO", "n", "N", "off", "OFF", "f", "F")),
+    *((v, None) for v in ("", " ", " true", "true ", "2", "1.0", "enabled", "si", "yes please")),
+])
+def test_the_values_accepted_from_the_environment(monkeypatch: pytest.MonkeyPatch, value: str,
+                                                  expected: bool | None) -> None:
+    monkeypatch.setenv("DEMO_PAYMENTS_ENABLED", value)
+    if expected is None:  # invalid: the backend does not start
+        with pytest.raises(ValidationError):
+            make()
+    else:
+        assert make().demo_payments_enabled is expected

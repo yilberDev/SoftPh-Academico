@@ -33,7 +33,7 @@ async function access(path: string, answer: SessionInfo | ApiError | Error): Pro
 }
 
 const ADMIN_PAGES = ['/admin', '/admin/', '/admin/residents', '/admin/blocks', '/admin/blocks/3', '/admin/towers/9', '/admin/residents/invite'];
-const RESIDENT_PAGES = ['/resident', '/resident/', '/resident/anything'];
+const RESIDENT_PAGES = ['/resident', '/resident/', '/resident/anything', '/resident/demo-payments'];
 const ALLOWED = (role: UserRole): PageAccess => ({ kind: 'allowed', session: session(role) });
 const TO_LOGIN: PageAccess = { kind: 'redirect', location: '/login' };
 const FORBIDDEN: PageAccess = { kind: 'forbidden' };

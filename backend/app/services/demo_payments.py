@@ -29,6 +29,9 @@ complete  outcome APPROVED | REJECTED | FAILED (the simulated answer, validated)
           COMMIT
 cancel    the same locks: INITIATED → CANCELLED; CANCELLED again returns it unchanged
 get       a read; an INITIATED transaction past its expiry is first made EXPIRED (same locks)
+payable   read only (no locks, nothing persisted): the obligations of the resident's current
+          apartment with an outstanding balance (charges.list_outstanding_charges) and the
+          resident's own live transaction of each; start checks everything again
 
 Every write to the charges, payments, allocations or demo transactions of an
 apartment holds the apartment lock (X), so operations on the same apartment run
@@ -87,6 +90,7 @@ from app.models import (
 from app.schemas.invitation import ID_MAX
 from app.services.allocation import receipt_number
 from app.services.audit import record_audit
+from app.services.charges import ChargeSummary, list_outstanding_charges
 from app.services.payments import money
 from app.services.structure import lock_unit_path
 
@@ -594,3 +598,43 @@ async def get_demo_payment(
         await db.rollback()
         raise
     return result
+
+
+# --- Obligations the resident can choose from (read only) --------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PayableCharge:
+    charge: ChargeSummary  # outstanding_amount > 0, from the persisted allocations
+    in_progress_transaction_id: int | None  # the resident's own INITIATED transaction of it, not expired yet
+
+
+async def list_payable_charges(db: AsyncSession, resident_id: int) -> tuple[PayableCharge, ...]:
+    """The obligations of the resident's current apartment that still have an outstanding balance.
+
+    A snapshot for choosing one, never an authority: start_demo_payment checks the residence, the
+    account and the balance again under the apartment lock. Nothing is locked or persisted here
+    (an expired transaction is simply not reported; get or start make it EXPIRED). Without a current
+    residence, or when the apartment was deleted, there is nothing to pay.
+    """
+    _check_resident_id(resident_id)
+    now = utc_now()
+    await db.commit()  # a fresh snapshot
+    if not _is_active_resident(await db.get(User, resident_id, populate_existing=True)):
+        raise ForbiddenError()
+    unit_id = await _current_unit_id(db, resident_id)
+    charges = () if unit_id is None else await list_outstanding_charges(db, unit_id, bogota_today(now))
+    charges = tuple(charge for charge in charges if not charge.unit.deleted)
+    live: dict[int, int] = {}
+    if charges:
+        rows = await db.execute(
+            select(DemoPaymentTransaction.charge_id, DemoPaymentTransaction.id).where(
+                DemoPaymentTransaction.resident_id == resident_id,
+                DemoPaymentTransaction.status == Status.INITIATED,
+                DemoPaymentTransaction.expires_at > now,  # is_expired: expired from expires_at on
+                DemoPaymentTransaction.charge_id.in_([charge.id for charge in charges]),
+            )
+        )
+        live = {row.charge_id: row.id for row in rows}
+    await db.commit()  # a read: nothing to keep
+    return tuple(PayableCharge(charge, live.get(charge.id)) for charge in charges)

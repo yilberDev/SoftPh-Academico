@@ -94,6 +94,7 @@ ACCESS_POLICY: dict[tuple[str, str], Access] = {
     ("GET", "/resident/feedback/{feedback_id}"): Access.RESIDENTE,
     # HU-010: the resident's demo payment transactions (only with DEMO_PAYMENTS_ENABLED; the resident is the session's).
     ("POST", "/resident/demo-payments"): Access.RESIDENTE,
+    ("GET", "/resident/demo-payments/obligations"): Access.RESIDENTE,  # HU-010-D: obligations it can pay
     ("GET", "/resident/demo-payments/{transaction_id}"): Access.RESIDENTE,
     ("POST", "/resident/demo-payments/{transaction_id}/complete"): Access.RESIDENTE,
     ("POST", "/resident/demo-payments/{transaction_id}/cancel"): Access.RESIDENTE,
@@ -376,6 +377,9 @@ async def test_resident_reaches_every_resident_route(
     unit_id = await db_session.scalar(text("SELECT unit_id FROM resident_units WHERE user_id = :u"), {"u": resident_id})
     await charge(db_session, int(unit_id), "100000", date(2026, 10, 5))
     fee = await db_session.scalar(text("SELECT MAX(id) FROM charges"))
+    payable = await client.get(f"{API}/resident/demo-payments/obligations", headers=headers)
+    assert payable.status_code == 200 and [i["charge_id"] for i in payable.json()["items"]] == [fee], payable.text
+    visited.add(("GET", "/resident/demo-payments/obligations"))
     started = await client.post(f"{API}/resident/demo-payments", headers=headers, json={"charge_id": fee, "amount": "40000"})
     assert started.status_code == 201, started.text
     visited.add(("POST", "/resident/demo-payments"))

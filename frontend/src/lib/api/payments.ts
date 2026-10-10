@@ -2,7 +2,10 @@ import { apiFetch } from './client';
 
 /** HU-004: manual payments (administrator only). Amounts travel as decimal strings ("150000.00"). */
 
-export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER';
+/** What the administrator can register (HU-004). */
+export type ManualPaymentMethod = 'CASH' | 'CARD' | 'TRANSFER';
+/** HU-010: DEMO_GATEWAY is only created by the resident's demo gateway, never by the administrator. */
+export type PaymentMethod = ManualPaymentMethod | 'DEMO_GATEWAY';
 export type PaymentConcept = 'MONTHLY_FEE' | 'LATE_FEE' | 'PENALTY' | 'OTHER';
 export type PaymentStatus = 'APPLIED' | 'PARTIALLY_APPLIED' | 'CREDIT';
 export type ReceiptEmailStatus = 'PENDING' | 'SENT' | 'FAILED';
@@ -12,7 +15,7 @@ export type PaymentSortField = 'date' | 'resident' | 'amount' | 'concept' | 'met
 export interface PaymentPayload {
   resident_id: number;
   amount: string;
-  method: PaymentMethod;
+  method: ManualPaymentMethod;
   concept: PaymentConcept;
   concept_description: string | null;
   payment_date: string; // YYYY-MM-DD

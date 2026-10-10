@@ -25,7 +25,13 @@ export default defineConfig({
   env: {
     schema: {
       // Read at runtime on the server only; never exposed to the browser.
-      API_INTERNAL_URL: envField.string({ context: 'server', access: 'secret', url: true })
+      API_INTERNAL_URL: envField.string({ context: 'server', access: 'secret', url: true }),
+      // HU-010: the same variable the backend reads (shared root .env), off when not set. Read at
+      // runtime on the server and never sent to the browser. A string, parsed with the backend's
+      // rule by lib/resident/demo-payment-flag.ts (envField.boolean only takes "true"/"false" and
+      // would fail on "1", which the backend accepts). It only hides the demo gateway's pages and
+      // links: the backend publishes its routes only when it is enabled there too.
+      DEMO_PAYMENTS_ENABLED: envField.string({ context: 'server', access: 'secret', optional: true })
     }
   },
 

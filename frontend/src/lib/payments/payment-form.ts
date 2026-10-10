@@ -1,5 +1,6 @@
 import { ApiError } from '../api/errors.ts';
 import type {
+  ManualPaymentMethod,
   PaymentConcept,
   PaymentMethod,
   PaymentPayload,
@@ -16,7 +17,12 @@ import type { Resident, ResidentPage } from '../api/residents.ts';
  * apartment, FIFO, credit, dates) is decided by the backend.
  */
 
-export const METHOD_LABELS: Record<PaymentMethod, string> = { CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia' };
+export const METHOD_LABELS: Record<PaymentMethod, string> = {
+  CASH: 'Efectivo',
+  CARD: 'Tarjeta',
+  TRANSFER: 'Transferencia',
+  DEMO_GATEWAY: 'Pasarela de demostración'
+};
 export const CONCEPT_LABELS: Record<PaymentConcept, string> = {
   MONTHLY_FEE: 'Mensualidad',
   LATE_FEE: 'Mora',
@@ -28,7 +34,8 @@ export const STATUS_LABELS: Record<PaymentStatus, string> = {
   PARTIALLY_APPLIED: 'Aplicado parcialmente',
   CREDIT: 'Saldo a favor'
 };
-export const METHODS = Object.keys(METHOD_LABELS) as PaymentMethod[];
+/** The methods the administrator can choose (HU-004): never DEMO_GATEWAY, which only HU-010 creates. */
+export const METHODS: ManualPaymentMethod[] = ['CASH', 'CARD', 'TRANSFER'];
 export const CONCEPTS = Object.keys(CONCEPT_LABELS) as PaymentConcept[];
 
 export const DESCRIPTION_MAX_LENGTH = 200;
@@ -177,7 +184,7 @@ export function validatePaymentForm(
     payload: {
       resident_id: values.residentId!,
       amount: amount.value,
-      method: values.method as PaymentMethod,
+      method: values.method as ManualPaymentMethod,
       concept: values.concept as PaymentConcept,
       // Only for "Otro"; never sent with another concept.
       concept_description: showsDescription(values.concept) ? description : null,
