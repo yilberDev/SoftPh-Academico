@@ -18,6 +18,7 @@ from collections.abc import Awaitable, Callable
 from datetime import date, timedelta
 from enum import StrEnum
 from typing import Any
+from urllib.parse import quote
 
 import pytest
 from httpx import AsyncClient, Response
@@ -71,6 +72,10 @@ ACCESS_POLICY: dict[tuple[str, str], Access] = {
     ("POST", "/resident-invitations/{invitation_id}/resend"): Access.ADMINISTRADOR,
     # HU-006: registered residents (read-only).
     ("GET", "/admin/residents"): Access.ADMINISTRADOR,
+    # HU-015: one registered resident: detail, update and logical deletion (writes with Origin + CSRF).
+    ("GET", "/admin/residents/{resident_id}"): Access.ADMINISTRADOR,
+    ("PATCH", "/admin/residents/{resident_id}"): Access.ADMINISTRADOR,
+    ("DELETE", "/admin/residents/{resident_id}"): Access.ADMINISTRADOR,
     # HU-004: manual payments.
     ("GET", "/admin/payments"): Access.ADMINISTRADOR,
     ("POST", "/admin/payments"): Access.ADMINISTRADOR,
@@ -141,6 +146,8 @@ BODIES: dict[tuple[str, str], Any] = {
     ("PATCH", "/towers/{tower_id}"): {"number": 2, "version": 1},
     ("POST", "/towers/{tower_id}/units"): {"number": 101},
     ("PATCH", "/units/{unit_id}"): {"number": 102, "version": 1},
+    ("PATCH", "/admin/residents/{resident_id}"): {"full_name": "Laura Gómez", "document_number": "1012345678",
+                                                  "phone": None, "updated_at": "2026-10-22T00:00:00Z"},
     ("POST", "/resident-invitations"): {
         "email": "nueva@example.com", "full_name": "Laura Gómez", "unit_id": 1, "validity_days": 7,
     },
@@ -151,6 +158,7 @@ QUERIES: dict[tuple[str, str], str] = {
     ("DELETE", "/blocks/{block_id}"): "?version=1",
     ("DELETE", "/towers/{tower_id}"): "?version=1",
     ("DELETE", "/units/{unit_id}"): "?version=1",
+    ("DELETE", "/admin/residents/{resident_id}"): "?updated_at=2026-10-22T00:00:00Z",
 }
 
 
@@ -312,6 +320,15 @@ async def test_administrator_reaches_every_administrator_route(
     await ok("GET", "/admin/charges/{charge_id}", f"/admin/charges/{charge['id']}", 200)
     spare = await ok("POST", "/towers/{tower_id}/units", f"/towers/{tower['id']}/units", 201, {"number": 103})
     await ok("DELETE", "/units/{unit_id}", f"/units/{spare['id']}?version={spare['version']}", 204)
+    # HU-015: the resident's detail, an update and the logical deletion, reached by the administrator. The
+    # apartment still owes the monthly fee and the penalty above, so the deletion is refused (CU-015 7b).
+    resident = await ok("GET", "/admin/residents/{resident_id}", f"/admin/residents/{resident_id}", 200)
+    resident = await ok("PATCH", "/admin/residents/{resident_id}", f"/admin/residents/{resident_id}", 200, {
+        "full_name": "Laura Gómez Ruiz", "document_number": "1012345678", "phone": None,
+        "updated_at": resident["updated_at"]})
+    blocked = await ok("DELETE", "/admin/residents/{resident_id}",
+                       f"/admin/residents/{resident_id}?updated_at={quote(resident['updated_at'])}", 409)
+    assert blocked["error"]["code"] == "RESIDENT_DELETION_BLOCKED"
     other_block = await ok("POST", "/blocks", "/blocks", 201, {"number": 9})
     other_tower = await ok("POST", "/blocks/{block_id}/towers", f"/blocks/{other_block['id']}/towers", 201, {"number": 1})
     await ok("DELETE", "/towers/{tower_id}", f"/towers/{other_tower['id']}?version={other_tower['version']}", 204)
@@ -510,7 +527,7 @@ async def test_resident_cannot_reach_resources_by_changing_identifiers(
     # Real ids, missing ids and invalid ids get the same answer: no existence leak.
     real = {"/blocks/{block_id}": block["id"], "/towers/{tower_id}": tower["id"], "/units/{unit_id}": unit["id"],
             "/resident-invitations/{invitation_id}/resend": invitation["id"], "/admin/feedback/{feedback_id}": feedback_id,
-            "/admin/charges/{charge_id}": charge["id"]}
+            "/admin/charges/{charge_id}": charge["id"], "/admin/residents/{resident_id}": resident.id}
     bodies = set()
     for route in ROUTES_OF[Access.ADMINISTRADOR]:
         if "{" not in route[1]:
@@ -529,9 +546,16 @@ async def test_resident_cannot_reach_resources_by_changing_identifiers(
 
 
 async def test_no_resident_route_selects_another_person() -> None:
-    # Nothing published takes a user/resident identifier: the identity is always the session.
+    # Nothing published outside administration takes a user/resident identifier: the identity is
+    # always the session. Only the administrator selects a resident (HU-015), on ADMINISTRADOR routes,
+    # where a resident gets 403 before anything is read (test_resident_cannot_reach_resources_...).
+    administration = {path for _, path in ROUTES_OF[Access.ADMINISTRADOR]}
     for path in app.openapi()["paths"]:
+        if path.removeprefix(API) in administration:
+            continue
         assert not re.search(r"\{(user|resident|owner|account)_?id\}", path), path
+    assert {path for path in administration if re.search(r"\{(user|resident|owner|account)_?id\}", path)} == {
+        "/admin/residents/{resident_id}"}
 
 
 async def test_unpublished_resident_routes_do_not_exist(

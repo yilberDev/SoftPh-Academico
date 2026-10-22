@@ -9,12 +9,15 @@ import {
   STATUS_LABELS,
   parseQuery
 } from '../../../lib/residents/residents-list';
+import { deletedNotice } from '../../../lib/residents/resident-detail';
 
 // HU-006. The middleware only renders /admin pages for a valid ADMINISTRADOR
 // session; the data is loaded by the browser from GET /api/v1/admin/residents,
 // which authorizes the request on its own (HU-018).
 const { csrf_token: csrfToken } = Astro.locals.auth!;
 const initial = parseQuery(Astro.url.searchParams);
+// HU-015 criterion 5.2: coming from a deletion, the list says so (the script then drops the parameter).
+const deleted = deletedNotice(Astro.url.searchParams);
 
 const columns = [
   { field: 'name', label: 'Nombre' },
@@ -48,6 +51,10 @@ const secondaryButton =
         Invitar residente
       </a>
     </div>
+
+    {deleted && (
+      <div role="status" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{deleted}</div>
+    )}
 
     <form data-filters class="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-[1fr_12rem]" role="search">
       <div>
@@ -84,7 +91,7 @@ const secondaryButton =
         {LOADING_MESSAGE}
       </p>
       <div class="overflow-x-auto">
-        <table class="w-full min-w-[56rem] divide-y divide-slate-200 text-left text-sm" data-table aria-busy="true">
+        <table class="w-full min-w-[62rem] divide-y divide-slate-200 text-left text-sm" data-table aria-busy="true">
           <thead class="bg-slate-50 text-slate-700">
             <tr>
               {
@@ -101,6 +108,7 @@ const secondaryButton =
                   </th>
                 ))
               }
+              <th scope="col" class="whitespace-nowrap px-4 py-2 font-medium"><span class="sr-only">Acciones</span></th>
             </tr>
           </thead>
           <tbody data-rows class="divide-y divide-slate-100"></tbody>
@@ -145,6 +153,7 @@ const secondaryButton =
     rangeText,
     type ListState
   } from '../../../lib/residents/residents-list';
+  import { residentPath } from '../../../lib/residents/resident-detail';
 
   const page = document.querySelector<HTMLElement>('[data-residents-page]')!;
   const form = page.querySelector<HTMLFormElement>('[data-filters]')!;
@@ -190,7 +199,16 @@ const secondaryButton =
     badge.className = `inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${BADGE[resident.status]}`;
     badge.textContent = STATUS_LABELS[resident.status];
     status.append(badge);
-    tr.append(status);
+    // HU-015: the resident's detail, where it can be updated or deleted.
+    const actions = document.createElement('td');
+    actions.className = 'whitespace-nowrap px-4 py-3 text-right';
+    const link = document.createElement('a');
+    link.href = residentPath(resident.id);
+    link.className = 'rounded font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+    link.textContent = 'Ver detalle';
+    link.setAttribute('aria-label', `Ver detalle de ${resident.full_name}`);
+    actions.append(link);
+    tr.append(status, actions);
     return tr;
   }
 

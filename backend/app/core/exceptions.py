@@ -257,6 +257,34 @@ class ResidenceChangedError(ConflictError):
     message = "La residencia del residente cambió mientras se registraba el pago. Intenta de nuevo."
 
 
+# --- HU-015: update and deletion of residents ------------------------------------------
+
+
+class ResidentNotFoundError(NotFoundError):
+    """A missing id, another role's account, a deleted one and one never activated look the same."""
+
+    code = "RESIDENT_NOT_FOUND"
+    message = "El residente no existe o ya no está registrado."
+
+
+class ResidentDeletionBlockedError(ConflictError):
+    """CU-015 7b: the resident's current apartment has money or a payment in progress; nothing is deleted.
+
+    The message names every condition to resolve; details repeat them one by one, keyed by a stable
+    condition name in "field" (pending_balance, credit_balance, demo_payment). No amounts are given.
+    """
+
+    code = "RESIDENT_DELETION_BLOCKED"
+
+    def __init__(self, reasons: list[tuple[str, str]]) -> None:
+        what = "esa condición" if len(reasons) == 1 else "esas condiciones"
+        super().__init__(
+            f"No se puede eliminar al residente porque {'; '.join(text for _, text in reasons)}. "
+            f"Resuelve {what} e inténtalo de nuevo."
+        )
+        self.details = [{"field": condition, "message": text} for condition, text in reasons]
+
+
 # --- HU-005: feedback management ------------------------------------------------------
 
 
