@@ -148,12 +148,24 @@ El feedback lo envían los residentes (HU-009); las pruebas también crean datos
 
 En `http://localhost:4321/admin/payments` (solo administrador) se registran los pagos manuales: residente (búsqueda por nombre o documento), monto, método (efectivo, tarjeta o transferencia), concepto (mensualidad, mora, penalización u otro con descripción) y fecha del pago. El backend determina la unidad vigente del residente, aplica el pago a los cargos pendientes de la unidad del más antiguo al más reciente (FIFO) y conserva el excedente como saldo a favor. Después envía el recibo en PDF al correo del residente (Mailpit en desarrollo: `http://localhost:8025`); si el correo falla, el pago queda registrado y se avisa aparte. Debajo está el resumen de pagos, con filtros por residente y fechas, orden y paginación.
 
-No hay dinero real ni pasarelas externas. HU-004 no genera cargos (mensualidades, mora): llegarán con su HU.
+No hay dinero real ni pasarelas externas. HU-004 no genera cargos (mensualidades, mora); cuando se implementó, se previó que llegarían con su HU. Hoy las obligaciones las registra y genera el administrador en `/admin/obligations`, una extensión técnica transversal descrita a continuación.
 
 | Endpoint | Uso |
 |---|---|
 | `POST /api/v1/admin/payments` | Registra un pago: `{resident_id, amount, method, concept, concept_description, payment_date}` (requiere `Origin` y `X-CSRF-Token`) |
 | `GET /api/v1/admin/payments?page=1&page_size=10&search=&date_from=&date_to=&sort_by=date&sort_order=desc` | Resumen de pagos (`sort_by`: `date`, `resident`, `amount`, `concept`, `method`, `status`) |
+
+## Obligaciones (extensión técnica transversal)
+
+En `http://localhost:4321/admin/obligations` (solo administrador) se generan las mensualidades de un periodo para los apartamentos activos que aún no la tienen (con vista previa), se registran obligaciones (mensualidad, mora, penalización u otro) y se consultan con filtros y su detalle. Al crear una obligación, el saldo a favor del apartamento se aplica a sus obligaciones pendientes. Un apartamento con saldo distinto de cero no se puede eliminar (`UNIT_HAS_BALANCE`). No es una historia de usuario del documento académico: su asociación a una HU está pendiente de decisión documental (ver [extensiones de diseño](docs/extensiones-diseno.md#extensión-técnica-transversal-de-gestión-de-cargos-y-obligaciones-detalle)).
+
+| Endpoint | Uso |
+|---|---|
+| `GET /api/v1/admin/charges` | Listado paginado de obligaciones (filtros por apartamento, bloque, torre, concepto, estado, periodo y vencimiento; orden por columna) |
+| `POST /api/v1/admin/charges` | Crea una obligación (requiere `Origin` y `X-CSRF-Token`) |
+| `GET /api/v1/admin/charges/{charge_id}` | Detalle de una obligación con los pagos aplicados |
+| `GET /api/v1/admin/charges/monthly/preview?billing_period=&amount=&due_date=` | Vista previa de la generación mensual (solo lectura) |
+| `POST /api/v1/admin/charges/monthly` | Genera las mensualidades confirmadas en la vista previa (requiere `Origin` y `X-CSRF-Token`; 409 `MONTHLY_PREVIEW_OUTDATED` si los datos cambiaron) |
 
 ## Pagos del residente (HU-008)
 
@@ -173,6 +185,39 @@ En `http://localhost:4321/resident/feedback/new` (solo residente, "Enviar feedba
 | `POST /api/v1/resident/feedback` | Envía un feedback: `{subject, message, category, urgency}` (`category`: `COMPLAINT`, `SUGGESTION`, `REQUEST`, `OTHER`; `urgency`: `HIGH`, `MEDIUM`, `LOW`; requiere `Origin` y `X-CSRF-Token`) |
 | `GET /api/v1/resident/feedback?page=1&page_size=10` | Feedback del residente de la sesión (`page_size` de 1 a 100) |
 | `GET /api/v1/resident/feedback/{id}` | Detalle de un feedback propio; uno de otro residente o inexistente responde 404 `NOT_FOUND` |
+
+## Pago electrónico de demostración (HU-010)
+
+Simulación interna de una pasarela de pagos para la demostración académica: **no hay dinero real, proveedores ni pasarelas externas**, no se piden datos de tarjetas, cuentas ni claves y no se envían correos automáticos. Solo existe con `DEMO_PAYMENTS_ENABLED=true` en el `.env` de la raíz (desactivada por defecto en `.env.example`; la API se niega a arrancar con ella activa y `APP_ENV=production`). Desactivada, las rutas de la API no se publican y las páginas responden 404 sin controles. Usa la tabla `demo_payment_transactions`: la base de desarrollo debe estar en el head de Alembic (`.venv/bin/alembic upgrade head`, que incluye la migración `41602195f69f`) antes de habilitarla.
+
+1. En `http://localhost:4321/resident/demo-payments` (solo residente, «Pago de demostración» en su panel) el residente elige una obligación pendiente, el monto (abono parcial hasta el saldo pendiente) y lo confirma; «Iniciar pago de demostración» crea la transacción, que vence a los 15 minutos.
+2. La transacción continúa en `/resident/demo-payments/checkout?transaction=<id>`: resumen, aviso de simulación y los instrumentos de prueba ficticios del catálogo del backend (tarjeta terminada en 0001: aprobación; terminada en 0002: rechazo por fondos insuficientes; cuenta de prueba: error técnico). «Procesar pago de demostración» envía solo `{instrument_id}` y **el backend determina el resultado**. Recargar la página recupera la transacción del servidor.
+3. Una aprobación registra un pago «Pasarela de demostración» aplicado solo a esa obligación; aparece en «Mis pagos» (HU-008) y en `/admin/payments` (HU-004). Su recibo PDF de demostración se genera bajo demanda en cada descarga (no se guarda ningún archivo). Rechazos, errores, cancelaciones y vencimientos no registran pagos.
+
+| Endpoint | Uso |
+|---|---|
+| `GET /api/v1/resident/demo-payments/obligations` | Obligaciones del residente con saldo pendiente (y su transacción en curso, si la hay) |
+| `GET /api/v1/resident/demo-payments/instruments` | Catálogo de instrumentos de prueba: `{items: [{id, label, kind, ending, expected_result, description}]}` |
+| `POST /api/v1/resident/demo-payments` | Inicia una transacción: `{charge_id, amount}` (requiere `Origin` y `X-CSRF-Token`) |
+| `GET /api/v1/resident/demo-payments/{transaction_id}` | Transacción propia, con `status`, `test_instrument` y `result_reason` |
+| `POST /api/v1/resident/demo-payments/{transaction_id}/complete` | Procesa con un instrumento: exactamente `{instrument_id}` (el antiguo `{outcome}` responde 422; requiere `Origin` y `X-CSRF-Token`) |
+| `POST /api/v1/resident/demo-payments/{transaction_id}/cancel` | Cancela una transacción en curso (requiere `Origin` y `X-CSRF-Token`) |
+| `GET /api/v1/resident/payments/{payment_id}/receipt` | Recibo PDF de demostración de un pago aprobado propio (no depende de la bandera) |
+
+Pruebas pertinentes (siempre sobre la base `*_test`; nunca ejecutes pytest y Playwright a la vez, porque ambos usan esa base):
+
+```bash
+cd backend
+.venv/bin/pytest tests/unit/test_demo_*.py tests/integration/test_demo_*.py tests/integration/test_access_control.py
+
+cd frontend
+npm test                                    # controladores de obligaciones y checkout (node --test)
+npx tsc --noEmit -p tsconfig.json
+npm run check                               # astro check
+npm run test:e2e -- e2e/demo-payments.spec.ts   # Playwright: levanta su propia API (puerto 8100, base *_test) y Astro (4400) con la simulación habilitada
+```
+
+Detalle de diseño y estado de cumplimiento: [extensiones de diseño](docs/extensiones-diseno.md#hu-010--realización-de-pagos-por-el-residente-detalle) y [HU-010](docs/historias-usuario/HU-010.md) (el criterio 2.2 está pendiente de validación académica).
 
 ## Residentes registrados (HU-006)
 
