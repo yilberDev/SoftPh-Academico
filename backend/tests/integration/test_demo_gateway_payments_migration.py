@@ -1,4 +1,4 @@
-"""HU-010 migration (f697625db563): head after 82e81b7ab23d, the new clauses of
+"""HU-010 migration (f697625db563): after 82e81b7ab23d, the new clauses of
 ck_payments_method_valid and ck_payments_source_valid as MySQL enforces them, round trip with the
 original clauses back, existing manual payments untouched and a protected downgrade.
 
@@ -109,11 +109,11 @@ def database(migrated_test_database: URL) -> Iterator[URL]:
         command.upgrade(config, "head")
 
 
-def test_revision_is_the_head_after_the_demo_transactions(migrated_test_database: URL) -> None:
+def test_revision_follows_the_demo_transactions(migrated_test_database: URL) -> None:
     script = ScriptDirectory.from_config(alembic_config(migrated_test_database))
-    assert script.get_heads() == [REVISION]
     assert script.get_revision(REVISION).down_revision == PREVIOUS
-    assert current_revision(migrated_test_database) == REVISION
+    # The demo checkout (41602195f69f) comes after it; test_demo_payment_transactions_database.py checks the head.
+    assert REVISION in {revision.revision for revision in script.walk_revisions()}
 
 
 def test_models_match_the_database(migrated_test_database: URL) -> None:

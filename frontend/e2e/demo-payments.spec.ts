@@ -14,6 +14,12 @@ import { createCharge, expect, normalized, test, type Api } from './support/fixt
  *
  * HU-010-E: the receipt of an approved payment is downloaded for real (browser → Astro proxy → FastAPI),
  * read in memory from Playwright's temporary download (nothing is written to the repository).
+ *
+ * The demo checkout has its own page (/resident/demo-payments/checkout?transaction=<id>), opened once the
+ * transaction is started; a reload reads it again from the server, and the legacy URL
+ * (/resident/demo-payments?transaction=<id>) leads to it. It lists the backend's real catalog of fictitious
+ * test instruments (GET /instruments); the resident chooses one and processes it, the page sends only its
+ * id and the result shown is the backend's.
  */
 
 type SignIn = (role: 'admin' | 'resident') => Promise<Api>;
@@ -70,13 +76,32 @@ async function download(page: Page, link: Locator): Promise<{ name: string; pdf:
   return { name: file.suggestedFilename(), pdf };
 }
 
+/** The backend's catalog (services/demo_instruments.py), in its order. */
+const INSTRUMENTS = {
+  approve: 'Tarjeta de prueba ficticia terminada en 0001',
+  funds: 'Tarjeta de prueba ficticia terminada en 0002',
+  technical: 'Cuenta de prueba ficticia'
+} as const;
+const instruments = (page: Page) => page.getByRole('group', { name: 'Instrumento de prueba ficticio' });
+const CHECKOUT_URL = /\/resident\/demo-payments\/checkout\?transaction=\d+$/;
+const choosing = (page: Page) => page.getByRole('heading', { name: 'Elige un instrumento de prueba' });
+const currentStep = (page: Page) => page.getByRole('list', { name: 'Pasos del pago de demostración' }).locator('[aria-current="step"]');
+const processButton = (page: Page) => page.getByRole('button', { name: 'Procesar pago de demostración' });
+
+/** Chooses a test instrument by its name and processes the payment. */
+async function processWith(page: Page, name: string): Promise<void> {
+  await instruments(page).getByRole('radio', { name }).check();
+  await processButton(page).click();
+}
+
 async function startPayment(page: Page, title: RegExp | string, amount?: string): Promise<void> {
   await obligation(page, title).getByRole('button', { name: 'Pagar esta obligación' }).click();
   if (amount !== undefined) await page.getByLabel('Monto a pagar (COP)').fill(amount);
   await page.getByRole('button', { name: 'Continuar' }).click();
   await expect(page.getByRole('heading', { name: 'Confirma el pago de demostración' })).toBeVisible();
   await page.getByRole('button', { name: 'Iniciar pago de demostración' }).click();
-  await expect(page.getByRole('heading', { name: 'Transacción de demostración en curso' })).toBeVisible();
+  await expect(page).toHaveURL(CHECKOUT_URL); // the checkout of the transaction just started
+  await expect(choosing(page)).toBeVisible();
 }
 
 test.describe('demo payment', () => {
@@ -97,6 +122,23 @@ test.describe('demo payment', () => {
     await expect(page.getByLabel(/tarjeta|cvv|cuenta|banco/i)).toHaveCount(0);
   });
 
+  test('the checkout without a transaction, or with one that is not the resident\'s: a safe exit, without data', async ({ page, signIn }) => {
+    await signIn('resident');
+    const posts = demoPosts(page);
+    await page.goto('/resident/demo-payments/checkout');
+    await expect(page.getByRole('heading', { name: 'No se indicó ninguna transacción de demostración.' })).toBeVisible();
+    await expect(main(page).getByRole('link', { name: 'Volver a mis obligaciones' })).toHaveAttribute('href', '/resident/demo-payments');
+    await expect(page.getByText('Entorno de simulación: no se realizará ningún cobro real')).toBeVisible();
+    const menu = page.getByRole('navigation', { name: 'Principal' });
+    await expect(menu.getByRole('link', { name: 'Pago de demostración' })).toHaveAttribute('aria-current', 'page');
+    // A transaction that does not exist answers like another resident's: nothing of it is shown.
+    await page.goto('/resident/demo-payments/checkout?transaction=999999');
+    await expect(page.getByRole('heading', { name: 'La transacción no existe o no pertenece a tu cuenta.' })).toBeVisible();
+    await expect(page.getByRole('radio')).toHaveCount(0);
+    await expect(page.getByText('Referencia de demostración')).toBeHidden();
+    expect(posts).toHaveLength(0);
+  });
+
   test('a partial approval: list, form with the balance, review, gateway, the result and the history', async ({ page, seed, admin, signIn }) => {
     await prepare(admin.api, seed, signIn);
     await open(page);
@@ -114,24 +156,59 @@ test.describe('demo payment', () => {
     const review = page.locator('[data-section="review"]');
     expect(normalized(await definition(review, 'Monto a pagar').textContent())).toBe('$ 40.000,50');
     await expect(definition(review, 'Tipo de pago')).toHaveText('Pago parcial');
+    expect(normalized(await definition(review, 'Saldo pendiente si se aprueba').textContent())).toBe('$ 59.999,50');
     expect(posts).toHaveLength(0); // nothing sent before confirming
 
+    // Started on the obligations page, continued on the checkout of that transaction.
     await page.getByRole('button', { name: 'Iniciar pago de demostración' }).click();
-    await expect(page.getByRole('heading', { name: 'Transacción de demostración en curso' })).toBeVisible();
+    await expect(page).toHaveURL(CHECKOUT_URL);
+    await expect(choosing(page)).toBeVisible();
+    await expect(choosing(page)).toBeFocused(); // the focus follows the new view
     expect(posts).toHaveLength(1);
     expect(posts[0].postDataJSON()).toEqual({ charge_id: expect.any(Number), amount: '40000.50' }); // text, never a float
+    await expect(page.getByText('Entorno de simulación: no se realizará ningún cobro real')).toBeVisible();
+    await expect(currentStep(page)).toContainText('Instrumento de prueba');
+    await expect(main(page).locator('[data-summary-concept]')).toHaveText(/^Mensualidad — /);
+    expect(normalized(await main(page).locator('[data-summary-amount]').textContent())).toBe('$ 40.000,50');
     await expect(definition(gateway(page), 'Referencia de demostración')).toHaveText(/^DEMO-[0-9A-F]{16}$/);
     await expect(definition(gateway(page), 'Vence')).toBeVisible();
-    await expect(page).toHaveURL(/\?transaction=\d+$/);
+    expect(normalized(await definition(gateway(page), 'Saldo pendiente actual').textContent())).toBe('$ 100.000,00');
 
     const transactionId = Number(new URL(page.url()).searchParams.get('transaction'));
     await expect(receiptLinks(page)).toHaveCount(0); // INITIATED: no receipt
-    await page.getByRole('button', { name: 'Simular aprobación' }).click();
+
+    // The checkout: the three instruments of the backend's catalog, in its order, nothing chosen yet.
+    const radios = instruments(page).getByRole('radio');
+    await expect(radios).toHaveCount(3);
+    await expect(radios.nth(0)).toHaveAccessibleName(INSTRUMENTS.approve);
+    await expect(radios.nth(1)).toHaveAccessibleName(INSTRUMENTS.funds);
+    await expect(radios.nth(2)).toHaveAccessibleName(INSTRUMENTS.technical);
+    await expect(radios.nth(0)).toHaveAccessibleDescription(/Tarjeta de prueba · terminación ficticia 0001.*simula un pago aprobado.*Resultado esperado: simula una aprobación\./);
+    await expect(radios.nth(2)).toHaveAccessibleDescription(/^Cuenta de prueba\s*Instrumento ficticio.*No es una cuenta real\.\s*Resultado esperado: simula un error de procesamiento\.$/);
+    for (const radio of await radios.all()) await expect(radio).not.toBeChecked();
+    await expect(processButton(page)).toBeDisabled(); // nothing is processed without an instrument
+    await expect(page.getByText('Selecciona un instrumento de prueba para continuar.')).toBeVisible();
+    await expect(page.getByRole('note')).toContainText('no se realiza ningún cobro real'); // the notice stays visible
+    // Never a payment-data field: only the three radio buttons.
+    await expect(gateway(page).locator('input:not([type="radio"]), textarea, select')).toHaveCount(0);
+    await expect(page.locator('input[autocomplete^="cc-"], input[type="password"]')).toHaveCount(0);
+    expect(posts).toHaveLength(1);
+
+    await instruments(page).getByRole('radio', { name: INSTRUMENTS.approve }).check();
+    await expect(processButton(page)).toBeEnabled();
+    await expect(page.getByText(`Se procesará con «${INSTRUMENTS.approve}». El resultado lo confirma el servidor.`)).toBeVisible();
+    await processButton(page).click();
+    // Its own processing view first (announced), then the result the server confirmed.
+    await expect(page.getByRole('heading', { name: 'Procesando el pago de demostración…' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Pago aprobado y registrado' })).toBeVisible();
+    await expect(currentStep(page)).toContainText('Resultado');
     await expect(gateway(page)).toContainText('Aprobado');
+    await expect(definition(gateway(page), 'Instrumento de prueba')).toHaveText(INSTRUMENTS.approve);
     await expect(definition(gateway(page), 'Número del pago en tu historial')).toHaveText(/^RC-\d{8}$/);
     const receiptNumber = normalized(await definition(gateway(page), 'Número del pago en tu historial').textContent());
     expect(posts).toHaveLength(2);
+    expect(posts[1].url()).toMatch(new RegExp(`/api/v1/resident/demo-payments/${transactionId}/complete$`));
+    expect(posts[1].postDataJSON()).toEqual({ instrument_id: 'TEST_CARD_APPROVE' }); // only the id: never an outcome or a status
 
     // HU-010-E: one receipt link, by the persisted payment's id (confirmed by the backend), never the transaction's.
     const historyHref = await page.getByRole('link', { name: 'Ver el pago en Mis pagos' }).getAttribute('href');
@@ -174,44 +251,92 @@ test.describe('demo payment', () => {
     const after = obligation(page, /^Mensualidad — /);
     expect(normalized(await definition(after, 'Abonado').textContent())).toBe('$ 40.000,50');
     expect(normalized(await definition(after, 'Saldo pendiente').textContent())).toBe('$ 59.999,50');
+
+    // HU-010 criterion 6.1: the administrator sees this payment (made in this test) in the payments summary.
+    await signIn('admin');
+    await page.goto('/admin/payments');
+    const adminRow = page.locator('[data-rows] tr').filter({ hasText: receiptNumber });
+    await expect(adminRow).toHaveCount(1);
+    await expect(adminRow).toContainText('Laura Gómez');
+    await expect(adminRow).toContainText(`${receiptNumber} · B1-TO1-APTO-101`);
+    await expect(adminRow).toContainText('Pasarela de demostración');
+    await expect(adminRow).toContainText('Aplicado');
+    await expect(adminRow).not.toContainText('Aplicado parcialmente');
+    expect(normalized(await adminRow.textContent())).toContain('$ 40.000,50');
   });
 
-  test('rejection after a reload (resumed from the URL), a processing error and a cancellation: nothing is paid', async ({ page, seed, admin, signIn }) => {
+  test('a reload recovers the checkout without starting it again; a rejection, another instrument (a new transaction), a processing error and a cancellation: nothing is paid', async ({ page, seed, admin, signIn }) => {
     await prepare(admin.api, seed, signIn);
     await open(page);
+    const posts = demoPosts(page);
     await startPayment(page, 'Penalización: Ruido E2E');
     const url = page.url();
+    const transactionId = Number(new URL(url).searchParams.get('transaction'));
+    expect(posts).toHaveLength(1); // the start
+
+    // A reload reads the same transaction from the server: never a second one.
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Transacción de demostración en curso' })).toBeVisible(); // resumed
-    await expect(definition(gateway(page), 'Obligación')).toHaveText('Penalización: Ruido E2E');
+    await expect(choosing(page)).toBeVisible();
     expect(page.url()).toBe(url);
+    await expect(definition(gateway(page), 'Obligación')).toHaveText('Penalización: Ruido E2E');
+    // The legacy URL of the transaction leads to the same checkout.
+    await page.goto(`/resident/demo-payments?transaction=${transactionId}`);
+    await expect(page).toHaveURL(url);
+    await expect(choosing(page)).toBeVisible();
+    expect(posts).toHaveLength(1); // still only the start
     await expect(receiptLinks(page)).toHaveCount(0); // INITIATED
-    await page.getByRole('button', { name: 'Simular rechazo' }).click();
+
+    // Keyboard only: the radio group is reached with Tab and the arrows move the choice.
+    await instruments(page).getByRole('radio', { name: INSTRUMENTS.approve }).focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(instruments(page).getByRole('radio', { name: INSTRUMENTS.funds })).toBeChecked();
+    await expect(instruments(page).getByRole('radio', { name: INSTRUMENTS.approve })).not.toBeChecked();
+    await page.keyboard.press('Tab');
+    await expect(processButton(page)).toBeFocused();
+    await page.keyboard.press('Enter');
     await expect(page.getByRole('heading', { name: 'Pago rechazado' })).toBeVisible();
     await expect(gateway(page)).toContainText('la obligación sigue pendiente');
+    await expect(gateway(page)).toContainText('Motivo simulado: fondos insuficientes en la tarjeta de prueba ficticia');
+    await expect(definition(gateway(page), 'Instrumento de prueba')).toHaveText(INSTRUMENTS.funds);
     await expect(receiptLinks(page)).toHaveCount(0); // REJECTED: nothing was paid, no receipt
+    expect(posts.slice(1).map((post) => post.postDataJSON())).toEqual([{ instrument_id: 'TEST_CARD_INSUFFICIENT_FUNDS' }]);
+    // Read again after a reload: the result, the instrument and the reason the backend stored.
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Pago rechazado' })).toBeVisible();
+    await expect(gateway(page)).toContainText('Motivo simulado: fondos insuficientes');
+    await expect(definition(gateway(page), 'Instrumento de prueba')).toHaveText(INSTRUMENTS.funds);
+    await expect(instruments(page)).toBeHidden(); // a result offers no instrument: it cannot be processed again
 
-    await page.getByRole('button', { name: 'Volver a mis obligaciones' }).click();
+    // Another instrument: a NEW transaction (same obligation and amount) and its own checkout.
+    await expect(page.getByText('Se iniciará una nueva transacción de demostración')).toBeVisible();
+    await page.getByRole('button', { name: 'Intentar con otro instrumento' }).click();
+    await page.waitForURL((next) => next.pathname === '/resident/demo-payments/checkout' &&
+      Number(next.searchParams.get('transaction')) > transactionId);
+    await expect(choosing(page)).toBeVisible();
+    expect(posts.at(-1)!.postDataJSON()).toEqual({ charge_id: expect.any(Number), amount: '50000.00' });
+    await expect(instruments(page).getByRole('radio', { name: INSTRUMENTS.funds })).not.toBeChecked(); // a new transaction, no choice
+    await processWith(page, INSTRUMENTS.technical);
+    await expect(page.getByRole('heading', { name: 'Error de procesamiento simulado' })).toBeVisible();
+    await expect(gateway(page)).toContainText('no debe considerarse pagada');
+    await expect(gateway(page)).toContainText('Motivo simulado: error técnico de procesamiento');
+    await expect(definition(gateway(page), 'Instrumento de prueba')).toHaveText(INSTRUMENTS.technical);
+    await expect(receiptLinks(page)).toHaveCount(0); // FAILED
+    expect(posts.at(-1)!.postDataJSON()).toEqual({ instrument_id: 'TEST_ACCOUNT_TECHNICAL_ERROR' });
+
+    // A cancellation: confirmed in a dialog, then back to the obligations, which say so.
+    await main(page).getByRole('link', { name: 'Volver a mis obligaciones' }).click();
     await expect(page).toHaveURL(/\/resident\/demo-payments$/);
     await startPayment(page, 'Penalización: Ruido E2E', '20000');
-    await page.getByRole('button', { name: 'Simular error de procesamiento' }).click();
-    await expect(page.getByRole('heading', { name: 'El pago no pudo aplicarse' })).toBeVisible();
-    await expect(gateway(page)).toContainText('no debe considerarse pagada');
-    await expect(receiptLinks(page)).toHaveCount(0); // FAILED
-
-    await page.getByRole('button', { name: 'Volver a mis obligaciones' }).click();
-    await startPayment(page, 'Penalización: Ruido E2E');
     await page.getByRole('button', { name: 'Cancelar operación' }).click();
     const dialog = page.getByRole('dialog', { name: '¿Cancelar la operación?' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Seguir con la operación' }).click();
-    await expect(page.getByRole('heading', { name: 'Transacción de demostración en curso' })).toBeVisible();
+    await expect(choosing(page)).toBeVisible();
     await page.getByRole('button', { name: 'Cancelar operación' }).click();
     await dialog.getByRole('button', { name: 'Cancelar operación' }).click();
-    await expect(page.getByRole('heading', { name: 'Operación cancelada' })).toBeVisible();
-    await expect(receiptLinks(page)).toHaveCount(0); // CANCELLED
+    await expect(page).toHaveURL(/\/resident\/demo-payments$/); // the notice is not kept in the URL
+    await expect(page.getByRole('status').filter({ hasText: 'Cancelaste la operación. No se aplicó ningún pago' })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Volver a mis obligaciones' }).click();
     const penalty = obligation(page, 'Penalización: Ruido E2E');
     expect(normalized(await definition(penalty, 'Saldo pendiente').textContent())).toBe('$ 50.000,00');
     await page.goto('/resident/payments');
@@ -264,7 +389,7 @@ test.describe('demo payment', () => {
     expect(posts).toHaveLength(0);
   });
 
-  test('360 px: no horizontal scroll in the list, the form and the gateway', async ({ page, seed, admin, signIn }) => {
+  test('360 px: no horizontal scroll in the list, the form, the review, the checkout and the result', async ({ page, seed, admin, signIn }) => {
     await page.setViewportSize({ width: 360, height: 800 });
     await prepare(admin.api, seed, signIn);
     await open(page);
@@ -280,11 +405,12 @@ test.describe('demo payment', () => {
     await page.getByRole('button', { name: 'Continuar' }).click();
     await noScroll('review');
     await page.getByRole('button', { name: 'Iniciar pago de demostración' }).click();
-    await expect(page.getByRole('button', { name: 'Simular aprobación' })).toBeVisible();
-    await noScroll('gateway');
-    await page.getByRole('button', { name: 'Cancelar operación' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Cancelar operación' }).click();
-    await expect(page.getByRole('heading', { name: 'Operación cancelada' })).toBeVisible();
+    await expect(page).toHaveURL(CHECKOUT_URL);
+    await expect(instruments(page).getByRole('radio')).toHaveCount(3);
+    await instruments(page).getByRole('radio', { name: INSTRUMENTS.funds }).check();
+    await noScroll('checkout');
+    await processButton(page).click();
+    await expect(page.getByRole('heading', { name: 'Pago rechazado' })).toBeVisible();
     await noScroll('result');
   });
 });

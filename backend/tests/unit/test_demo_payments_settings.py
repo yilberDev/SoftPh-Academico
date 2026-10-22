@@ -55,6 +55,7 @@ def test_the_app_factory_refuses_production_even_without_the_validator() -> None
     assert demo_paths(valid) == []
     assert demo_paths(make(app_env="development", demo_payments_enabled=True)) == [
         "/api/v1/resident/demo-payments", "/api/v1/resident/demo-payments/obligations",
+        "/api/v1/resident/demo-payments/instruments",
         "/api/v1/resident/demo-payments/{transaction_id}",
         "/api/v1/resident/demo-payments/{transaction_id}/complete",
         "/api/v1/resident/demo-payments/{transaction_id}/cancel",
@@ -65,6 +66,7 @@ def test_the_app_factory_refuses_production_even_without_the_validator() -> None
 
 DEMO_PATHS = [
     "/api/v1/resident/demo-payments", "/api/v1/resident/demo-payments/obligations",
+    "/api/v1/resident/demo-payments/instruments",
     "/api/v1/resident/demo-payments/{transaction_id}",
     "/api/v1/resident/demo-payments/{transaction_id}/complete",
     "/api/v1/resident/demo-payments/{transaction_id}/cancel",
@@ -117,7 +119,7 @@ def test_include_publishes_the_routes_once_outside_production() -> None:
     include_demo_payments(app, enabled)  # repeated: nothing is added (OpenAPI would hide a duplicate; routes do not)
 
     assert once == before + 1 and len(app.routes) == once
-    assert sorted({path for _, path in published(app)}) == sorted(DEMO_PATHS) and len(published(app)) == 5
+    assert sorted({path for _, path in published(app)}) == sorted(DEMO_PATHS) and len(published(app)) == 6
     # Every call checks its Settings again, even when the routes are already there.
     with pytest.raises(RuntimeError, match="DEMO_PAYMENTS_ENABLED no está habilitado"):
         include_demo_payments(app, make(app_env="test"))
@@ -152,7 +154,7 @@ def test_an_application_created_with_the_flag_gets_the_routes_once(app_env: str)
     routes = len(app.routes)
     include_demo_payments(app, enabled)  # again: nothing added
     assert len(app.routes) == routes
-    assert sorted({path for _, path in published(app)}) == sorted(DEMO_PATHS) and len(published(app)) == 5
+    assert sorted({path for _, path in published(app)}) == sorted(DEMO_PATHS) and len(published(app)) == 6
 
 
 def test_an_application_not_created_by_create_app_is_refused() -> None:

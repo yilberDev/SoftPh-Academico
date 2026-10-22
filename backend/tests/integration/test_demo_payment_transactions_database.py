@@ -1,21 +1,29 @@
 """HU-010 (persistence): the real structure of demo_payment_transactions and the rules MySQL
-enforces itself (DECIMAL money, CHECKs, UNIQUE, foreign keys RESTRICT).
+enforces itself (DECIMAL money, CHECKs, UNIQUE, foreign keys RESTRICT), including the test
+instrument of the demo checkout (migration 41602195f69f, the head: its chain, round trip,
+existing rows and protected downgrade are at the end; they only ever run on the *_test database).
 
 Every rule here is checked with raw SQL against MySQL: the model has no Python
 validation of its own (its agreement with the database is `alembic check`, in
 test_demo_payment_transactions_migration.py).
 """
 
+from collections.abc import Iterator
 from datetime import timedelta
 from decimal import Decimal
 from typing import Any
 
 import pytest
-from sqlalchemy import text
+from alembic import command
+from alembic.script import ScriptDirectory
+from sqlalchemy import CheckConstraint, text
+from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import utc_now
 from app.models import DemoPaymentTransaction, DemoPaymentTransactionStatus
+from tests.integration.conftest import alembic_config
+from tests.integration.test_demo_gateway_payments_migration import SETUP, current_revision, run_sql
 from tests.integration.test_payments_database import (
     CHECK_VIOLATED,
     DUPLICATE,
@@ -37,6 +45,7 @@ INSERT = (
     "finished_at, payment_id) VALUES (:r, :c, :amount, :ref, :status, "
     "UTC_TIMESTAMP(6) + INTERVAL 15 MINUTE, :finished, :p)"
 )
+WITH_INSTRUMENT = INSERT.replace("payment_id)", "payment_id, test_instrument)").replace(":p)", ":p, :instrument)")
 
 
 @pytest.fixture
@@ -95,6 +104,7 @@ async def test_columns(db_session: AsyncSession) -> None:
         ("expires_at", "datetime(6)", "NO", None, None),
         ("finished_at", "datetime(6)", "YES", None, None),
         ("payment_id", "bigint", "YES", None, None),
+        ("test_instrument", "varchar(40)", "YES", None, "utf8mb4_0900_bin"),  # 41602195f69f: an id, NULL allowed
     ]
     # Nothing derived (balances, applied amounts) and no card data: only the columns above.
 
@@ -117,6 +127,9 @@ async def test_constraints_indexes_and_foreign_keys(db_session: AsyncSession) ->
         ("ck_demo_payment_transactions_status_valid",
          "(`status` in (_utf8mb4\\'INITIATED\\',_utf8mb4\\'APPROVED\\',_utf8mb4\\'REJECTED\\',"
          "_utf8mb4\\'FAILED\\',_utf8mb4\\'CANCELLED\\',_utf8mb4\\'EXPIRED\\'))"),
+        ("ck_demo_payment_transactions_test_instrument_resolved",
+         ("((`test_instrument` is null) or (`status` in (_utf8mb4\\'APPROVED\\',_utf8mb4\\'REJECTED\\',"
+          "_utf8mb4\\'FAILED\\')))")),
     ]
     assert await rows(
         db_session,
@@ -274,3 +287,183 @@ async def test_the_model_maps_the_table(db_session: AsyncSession, ids: dict[str,
     # created_at is set by MySQL (UTC session time zone), close to the application's UTC clock.
     assert abs(transaction.created_at - now) < timedelta(minutes=1)
     assert transaction.expires_at == now + timedelta(minutes=15)
+
+
+# --- The test instrument of the demo checkout (41602195f69f) ----------------------------------------------------
+
+NEW_REVISION = "41602195f69f"
+PREVIOUS_REVISION = "f697625db563"
+
+
+def resolved(ids: dict[str, int], status: str, **changes: Any) -> dict[str, Any]:
+    """A finished transaction with the given status (and its payment when APPROVED)."""
+    payment = ids["payment"] if status == "APPROVED" else None
+    return values(ids, status=status, finished=FINISHED, p=payment) | changes
+
+
+@pytest.mark.parametrize("status", ["APPROVED", "REJECTED", "FAILED"])
+async def test_a_resolved_transaction_keeps_its_instrument(db_session: AsyncSession, ids: dict[str, int],
+                                                           status: str) -> None:
+    await db_session.execute(text(WITH_INSTRUMENT), resolved(ids, status, instrument="TEST_CARD_APPROVE"))
+    assert await rows(db_session, "SELECT status, test_instrument FROM demo_payment_transactions") == [
+        (status, "TEST_CARD_APPROVE")
+    ]
+
+
+@pytest.mark.parametrize("status", ["INITIATED", "CANCELLED", "EXPIRED"])
+async def test_an_unresolved_transaction_has_no_instrument(db_session: AsyncSession, ids: dict[str, int],
+                                                           status: str) -> None:
+    finished = None if status == "INITIATED" else FINISHED
+    await rejects(db_session, WITH_INSTRUMENT, CHECK_VIOLATED,
+                  **values(ids, status=status, finished=finished, instrument="TEST_CARD_APPROVE"))
+    await db_session.execute(text(WITH_INSTRUMENT), values(ids, status=status, finished=finished, instrument=None))
+    assert await rows(db_session, "SELECT status, test_instrument FROM demo_payment_transactions") == [(status, None)]
+
+
+async def test_without_an_instrument_every_status_stays_valid(db_session: AsyncSession, ids: dict[str, int]) -> None:
+    # As every transaction written before 41602195f69f: the column is simply NULL.
+    for number, status in enumerate(DemoPaymentTransactionStatus):
+        finished = None if status == DemoPaymentTransactionStatus.INITIATED else FINISHED
+        payment = ids["payment"] if status == DemoPaymentTransactionStatus.APPROVED else None
+        await insert(db_session, **values(ids, ref=f"DEMO-{number}", status=status.value, finished=finished, p=payment))
+    assert await rows(db_session, "SELECT status, test_instrument FROM demo_payment_transactions ORDER BY id") == [
+        (status.value, None) for status in DemoPaymentTransactionStatus
+    ]
+
+
+async def test_the_instrument_comes_with_the_result(db_session: AsyncSession, ids: dict[str, int]) -> None:
+    transaction = await insert(db_session, **values(ids))
+    # Never on a pending transaction...
+    await rejects(db_session, "UPDATE demo_payment_transactions SET test_instrument = 'TEST_CARD_APPROVE' WHERE id = :id",
+                  CHECK_VIOLATED, id=transaction)
+    # ...but together with its result, in one UPDATE.
+    await db_session.execute(text(
+        "UPDATE demo_payment_transactions SET status = 'REJECTED', finished_at = UTC_TIMESTAMP(6), "
+        "test_instrument = 'TEST_CARD_INSUFFICIENT_FUNDS' WHERE id = :id"), {"id": transaction})
+    assert await rows(db_session, "SELECT status, test_instrument FROM demo_payment_transactions") == [
+        ("REJECTED", "TEST_CARD_INSUFFICIENT_FUNDS")
+    ]
+
+
+async def test_the_instrument_is_exact_and_short(db_session: AsyncSession, ids: dict[str, int]) -> None:
+    await db_session.execute(text(WITH_INSTRUMENT), resolved(ids, "REJECTED", ref="DEMO-1", instrument="I" * 40))
+    await rejects(db_session, WITH_INSTRUMENT, DATA_TOO_LONG, **resolved(ids, "REJECTED", ref="DEMO-2", instrument="J" * 41))
+    await db_session.execute(text(WITH_INSTRUMENT), resolved(ids, "FAILED", ref="DEMO-3", instrument="TEST_CARD_APPROVE"))
+    # Binary collation: another case is another id.
+    assert await rows(db_session, "SELECT COUNT(*) FROM demo_payment_transactions "
+                                  "WHERE test_instrument = 'test_card_approve'") == [(0,)]
+
+
+async def test_the_model_and_the_database_agree(db_session: AsyncSession) -> None:
+    table = DemoPaymentTransaction.__table__
+    checks = {str(c.name) for c in table.constraints if isinstance(c, CheckConstraint)}
+    assert {name for (name,) in await rows(
+        db_session,
+        "SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() "
+        "AND TABLE_NAME = :t AND CONSTRAINT_TYPE = 'CHECK'", t=TABLE,
+    )} == checks
+    column = table.c.test_instrument
+    assert (column.nullable, column.type.length, column.type.collation) == (True, 40, "utf8mb4_0900_bin")  # type: ignore[attr-defined]
+    assert await rows(
+        db_session,
+        "SELECT IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH, COLLATION_NAME FROM information_schema.COLUMNS "
+        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = 'test_instrument'", t=TABLE,
+    ) == [("YES", 40, "utf8mb4_0900_bin")]
+
+
+# Migration 41602195f69f itself: committed rows on the *_test database, always left at head.
+
+CHARGE = (
+    "INSERT INTO charges (unit_id, concept, amount, due_date, billing_period, created_by_user_id) "
+    "SELECT units.id, 'MONTHLY_FEE', 100000, '2026-10-05', '2026-10-01', users.id FROM units, users "
+    "WHERE users.role = 'ADMINISTRADOR'"
+)
+
+
+def old_transaction(reference: str, status: str, finished: str) -> str:
+    """A transaction as written before 41602195f69f (no test_instrument column)."""
+    return (
+        "INSERT INTO demo_payment_transactions (resident_id, charge_id, amount, reference, status, expires_at, "
+        f"finished_at) SELECT users.id, charges.id, 1000, '{reference}', '{status}', "
+        f"UTC_TIMESTAMP(6) + INTERVAL 15 MINUTE, {finished} FROM users, charges WHERE users.role = 'RESIDENTE'"
+    )
+
+
+def structure(url: URL) -> tuple[int, int]:
+    """(test_instrument columns, its CHECKs): (1, 1) after the migration, (0, 0) before it."""
+    [columns, checks] = run_sql(
+        url,
+        "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+        "AND TABLE_NAME = 'demo_payment_transactions' AND COLUMN_NAME = 'test_instrument'",
+        "SELECT COUNT(*) FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() "
+        "AND CONSTRAINT_NAME = 'ck_demo_payment_transactions_test_instrument_resolved'",
+    )
+    return columns[0][0], checks[0][0]
+
+
+@pytest.fixture
+def before_instruments(migrated_test_database: URL) -> Iterator[URL]:
+    """The database at f697625db563 with a rejected and a pending transaction, as they existed before."""
+    assert migrated_test_database.database is not None and migrated_test_database.database.endswith("_test")
+    config = alembic_config(migrated_test_database)
+    command.downgrade(config, PREVIOUS_REVISION)
+    try:
+        run_sql(migrated_test_database, *SETUP, CHARGE,
+                old_transaction("DEMO-OLD-1", "REJECTED", "UTC_TIMESTAMP(6)"),
+                old_transaction("DEMO-OLD-2", "INITIATED", "NULL"))
+        yield migrated_test_database
+    finally:
+        run_sql(migrated_test_database, "DELETE FROM demo_payment_transactions", "DELETE FROM charges",
+                "DELETE FROM units", "DELETE FROM towers", "DELETE FROM blocks", "DELETE FROM users")
+        command.upgrade(config, "head")
+
+
+def test_the_instrument_migration_is_the_head(migrated_test_database: URL) -> None:
+    script = ScriptDirectory.from_config(alembic_config(migrated_test_database))
+    assert script.get_heads() == [NEW_REVISION]
+    assert script.get_revision(NEW_REVISION).down_revision == PREVIOUS_REVISION
+    assert current_revision(migrated_test_database) == NEW_REVISION
+
+
+def test_existing_transactions_stay_valid_with_null(before_instruments: URL) -> None:
+    url = before_instruments
+    assert structure(url) == (0, 0) and current_revision(url) == PREVIOUS_REVISION
+    [before] = run_sql(url, "SELECT id, reference, status, finished_at, payment_id FROM demo_payment_transactions "
+                            "ORDER BY id")
+
+    command.upgrade(alembic_config(url), NEW_REVISION)
+
+    assert structure(url) == (1, 1) and current_revision(url) == NEW_REVISION
+    [after] = run_sql(url, "SELECT id, reference, status, finished_at, payment_id, test_instrument "
+                           "FROM demo_payment_transactions ORDER BY id")
+    assert [row[:5] for row in after] == before and [row[5] for row in after] == [None, None]
+    # The pending one goes on without an instrument (cancelled), as the rules always allowed.
+    run_sql(url, "UPDATE demo_payment_transactions SET status = 'CANCELLED', finished_at = UTC_TIMESTAMP(6) "
+                 "WHERE reference = 'DEMO-OLD-2'")
+    assert run_sql(url, "SELECT reference, status, test_instrument FROM demo_payment_transactions ORDER BY id") == [[
+        ("DEMO-OLD-1", "REJECTED", None), ("DEMO-OLD-2", "CANCELLED", None),
+    ]]
+
+
+def test_round_trip_and_a_protected_downgrade(before_instruments: URL) -> None:
+    url, config = before_instruments, alembic_config(before_instruments)
+    command.upgrade(config, NEW_REVISION)
+    run_sql(url, "UPDATE demo_payment_transactions SET test_instrument = 'TEST_CARD_INSUFFICIENT_FUNDS' "
+                 "WHERE reference = 'DEMO-OLD-1'")  # committed: a rejected transaction resolved by an instrument
+
+    with pytest.raises(RuntimeError, match="1 test instruments in demo_payment_transactions would be lost.*"
+                                           "Nothing was changed"):
+        command.downgrade(config, PREVIOUS_REVISION)
+    assert structure(url) == (1, 1) and current_revision(url) == NEW_REVISION
+    assert run_sql(url, "SELECT test_instrument FROM demo_payment_transactions WHERE reference = 'DEMO-OLD-1'") == [
+        [("TEST_CARD_INSUFFICIENT_FUNDS",)]
+    ]
+
+    run_sql(url, "UPDATE demo_payment_transactions SET test_instrument = NULL")
+    command.downgrade(config, PREVIOUS_REVISION)  # the CHECK first, then the column
+    assert structure(url) == (0, 0) and current_revision(url) == PREVIOUS_REVISION
+    command.upgrade(config, NEW_REVISION)
+    assert structure(url) == (1, 1) and current_revision(url) == NEW_REVISION
+    assert run_sql(url, "SELECT reference, status, test_instrument FROM demo_payment_transactions ORDER BY id") == [[
+        ("DEMO-OLD-1", "REJECTED", None), ("DEMO-OLD-2", "INITIATED", None),
+    ]]

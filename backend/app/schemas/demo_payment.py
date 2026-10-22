@@ -1,14 +1,17 @@
 """HU-010: input and output of the resident's demo payment transactions (internal demo gateway).
 
-Starting takes only the obligation (charge_id) and the amount; completing takes only the demo
-gateway's outcome. The resident is always the session's, and everything else (reference, status,
-dates, the payment) is decided by services/demo_payments.py. Any other field is rejected
-(extra="forbid"): a resident_id, a reference, another amount or another charge never get in.
+Starting takes only the obligation (charge_id) and the amount; completing takes only the
+fictitious test instrument chosen in the demo checkout (instrument_id): the backend resolves the
+simulated answer from its catalog (services/demo_instruments.py), so an outcome or a status never
+comes from the client. The resident is always the session's, and everything else (reference,
+status, dates, the payment) is decided by services/demo_payments.py. Any other field is rejected
+(extra="forbid"): a resident_id, a reference, an outcome, another amount or another charge never get in.
 """
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Annotated, Any, Self
+from enum import StrEnum
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
     AfterValidator,
@@ -21,18 +24,15 @@ from pydantic import (
 
 from app.core.validation import invalid
 from app.models import DemoPaymentTransactionStatus, FinancialConcept
+from app.models.finance import DEMO_INSTRUMENT_MAX_LENGTH
 from app.schemas.charge import period_text
 from app.schemas.invitation import ID_MAX
 from app.schemas.payment import clean_amount
 from app.services.allocation import ChargeStatus
-from app.services.demo_payments import (
-    DemoOutcome,
-    DemoPaymentTransactionResult,
-    PayableCharge,
-)
+from app.services.demo_instruments import CATALOG, UNKNOWN_MESSAGE, DemoInstrument, DemoInstrumentKind
+from app.services.demo_payments import DemoPaymentTransactionResult, PayableCharge
 
 AMOUNT_NOT_FLOAT_MESSAGE = 'El monto debe enviarse como texto (p. ej., "150000.50") o como número entero.'
-OUTCOME_MESSAGE = "Selecciona un resultado de la pasarela de demostración: APPROVED, REJECTED o FAILED."
 
 
 def _valid_charge_id(value: int) -> int:
@@ -71,18 +71,46 @@ class DemoPaymentStart(BaseModel):
 
 
 class DemoPaymentComplete(BaseModel):
-    """The demo gateway's answer, and nothing else."""
+    """The fictitious test instrument chosen in the demo checkout, and nothing else.
+
+    Only its shape is checked here (a short text); whether it is an available instrument is the
+    service's 422 on instrument_id, from the catalog. An outcome is never accepted, not even next to it.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    outcome: DemoOutcome
+    instrument_id: str
 
-    @field_validator("outcome", mode="before")
+    @field_validator("instrument_id", mode="before")
     @classmethod
-    def validate_outcome(cls, value: Any) -> Any:
-        if not isinstance(value, str) or value not in {outcome.value for outcome in DemoOutcome}:
-            raise invalid("outcome_invalid", OUTCOME_MESSAGE)
+    def validate_instrument_id(cls, value: Any) -> Any:
+        if not isinstance(value, str) or len(value) > DEMO_INSTRUMENT_MAX_LENGTH:
+            raise invalid("instrument_id_invalid", UNKNOWN_MESSAGE)
         return value
+
+
+class DemoResultReason(StrEnum):
+    """Why a resolved transaction did not end APPROVED, derived from its status and its instrument."""
+
+    INSUFFICIENT_FUNDS = "INSUFFICIENT_FUNDS"  # the instrument simulated a rejection
+    TECHNICAL_ERROR = "TECHNICAL_ERROR"  # the instrument simulated a processing error
+    NOT_APPLIED = "NOT_APPLIED"  # the instrument approved, but the payment could no longer be applied
+
+
+def result_reason(status: DemoPaymentTransactionStatus, test_instrument: str | None) -> DemoResultReason | None:
+    """Only from what is persisted (the final status and the instrument), so it never changes on a reload.
+
+    No instrument (finished before instruments, cancelled, expired, still pending): no reason. An id
+    no longer in the catalog (retired) gives no reason either: its metadata left with it.
+    """
+    instrument = CATALOG.get(test_instrument) if test_instrument is not None else None
+    if instrument is None:
+        return None
+    if status == DemoPaymentTransactionStatus.FAILED and instrument.result == DemoPaymentTransactionStatus.APPROVED:
+        return DemoResultReason.NOT_APPLIED  # the backend's own rules, never a simulated answer
+    if status == instrument.result and instrument.reason is not None:
+        return DemoResultReason(instrument.reason.value)
+    return None
 
 
 class DemoPaymentTransactionRead(BaseModel):
@@ -102,6 +130,8 @@ class DemoPaymentTransactionRead(BaseModel):
     finished_at: datetime | None  # UTC; None while INITIATED
     payment_id: int | None
     receipt_number: str | None
+    test_instrument: str | None  # the fictitious instrument that resolved it; None before instruments existed
+    result_reason: DemoResultReason | None  # derived; None for an approval or without an instrument
 
     @classmethod
     def from_result(cls, result: DemoPaymentTransactionResult) -> Self:
@@ -110,7 +140,35 @@ class DemoPaymentTransactionRead(BaseModel):
             status=result.status, created_at=_utc(result.created_at), expires_at=_utc(result.expires_at),
             finished_at=_utc(result.finished_at) if result.finished_at is not None else None,
             payment_id=result.payment_id, receipt_number=result.receipt_number,
+            test_instrument=result.test_instrument,
+            result_reason=result_reason(result.status, result.test_instrument),
         )
+
+
+class DemoInstrumentRead(BaseModel):
+    """A fictitious test instrument of the demo checkout, with the result it simulates (a sandbox)."""
+
+    id: str
+    label: str
+    kind: DemoInstrumentKind
+    ending: str | None  # fictitious last digits of a test card; never a card number
+    expected_result: Literal["APPROVED", "REJECTED", "FAILED"]
+    description: str
+
+    @classmethod
+    def from_instrument(cls, instrument: DemoInstrument) -> Self:
+        return cls(id=instrument.id, label=instrument.label, kind=instrument.kind, ending=instrument.ending,
+                   expected_result=instrument.result.value, description=instrument.description)  # type: ignore[arg-type]
+
+
+class DemoInstrumentQuery(BaseModel):
+    """Query string of GET /resident/demo-payments/instruments: it takes none (unknown ones: 422)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class DemoInstrumentList(BaseModel):
+    items: list[DemoInstrumentRead]  # the catalog's order
 
 
 class DemoPayableChargeRead(BaseModel):

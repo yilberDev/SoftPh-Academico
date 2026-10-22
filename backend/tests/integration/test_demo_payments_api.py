@@ -1,4 +1,6 @@
 """HU-010-C: the resident's demo payment routes over real HTTP (session cookie, Origin, CSRF, NoStoreRoute).
+Completing takes a fictitious test instrument ({"instrument_id"}), never an outcome; GET /instruments
+lists the catalog.
 
 The routes are published only with DEMO_PAYMENTS_ENABLED; the integration tests enable them
 explicitly on the application under test (tests/integration/conftest.py), and the tests at the end
@@ -22,6 +24,7 @@ from app.core.sessions import CSRF_HEADER_NAME
 from app.db.session import get_db
 from app.main import app, create_app
 from app.models import User
+from app.services.demo_payments import complete_demo_payment
 from tests.integration.conftest import sign_in
 from tests.integration.test_demo_payments_service import (
     NOW,
@@ -47,12 +50,16 @@ NO_STORE = "no-store"
 OPERATIONS = {
     ("post", f"{API}/resident/demo-payments"),
     ("get", f"{API}/resident/demo-payments/obligations"),
+    ("get", f"{API}/resident/demo-payments/instruments"),
     ("get", f"{API}/resident/demo-payments/{{transaction_id}}"),
     ("post", f"{API}/resident/demo-payments/{{transaction_id}}/complete"),
     ("post", f"{API}/resident/demo-payments/{{transaction_id}}/cancel"),
 }
 READ_FIELDS = {"id", "reference", "charge_id", "amount", "status", "created_at", "expires_at", "finished_at",
-               "payment_id", "receipt_number"}
+               "payment_id", "receipt_number", "test_instrument", "result_reason"}
+APPROVE = {"instrument_id": "TEST_CARD_APPROVE"}
+FUNDS = {"instrument_id": "TEST_CARD_INSUFFICIENT_FUNDS"}
+TECHNICAL = {"instrument_id": "TEST_ACCOUNT_TECHNICAL_ERROR"}
 NOT_FOUND = {"error": {"code": "DEMO_TRANSACTION_NOT_FOUND", "message": "La transacción no existe.", "details": []}}
 
 
@@ -201,7 +208,7 @@ async def test_another_residents_transaction_does_not_exist(client: AsyncClient,
     for transaction_id in (started["id"], 999_999_999):  # Pedro asks for Laura's, then for a missing one
         answers += [
             await client.get(f"{BASE}/{transaction_id}"),
-            await client.post(f"{BASE}/{transaction_id}/complete", headers=pedro, json={"outcome": "APPROVED"}),
+            await client.post(f"{BASE}/{transaction_id}/complete", headers=pedro, json=APPROVE),
             await client.post(f"{BASE}/{transaction_id}/cancel", headers=pedro),
         ]
 
@@ -226,7 +233,8 @@ def requests_for(transaction_id: int, charge_id: int) -> list[tuple[str, str, An
         ("POST", BASE, {"charge_id": charge_id, "amount": "1000"}),
         ("GET", f"{BASE}/obligations", None),
         ("GET", f"{BASE}/{transaction_id}", None),
-        ("POST", f"{BASE}/{transaction_id}/complete", {"outcome": "APPROVED"}),
+        ("GET", f"{BASE}/instruments", None),
+        ("POST", f"{BASE}/{transaction_id}/complete", APPROVE),
         ("POST", f"{BASE}/{transaction_id}/cancel", None),
     ]
 
@@ -285,26 +293,88 @@ async def test_every_post_needs_origin_and_csrf(client: AsyncClient, db_session:
     assert await statuses(db_session) == before and await count(db_session, "payments") == 0
 
 
+# --- The catalog of test instruments -------------------------------------------------------------------------
+
+
+async def test_the_catalog_of_test_instruments(client: AsyncClient, db_session: AsyncSession, world: World) -> None:
+    await as_user(client, db_session, world.laura)
+
+    response = await client.get(f"{BASE}/instruments")
+
+    assert response.status_code == 200 and no_store(response)
+    assert response.json() == {"items": [
+        {"id": "TEST_CARD_APPROVE", "label": "Tarjeta de prueba ficticia terminada en 0001", "kind": "CARD",
+         "ending": "0001", "expected_result": "APPROVED",
+         "description": "Instrumento ficticio de demostración: simula un pago aprobado. No es una tarjeta real."},
+        {"id": "TEST_CARD_INSUFFICIENT_FUNDS", "label": "Tarjeta de prueba ficticia terminada en 0002", "kind": "CARD",
+         "ending": "0002", "expected_result": "REJECTED",
+         "description": "Instrumento ficticio de demostración: simula un rechazo por fondos insuficientes. "
+                        "No es una tarjeta real."},
+        {"id": "TEST_ACCOUNT_TECHNICAL_ERROR", "label": "Cuenta de prueba ficticia", "kind": "ACCOUNT",
+         "ending": None, "expected_result": "FAILED",
+         "description": "Instrumento ficticio de demostración: simula un error técnico de procesamiento. "
+                        "No es una cuenta real."},
+    ]}
+    assert (await client.get(f"{BASE}/instruments")).json() == response.json()  # always the same order
+
+
+@pytest.mark.parametrize("query", ["?resident_id=1", "?instrument_id=TEST_CARD_APPROVE", "?all=true"])
+async def test_the_catalog_takes_no_query(client: AsyncClient, db_session: AsyncSession, world: World,
+                                          query: str) -> None:
+    await as_user(client, db_session, world.laura)
+    response = await client.get(f"{BASE}/instruments{query}")
+    assert response.status_code == 422 and no_store(response)
+
+
 # --- Completing --------------------------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("body", [
-    {"outcome": "CANCELLED"}, {"outcome": "EXPIRED"}, {"outcome": "INITIATED"}, {"outcome": "approved"},
-    {"outcome": ""}, {"outcome": None}, {"outcome": 1}, {},
-    {"outcome": "APPROVED", "amount": "1"},  # never a new amount, reference, charge or resident
-    {"outcome": "APPROVED", "charge_id": 1}, {"outcome": "APPROVED", "reference": "DEMO-X"},
-    {"outcome": "APPROVED", "resident_id": 1},
+    {"outcome": "APPROVED"}, {"outcome": "REJECTED"},  # the old contract: never again
+    {"outcome": "APPROVED", "instrument_id": "TEST_CARD_APPROVE"},  # not even next to an instrument
+    {"instrument_id": "TEST_CARD_APPROVE", "status": "APPROVED"},
+    {"instrument_id": "APPROVED"}, {"instrument_id": "TEST_CARD_UNKNOWN"}, {"instrument_id": "test_card_approve"},
+    {"instrument_id": " TEST_CARD_APPROVE"}, {"instrument_id": ""}, {"instrument_id": None}, {"instrument_id": 1},
+    {"instrument_id": ["TEST_CARD_APPROVE"]}, {"instrument_id": "4242424242424242"}, {"instrument_id": "X" * 41}, {},
+    {"instrument_id": "TEST_CARD_APPROVE", "amount": "1"},  # never a new amount, reference, charge or resident
+    {"instrument_id": "TEST_CARD_APPROVE", "charge_id": 1}, {"instrument_id": "TEST_CARD_APPROVE", "reference": "DEMO-X"},
+    {"instrument_id": "TEST_CARD_APPROVE", "resident_id": 1},
+    {"instrument_id": "TEST_CARD_APPROVE", "card_number": "4242424242424242", "cvv": "123"},  # never card data
 ])
-async def test_only_a_gateway_outcome_completes(client: AsyncClient, db_session: AsyncSession, world: World,
-                                                clock: Clock, body: dict[str, Any]) -> None:
+async def test_only_an_available_instrument_completes(client: AsyncClient, db_session: AsyncSession, world: World,
+                                                      clock: Clock, body: dict[str, Any]) -> None:
     headers = await as_user(client, db_session, world.laura)
     started = (await start(client, headers, world.fee, "1000")).json()
+    before = await financial_state(db_session)
 
     response = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json=body)
 
     assert response.status_code == 422 and no_store(response), response.text
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert await rows(db_session, "SELECT status, payment_id, test_instrument FROM demo_payment_transactions") == [
+        ("INITIATED", None, None)]
+    assert await financial_state(db_session) == before and await count(db_session, "payments") == 0
+
+
+async def test_the_old_outcome_contract_is_refused_field_by_field(client: AsyncClient, db_session: AsyncSession,
+                                                                  world: World, clock: Clock) -> None:
+    headers = await as_user(client, db_session, world.laura)
+    started = (await start(client, headers, world.fee, "1000")).json()
+    old = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json={"outcome": "APPROVED"})
+    both = await client.post(f"{BASE}/{started['id']}/complete", headers=headers,
+                             json={"outcome": "APPROVED"} | APPROVE)
+    unknown = await client.post(f"{BASE}/{started['id']}/complete", headers=headers,
+                                json={"instrument_id": "TEST_CARD_UNKNOWN"})
+
+    assert sorted(map(str, old.json()["error"]["details"])) == sorted(map(str, [
+        {"field": "instrument_id", "message": "Este campo es obligatorio."},
+        {"field": "outcome", "message": "Este campo no está permitido."},
+    ]))
+    assert both.json()["error"]["details"] == [{"field": "outcome", "message": "Este campo no está permitido."}]
+    assert unknown.json()["error"]["details"] == [
+        {"field": "instrument_id", "message": "Selecciona un instrumento de prueba válido."}]  # the service's 422
+    assert (old.status_code, both.status_code, unknown.status_code) == (422, 422, 422)
     assert await statuses(db_session) == [(started["id"], "INITIATED", None)]
-    assert await count(db_session, "payments") == 0
 
 
 async def test_approval_pays_the_selected_obligation_once(client: AsyncClient, db_session: AsyncSession,
@@ -314,13 +384,15 @@ async def test_approval_pays_the_selected_obligation_once(client: AsyncClient, d
     started = (await start(client, headers, world.fee, "100000")).json()
     clock.now = NOW + timedelta(minutes=2)
 
-    first = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json={"outcome": "APPROVED"})
-    again = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json={"outcome": "APPROVED"})
+    first = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json=APPROVE)
+    again = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json=APPROVE)
 
     assert first.status_code == again.status_code == 200 and no_store(first)
     approved = first.json()
     assert again.json() == approved  # the same answer, no second payment
     assert approved["status"] == "APPROVED" and approved["finished_at"] == "2026-10-09T20:02:00Z"
+    assert (approved["test_instrument"], approved["result_reason"]) == ("TEST_CARD_APPROVE", None)
+    assert (await client.get(f"{BASE}/{started['id']}")).json() == approved  # the same on a reload
     assert approved["receipt_number"] == f"RC-{approved['payment_id']:08d}"
     assert await rows(db_session, "SELECT id, amount, method, source, registered_by_user_id, transaction_reference "
                                   "FROM payments") == [
@@ -331,28 +403,37 @@ async def test_approval_pays_the_selected_obligation_once(client: AsyncClient, d
     assert len(await audits(db_session, "DEMO_PAYMENT_APPROVED")) == 1
 
 
-@pytest.mark.parametrize("outcome", ["REJECTED", "FAILED", "CANCELLED"])
+@pytest.mark.parametrize(("instrument", "outcome", "reason"), [
+    (FUNDS, "REJECTED", "INSUFFICIENT_FUNDS"),
+    (TECHNICAL, "FAILED", "TECHNICAL_ERROR"),
+    (None, "CANCELLED", None),  # cancelled: no instrument
+])
 async def test_an_unsuccessful_end_changes_nothing(client: AsyncClient, db_session: AsyncSession, world: World,
-                                                   clock: Clock, outcome: str) -> None:
+                                                   clock: Clock, instrument: dict[str, str] | None, outcome: str,
+                                                   reason: str | None) -> None:
     headers = await as_user(client, db_session, world.laura)
     started = (await start(client, headers, world.fee, "100000")).json()
     before = await financial_state(db_session)
 
-    if outcome == "CANCELLED":
+    if instrument is None:
         ended = await client.post(f"{BASE}/{started['id']}/cancel", headers=headers)
     else:
-        ended = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json={"outcome": outcome})
+        ended = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json=instrument)
 
     assert ended.status_code == 200 and no_store(ended)
     assert ended.json()["status"] == outcome and ended.json()["payment_id"] is None
     assert ended.json()["receipt_number"] is None
+    used = instrument["instrument_id"] if instrument else None
+    assert (ended.json()["test_instrument"], ended.json()["result_reason"]) == (used, reason)
+    assert (await client.get(f"{BASE}/{started['id']}")).json() == ended.json()  # the same on a reload
+    assert await rows(db_session, "SELECT status, test_instrument FROM demo_payment_transactions") == [(outcome, used)]
     assert await financial_state(db_session) == before
     assert await outstanding(db_session, world.fee) == Decimal("100000.00")
     # Finished: the same request answers the same; anything else is a 409 and nothing changes.
-    same = (await client.post(f"{BASE}/{started['id']}/cancel", headers=headers) if outcome == "CANCELLED" else
-            await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json={"outcome": outcome}))
+    same = (await client.post(f"{BASE}/{started['id']}/cancel", headers=headers) if instrument is None else
+            await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json=instrument))
     assert same.status_code == 200 and same.json() == ended.json()
-    late = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json={"outcome": "APPROVED"})
+    late = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json=APPROVE)
     assert late.status_code == 409 and no_store(late)
     assert late.json()["error"] == {"code": "DEMO_TRANSACTION_FINISHED",
                                     "message": "La transacción ya terminó y no admite cambios.", "details": []}
@@ -365,7 +446,7 @@ async def test_an_expired_transaction_is_never_paid(client: AsyncClient, db_sess
     started = (await start(client, headers, world.fee, "100000")).json()
     clock.now = NOW + timedelta(minutes=15)  # exactly expires_at
 
-    approve = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json={"outcome": "APPROVED"})
+    approve = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json=APPROVE)
     cancel = await client.post(f"{BASE}/{started['id']}/cancel", headers=headers)
     read = await client.get(f"{BASE}/{started['id']}")
 
@@ -389,12 +470,37 @@ async def test_an_approval_that_can_no_longer_be_applied_fails(client: AsyncClie
     await db_session.execute(text("UPDATE resident_units SET ended_at = UTC_TIMESTAMP(6) WHERE user_id = :u"),
                              {"u": world.laura})
 
-    response = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json={"outcome": "APPROVED"})
+    response = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json=APPROVE)
 
     assert response.status_code == 409 and no_store(response)
-    assert response.json()["error"]["code"] == "DEMO_PAYMENT_NOT_APPLIED"
-    assert (await client.get(f"{BASE}/{started['id']}")).json()["status"] == "FAILED"
+    assert response.json()["error"]["code"] == "DEMO_PAYMENT_NOT_APPLIED"  # the first answer: unchanged
+    read = (await client.get(f"{BASE}/{started['id']}")).json()
+    assert (read["status"], read["test_instrument"], read["result_reason"]) == ("FAILED", "TEST_CARD_APPROVE",
+                                                                              "NOT_APPLIED")
+    # The same instrument again: the stored result (200), equal to the reload; another one: 409.
+    again = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json=APPROVE)
+    other = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json=FUNDS)
+    assert (again.status_code, again.json()) == (200, read)
+    assert (other.status_code, other.json()["error"]["code"]) == (409, "DEMO_TRANSACTION_FINISHED")
     assert await count(db_session, "payments") == 0
+
+
+async def test_a_transaction_finished_without_an_instrument_reads_as_it_was(
+    client: AsyncClient, db_session: AsyncSession, world: World, clock: Clock
+) -> None:
+    # As one finished before instruments existed: test_instrument NULL, never an invented reason.
+    headers = await as_user(client, db_session, world.laura)
+    started = (await start(client, headers, world.fee, "100000")).json()
+    await complete_demo_payment(db_session, world.laura, started["id"], "REJECTED")  # the old service path
+
+    read = await client.get(f"{BASE}/{started['id']}")
+    late = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json=FUNDS)
+
+    assert read.status_code == 200
+    assert (read.json()["status"], read.json()["test_instrument"], read.json()["result_reason"]) == (
+        "REJECTED", None, None)
+    assert (late.status_code, late.json()["error"]["code"]) == (409, "DEMO_TRANSACTION_FINISHED")
+    assert (await client.get(f"{BASE}/{started['id']}")).json() == read.json()  # never assigned afterwards
 
 
 # --- HU-004 and HU-008 with the demo gateway enabled ---------------------------------------------------------
@@ -416,7 +522,7 @@ async def test_the_approved_payment_is_in_the_residents_history(client: AsyncCli
     headers = await as_user(client, db_session, world.laura)
     started = (await start(client, headers, world.fee, "40000")).json()
     approved = (await client.post(f"{BASE}/{started['id']}/complete", headers=headers,
-                                  json={"outcome": "APPROVED"})).json()
+                                  json=APPROVE)).json()
 
     listed = (await client.get(f"{API}/resident/payments")).json()
     detail = (await client.get(f"{API}/resident/payments/{approved['payment_id']}")).json()
@@ -428,6 +534,56 @@ async def test_the_approved_payment_is_in_the_residents_history(client: AsyncCli
     assert [(a["charge_id"], a["allocated_amount"]) for a in detail["allocations"]] == [(world.fee, "40000.00")]
     pedro = await as_user(client, db_session, world.pedro)
     assert pedro and (await client.get(f"{API}/resident/payments")).json()["items"] == []
+
+
+async def test_the_approved_payment_is_in_the_administrators_list(client: AsyncClient, db_session: AsyncSession,
+                                                                  world: World, clock: Clock) -> None:
+    # HU-010 criterion 6.1: the payment comes from the real flow (start, then APPROVED), never inserted with SQL.
+    admin = await as_user(client, db_session, world.admin)
+    manual = await client.post(f"{API}/admin/payments", headers=admin, json={  # another payment, not the target
+        "resident_id": world.pedro, "amount": "1000", "method": "CASH", "concept": "MONTHLY_FEE",
+        "payment_date": "2026-10-08"})
+    assert manual.status_code == 201, manual.text
+
+    headers = await as_user(client, db_session, world.laura)
+    started = (await start(client, headers, world.fee, "40000.50")).json()
+    approved = (await client.post(f"{BASE}/{started['id']}/complete", headers=headers,
+                                  json=APPROVE)).json()
+    assert (approved["status"], approved["amount"]) == ("APPROVED", "40000.50")
+
+    await as_user(client, db_session, world.admin)
+    listed = await client.get(f"{API}/admin/payments")
+
+    assert listed.status_code == 200 and no_store(listed)
+    matches = [item for item in listed.json()["items"] if item["id"] == approved["payment_id"]]
+    assert len(matches) == 1  # exactly once, next to the manual payment
+    [item] = matches
+    assert item["registered_at"].endswith(("Z", "+00:00"))  # UTC: the controlled clock of the approval
+    assert item["registered_at"].replace("Z", "+00:00").startswith(NOW.isoformat())
+    assert item == {
+        "id": approved["payment_id"],
+        "receipt_number": approved["receipt_number"],
+        "resident": {"id": world.laura, "full_name": "Laura Gómez"},
+        "unit": {"id": world.laura_unit, "label": "B1-TO1-APTO-101"},
+        "amount": "40000.50",
+        "method": "DEMO_GATEWAY",
+        "concept": "MONTHLY_FEE",  # the selected obligation's
+        "concept_description": None,
+        "payment_date": NOW.date().isoformat(),  # 15:00 in Bogotá, the same day
+        "registered_at": item["registered_at"],
+        "transaction_reference": started["reference"],
+        "notes": None,
+        "applied_amount": "40000.50",  # applied to the selected obligation only
+        "credit_amount": "0.00",
+        "status": "APPLIED",
+        "receipt_email_status": "PENDING",  # HU-010 never emails the receipt
+    }
+    # The administrator's filters keep it: the resident's payments are exactly this one.
+    by_resident = (await client.get(f"{API}/admin/payments", params={"resident_id": world.laura})).json()
+    assert [(i["id"], i["method"]) for i in by_resident["items"]] == [(approved["payment_id"], "DEMO_GATEWAY")]
+    assert by_resident["total"] == 1
+    by_name = (await client.get(f"{API}/admin/payments", params={"search": "Laura"})).json()
+    assert [i["id"] for i in by_name["items"]] == [approved["payment_id"]]
 
 
 # --- Publication: only with DEMO_PAYMENTS_ENABLED, and only these operations -----------------------------------
@@ -468,7 +624,7 @@ async def test_disabled_the_routes_do_not_exist(disabled_client: AsyncClient, db
     assert response.status_code == 422
 
 
-def test_enabled_exactly_the_five_operations_are_published() -> None:
+def test_enabled_exactly_the_six_operations_are_published() -> None:
     enabled = create_app(get_settings().model_copy(update={"demo_payments_enabled": True}))
     assert demo_operations(enabled) == OPERATIONS
     assert demo_operations(app) == OPERATIONS  # the application under test (enabled by conftest)
@@ -495,8 +651,17 @@ def test_the_openapi_contract() -> None:
 
     complete_op = paths[f"{API}/resident/demo-payments/{{transaction_id}}/complete"]["post"]
     complete_body = body_of(complete_op)
-    assert set(complete_body["properties"]) == {"outcome"} and complete_body["additionalProperties"] is False
-    assert resolve(complete_body["properties"]["outcome"])["enum"] == ["APPROVED", "REJECTED", "FAILED"]
+    assert set(complete_body["properties"]) == {"instrument_id"} and complete_body["additionalProperties"] is False
+    assert complete_body["required"] == ["instrument_id"]
+    assert complete_body["properties"]["instrument_id"]["type"] == "string"
+    assert "outcome" not in complete_body["properties"] and "outcome" not in complete_body["required"]  # gone
+
+    instruments_op = paths[f"{API}/resident/demo-payments/instruments"]["get"]
+    assert "requestBody" not in instruments_op and "parameters" not in instruments_op
+    item = resolve(resolve(instruments_op["responses"]["200"]["content"]["application/json"]["schema"])
+                   ["properties"]["items"]["items"])
+    assert set(item["properties"]) == {"id", "label", "kind", "ending", "expected_result", "description"}
+    assert item["properties"]["expected_result"]["enum"] == ["APPROVED", "REJECTED", "FAILED"]
 
     # GET and cancel take no body and no query parameter: only the transaction id in the path.
     for path, method in ((f"{API}/resident/demo-payments/{{transaction_id}}", "get"),
@@ -513,6 +678,9 @@ def test_the_openapi_contract() -> None:
         assert set(read["properties"]) == READ_FIELDS
         assert resolve(read["properties"]["status"])["enum"] == [
             "INITIATED", "APPROVED", "REJECTED", "FAILED", "CANCELLED", "EXPIRED"]
+        reason = read["properties"]["result_reason"]["anyOf"]
+        assert resolve(reason[0])["enum"] == ["INSUFFICIENT_FUNDS", "TECHNICAL_ERROR", "NOT_APPLIED"]
+        assert reason[1] == {"type": "null"}
     # The manual payments keep documenting their three methods (HU-004).
     manual = body_of(spec["paths"][f"{API}/admin/payments"]["post"])
     assert resolve(manual["properties"]["method"])["enum"] == ["CASH", "CARD", "TRANSFER"]

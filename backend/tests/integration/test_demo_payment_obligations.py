@@ -131,7 +131,8 @@ async def test_an_approved_demo_payment_updates_the_list(client: AsyncClient, db
 
     async def approve(amount: str) -> None:
         started = (await start(client, headers, world.fee, amount)).json()
-        approved = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json={"outcome": "APPROVED"})
+        approved = await client.post(f"{BASE}/{started['id']}/complete", headers=headers,
+                                     json={"instrument_id": "TEST_CARD_APPROVE"})
         assert approved.status_code == 200 and approved.json()["status"] == "APPROVED", approved.text
 
     await approve("25000.75")  # partial
@@ -149,7 +150,8 @@ async def test_an_unsuccessful_transaction_leaves_the_balance(client: AsyncClien
     if outcome == "CANCELLED":
         ended = await client.post(f"{BASE}/{started['id']}/cancel", headers=headers)
     else:
-        ended = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json={"outcome": outcome})
+        instrument = {"REJECTED": "TEST_CARD_INSUFFICIENT_FUNDS", "FAILED": "TEST_ACCOUNT_TECHNICAL_ERROR"}[outcome]  # the test instrument that simulates it
+        ended = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json={"instrument_id": instrument})
     assert ended.json()["status"] == outcome
     assert balances(await obligations(client)) == [(world.fee, "0.00", "100000.00", "OVERDUE")]
 

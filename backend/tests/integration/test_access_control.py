@@ -96,6 +96,7 @@ ACCESS_POLICY: dict[tuple[str, str], Access] = {
     # HU-010: the resident's demo payment transactions (only with DEMO_PAYMENTS_ENABLED; the resident is the session's).
     ("POST", "/resident/demo-payments"): Access.RESIDENTE,
     ("GET", "/resident/demo-payments/obligations"): Access.RESIDENTE,  # HU-010-D: obligations it can pay
+    ("GET", "/resident/demo-payments/instruments"): Access.RESIDENTE,  # the fictitious test instruments
     ("GET", "/resident/demo-payments/{transaction_id}"): Access.RESIDENTE,
     ("POST", "/resident/demo-payments/{transaction_id}/complete"): Access.RESIDENTE,
     ("POST", "/resident/demo-payments/{transaction_id}/cancel"): Access.RESIDENTE,
@@ -133,7 +134,7 @@ BODIES: dict[tuple[str, str], Any] = {
                                          "expected_to_create": 0, "preview_fingerprint": "0" * 64},
     ("POST", "/resident/feedback"): {"subject": "Ruido", "message": "Hay ruido.", "category": "COMPLAINT", "urgency": "HIGH"},
     ("POST", "/resident/demo-payments"): {"charge_id": 1, "amount": "1000"},
-    ("POST", "/resident/demo-payments/{transaction_id}/complete"): {"outcome": "APPROVED"},
+    ("POST", "/resident/demo-payments/{transaction_id}/complete"): {"instrument_id": "TEST_CARD_APPROVE"},
     ("POST", "/blocks"): {"number": 1},
     ("PATCH", "/blocks/{block_id}"): {"number": 2, "version": 1},
     ("POST", "/blocks/{block_id}/towers"): {"number": 1},
@@ -386,9 +387,10 @@ async def test_resident_reaches_every_resident_route(
     visited.add(("POST", "/resident/demo-payments"))
     transaction = started.json()["id"]
     for route, path, body in (
+        (("GET", "/resident/demo-payments/instruments"), "/resident/demo-payments/instruments", None),
         (("GET", "/resident/demo-payments/{transaction_id}"), f"/resident/demo-payments/{transaction}", None),
         (("POST", "/resident/demo-payments/{transaction_id}/complete"), f"/resident/demo-payments/{transaction}/complete",
-         {"outcome": "APPROVED"}),
+         {"instrument_id": "TEST_CARD_APPROVE"}),
     ):
         response = await client.request(route[0], f"{API}{path}", headers=headers, json=body)
         assert response.status_code == 200, (path, response.text)

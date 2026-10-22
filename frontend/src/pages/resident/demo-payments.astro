@@ -4,30 +4,32 @@ import ResidentHeader from '../../components/ResidentHeader.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import { demoPaymentsEnabled } from '../../lib/resident/demo-payment-flag-server';
 import {
-  APPROVAL_EFFECT,
-  DEMO_RECEIPT_LINK,
   DEMO_NOTICE,
   DEMO_NOTICE_TITLE,
   EMPTY_HINT,
   EMPTY_MESSAGE,
   HISTORY_PATH,
   LOADING_MESSAGE,
-  OUTCOMES,
-  OUTCOME_HINTS,
-  OUTCOME_LABELS,
   UNAVAILABLE_TEXT,
-  UNAVAILABLE_TITLE
+  UNAVAILABLE_TITLE,
+  legacyCheckoutRedirect
 } from '../../lib/resident/demo-payment';
 
-// HU-010-D. The middleware only renders /resident pages for a valid RESIDENTE session. The
-// API decides everything (whose obligations, the balances, the transaction, the payment) and
-// checks Origin and the CSRF token on every POST (HU-018). DEMO_PAYMENTS_ENABLED (the same
-// variable as the backend's, off by default) only hides this page: with it off there are no
-// controls and no request is made; the backend publishes its routes only when it is on there too.
+// HU-010-D, the obligations: choose one, the amount, review and start. The transaction is continued on
+// its own page (demo-payments/checkout.astro). The middleware only renders /resident pages for a valid
+// RESIDENTE session. The API decides everything (whose obligations, the balances, the transaction, the
+// payment) and checks Origin and the CSRF token on every POST (HU-018). DEMO_PAYMENTS_ENABLED (the same
+// variable as the backend's, off by default) only hides this page: with it off there are no controls and
+// no request is made; the backend publishes its routes only when it is on there too.
 const { csrf_token: csrfToken } = Astro.locals.auth!;
 const enabled = demoPaymentsEnabled();
 if (!enabled) {
   Astro.response.status = 404;
+}
+// The URL of a transaction before the checkout had its own page (?transaction=<id>): that checkout.
+const legacy = enabled ? legacyCheckoutRedirect(Astro.url.search) : null;
+if (legacy !== null) {
+  return Astro.redirect(legacy);
 }
 
 const card = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6';
@@ -39,8 +41,6 @@ const primaryButton =
   'rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-60';
 const secondaryButton =
   'rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-60';
-const dangerButton =
-  'rounded-lg border border-red-300 bg-white px-4 py-2 font-medium text-red-800 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:cursor-not-allowed disabled:opacity-60';
 const link =
   'rounded text-sm font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
 const heading = 'text-lg font-semibold focus:outline-none';
@@ -143,9 +143,14 @@ const heading = 'text-lg font-semibold focus:outline-none';
               <div><dt class="text-slate-500">Monto a pagar</dt><dd data-review-amount class="font-medium text-slate-900"></dd></div>
               <div><dt class="text-slate-500">Saldo pendiente actual</dt><dd data-review-outstanding class="font-medium text-slate-900"></dd></div>
               <div><dt class="text-slate-500">Tipo de pago</dt><dd data-review-kind class="font-medium text-slate-900"></dd></div>
+              <div data-review-projected-row>
+                <dt class="text-slate-500">Saldo pendiente si se aprueba</dt>
+                <dd data-review-projected class="font-medium text-slate-900"></dd>
+              </div>
             </dl>
             <p class="mt-4 text-sm text-slate-600">
-              Al continuar se inicia una transacción de demostración que vence en 15 minutos. Todavía no se aplica ningún pago.
+              Al continuar se inicia una transacción de demostración que vence en 15 minutos y se abre su página de pago,
+              donde eliges el instrumento de prueba. Todavía no se aplica ningún pago: el saldo final lo calcula el servidor.
             </p>
             <div class="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-5">
               <button type="button" data-start class={primaryButton}>Iniciar pago de demostración</button>
@@ -153,64 +158,6 @@ const heading = 'text-lg font-semibold focus:outline-none';
               <button type="button" data-back class={secondaryButton}>Volver a la lista</button>
             </div>
           </section>
-
-          <section data-section="transaction" class:list={['hidden', card]} aria-labelledby="demo-transaction-title">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-              <h2 id="demo-transaction-title" data-focus tabindex="-1" data-transaction-title class={heading}></h2>
-              <p>
-                <span class="sr-only">Estado: </span>
-                <span data-transaction-badge class="inline-flex whitespace-nowrap rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset"></span>
-              </p>
-            </div>
-            <p data-transaction-text class="mt-2 text-slate-700"></p>
-            <dl data-transaction-lines class="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2"></dl>
-
-            <div data-gateway class="mt-5 hidden space-y-4 border-t border-slate-200 pt-5">
-              <div>
-                <h3 class="font-semibold text-slate-900">Pasarela de demostración</h3>
-                <p class="mt-1 text-sm text-slate-600">{APPROVAL_EFFECT}</p>
-              </div>
-              <ul class="grid gap-3 sm:grid-cols-3">
-                {
-                  OUTCOMES.map((outcome) => (
-                    <li class="flex flex-col gap-1">
-                      <button type="button" data-outcome={outcome} aria-describedby={`demo-outcome-${outcome}`}
-                        class={outcome === 'APPROVED' ? primaryButton : secondaryButton}>
-                        {OUTCOME_LABELS[outcome]}
-                      </button>
-                      <span id={`demo-outcome-${outcome}`} class="text-xs text-slate-500">{OUTCOME_HINTS[outcome]}</span>
-                    </li>
-                  ))
-                }
-              </ul>
-              <div class="flex flex-wrap items-center gap-3">
-                <button type="button" data-cancel class={dangerButton}>Cancelar operación</button>
-                <button type="button" data-check class={secondaryButton}>Consultar estado</button>
-              </div>
-              <p data-polling class="text-xs text-slate-500" aria-live="polite"></p>
-            </div>
-
-            <div data-finished class="mt-5 hidden flex-wrap items-center gap-x-5 gap-y-3 border-t border-slate-200 pt-5">
-              <a data-payment-link href={HISTORY_PATH} class:list={['hidden', link]}>Ver el pago en Mis pagos</a>
-              <a data-receipt-link href={HISTORY_PATH} download class:list={['hidden', link]}>{DEMO_RECEIPT_LINK}</a>
-              <a data-history-link href={HISTORY_PATH} class:list={['hidden', link]}>Ir a Mis pagos</a>
-              <button type="button" data-back class={secondaryButton}>Volver a mis obligaciones</button>
-            </div>
-          </section>
-
-          <dialog data-cancel-dialog aria-labelledby="cancel-title" aria-describedby="cancel-text"
-            class="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl p-0 shadow-xl backdrop:bg-slate-900/40">
-            <div class="space-y-3 p-6">
-              <h2 id="cancel-title" class="text-lg font-semibold">¿Cancelar la operación?</h2>
-              <p id="cancel-text" class="text-sm text-slate-600">
-                No se aplicará ningún pago y esta transacción no podrá retomarse. Podrás iniciar un nuevo pago de demostración.
-              </p>
-              <div class="flex flex-wrap justify-end gap-2 pt-2">
-                <button type="button" data-cancel-keep class={secondaryButton}>Seguir con la operación</button>
-                <button type="button" data-cancel-ok class={dangerButton}>Cancelar operación</button>
-              </div>
-            </div>
-          </dialog>
         </>
       )
     }
@@ -218,28 +165,15 @@ const heading = 'text-lg font-semibold focus:outline-none';
 </Layout>
 
 <script>
-  import {
-    cancelDemoPayment,
-    completeDemoPayment,
-    getDemoPayment,
-    listPayableObligations,
-    startDemoPayment,
-    type DemoOutcome,
-    type PayableObligation
-  } from '../../lib/api/demo-payments';
+  import { listPayableObligations, startDemoPayment, type PayableObligation } from '../../lib/api/demo-payments';
   import { STATUS_BADGES, STATUS_LABELS } from '../../lib/obligations/charge-format';
   import {
-    TRANSACTION_STATUS_BADGES,
-    TRANSACTION_STATUS_LABELS,
+    CANCELLED_NOTICE,
     createDemoPaymentFlow,
     isFullPayment,
     obligationLines,
     obligationTitle,
-    parseTransactionParam,
-    paymentPath,
-    receiptLinkOf,
-    transactionHeading,
-    transactionLines,
+    projectedOutstanding,
     type DemoState
   } from '../../lib/resident/demo-payment';
   import { formatCop } from '../../lib/resident/payment-format';
@@ -257,18 +191,16 @@ const heading = 'text-lg font-semibold focus:outline-none';
     const info = $<HTMLElement>('[data-info]');
     const amount = $<HTMLInputElement>('#demo-amount');
     const amountError = $<HTMLElement>('[data-amount-error]');
-    const dialog = $<HTMLDialogElement>('[data-cancel-dialog]');
-    const busyButtons = () => $$<HTMLButtonElement>('button:not([data-cancel-keep])');
 
-    function lines(target: HTMLElement, items: { label: string; value: string; mono?: boolean }[]): void {
+    function lines(target: HTMLElement, items: { label: string; value: string }[]): void {
       target.replaceChildren(
-        ...items.map(({ label, value, mono }) => {
+        ...items.map(({ label, value }) => {
           const row = document.createElement('div');
           const term = document.createElement('dt');
           term.className = 'text-slate-500';
           term.textContent = label;
           const description = document.createElement('dd');
-          description.className = mono ? 'break-all font-mono font-medium text-slate-900' : 'font-medium text-slate-900';
+          description.className = 'font-medium text-slate-900';
           description.textContent = value;
           row.append(term, description);
           return row;
@@ -348,81 +280,40 @@ const heading = 'text-lg font-semibold focus:outline-none';
         $('[data-review-amount]').textContent = formatCop(view.amount);
         $('[data-review-outstanding]').textContent = formatCop(view.obligation.outstanding_amount);
         $('[data-review-kind]').textContent = full ? 'Pago del saldo completo' : 'Pago parcial';
-        $<HTMLButtonElement>('[data-start]').textContent = state.busy === 'starting' ? 'Iniciando...' : 'Iniciar pago de demostración';
-      }
-      if (view.kind === 'transaction') {
-        const { transaction } = view;
-        const live = transaction.status === 'INITIATED';
-        const { title, text } = transactionHeading(transaction);
-        $('[data-transaction-title]').textContent = title;
-        $('[data-transaction-text]').textContent = text;
-        const badge = $<HTMLElement>('[data-transaction-badge]');
-        badge.className = `inline-flex whitespace-nowrap rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset ${TRANSACTION_STATUS_BADGES[transaction.status]}`;
-        badge.textContent = TRANSACTION_STATUS_LABELS[transaction.status];
-        lines($('[data-transaction-lines]'), transactionLines(transaction, view.obligation));
-        show($('[data-gateway]'), live);
-        $('[data-finished]').classList.toggle('flex', !live);
-        show($('[data-finished]'), !live);
-        const approved = transaction.status === 'APPROVED' && transaction.payment_id !== null;
-        const paymentLink = $<HTMLAnchorElement>('[data-payment-link]');
-        if (approved) paymentLink.href = paymentPath(transaction.payment_id!);
-        show(paymentLink, approved);
-        // The receipt of the persisted payment, only for a confirmed approval.
-        const receiptLink = $<HTMLAnchorElement>('[data-receipt-link]');
-        const receipt = receiptLinkOf(transaction);
-        if (receipt) receiptLink.href = receipt;
-        show(receiptLink, receipt !== null);
-        show($('[data-history-link]'), approved);
-        for (const button of $$<HTMLButtonElement>('[data-outcome]')) {
-          const outcome = button.dataset.outcome as DemoOutcome;
-          button.textContent = state.busy === outcome ? 'Procesando...' : button.dataset.label ?? button.textContent ?? '';
-        }
-        $<HTMLButtonElement>('[data-cancel]').textContent = state.busy === 'cancelling' ? 'Cancelando...' : 'Cancelar operación';
-        $<HTMLButtonElement>('[data-check]').textContent = state.busy === 'checking' ? 'Consultando...' : 'Consultar estado';
-        $('[data-polling]').textContent = live && state.polling ? 'El estado se actualiza automáticamente mientras la transacción está en curso.' : '';
+        // A preview of the text against the balance the server sent; nothing when it cannot be computed.
+        const projected = projectedOutstanding(view.amount, view.obligation.outstanding_amount);
+        $('[data-review-projected]').textContent = projected === null ? '' : formatCop(projected);
+        show($('[data-review-projected-row]'), projected !== null);
+        $<HTMLButtonElement>('[data-start]').textContent = state.busy === 'starting' || state.busy === 'opening'
+          ? 'Iniciando...' : 'Iniciar pago de demostración';
       }
 
-      // Really disabled while a request runs: no second POST. After an unknown outcome, only "Consultar estado".
-      for (const button of busyButtons()) {
-        const gatewayAction = button.matches('[data-outcome], [data-cancel]');
-        button.disabled = busy || state.sessionExpired || (gatewayAction && state.mustCheck);
-      }
+      // Really disabled while a request runs (or the checkout opens): no second POST.
+      for (const button of $$<HTMLButtonElement>('button')) button.disabled = busy || state.sessionExpired;
       amount.disabled = busy;
       page.setAttribute('aria-busy', String(busy));
 
-      // Focus moves only when the screen changes (a new view, or a transaction that ended).
-      const key = view.kind === 'transaction' ? `transaction:${view.transaction.id}:${view.transaction.status}`
-        : view.kind === 'form' ? `form:${view.obligation.charge_id}` : view.kind;
+      // Focus moves only when the screen changes.
+      const key = view.kind === 'form' ? `form:${view.obligation.charge_id}` : view.kind;
       if (key !== shown) {
         const previous = shown;
         shown = key;
         if (previous && view.kind !== 'loading') page.querySelector<HTMLElement>(`[data-section="${view.kind}"] [data-focus]`)?.focus();
       }
-      // A new error is announced and focused once (not again on every automatic update).
+      // A new error is announced and focused once.
       if (state.notice !== notified) {
         notified = state.notice;
         if (error) errorBox.focus();
       }
     }
 
-    for (const button of $$<HTMLButtonElement>('[data-outcome]')) button.dataset.label = button.textContent?.trim() ?? '';
-
     const flow = createDemoPaymentFlow({
       api: {
         list: listPayableObligations,
-        start: (chargeId, value) => startDemoPayment(chargeId, value, csrfToken),
-        get: getDemoPayment,
-        complete: (id, outcome) => completeDemoPayment(id, outcome, csrfToken),
-        cancel: (id) => cancelDemoPayment(id, csrfToken)
+        start: (chargeId, value) => startDemoPayment(chargeId, value, csrfToken)
       },
       render,
-      remember(transactionId) {
-        // Only the id travels in the URL (a reload resumes it); nothing is stored in the browser.
-        const url = new URL(window.location.href);
-        if (transactionId === null) url.searchParams.delete('transaction');
-        else url.searchParams.set('transaction', String(transactionId));
-        if (url.href !== window.location.href) history.replaceState(null, '', url);
-      }
+      navigate: (path) => window.location.assign(path)
     });
 
     $('[data-obligations]').addEventListener('click', (event) => {
@@ -437,20 +328,15 @@ const heading = 'text-lg font-semibold focus:outline-none';
     $('[data-retry]').addEventListener('click', () => void flow.retry());
     $('[data-edit]').addEventListener('click', () => flow.edit());
     $('[data-start]').addEventListener('click', () => void flow.start());
-    for (const button of $$<HTMLButtonElement>('[data-outcome]')) {
-      button.addEventListener('click', () => void flow.complete(button.dataset.outcome as DemoOutcome));
-    }
-    $('[data-check]').addEventListener('click', () => void flow.refresh());
-    $('[data-cancel]').addEventListener('click', () => {
-      if (flow.state.busy === null) dialog.showModal();
-    });
-    $('[data-cancel-keep]').addEventListener('click', () => dialog.close());
-    $('[data-cancel-ok]').addEventListener('click', () => {
-      dialog.close();
-      void flow.cancel();
-    });
     window.addEventListener('pagehide', () => flow.dispose());
 
-    void flow.init(parseTransactionParam(window.location.search));
+    // After a cancellation confirmed in the checkout (?cancelled=1): said once, then removed from the URL.
+    const url = new URL(window.location.href);
+    const cancelled = url.searchParams.get('cancelled') === '1';
+    if (cancelled) {
+      url.searchParams.delete('cancelled');
+      history.replaceState(null, '', url);
+    }
+    void flow.init(cancelled ? { tone: 'info', text: CANCELLED_NOTICE } : null);
   }
 </script>

@@ -28,12 +28,13 @@ from app.core.exceptions import (
 )
 from app.models import User
 from app.schemas.payment import PaymentCreate, PaymentListQuery
-from app.services import demo_payments
+from app.services import demo_instruments, demo_payments
 from app.services import payments as payment_service
 from app.services import resident_payments
 from app.services.demo_payments import (
     cancel_demo_payment,
     complete_demo_payment,
+    complete_demo_payment_with_instrument,
     get_demo_payment,
     start_demo_payment,
 )
@@ -443,6 +444,202 @@ async def test_a_resident_no_longer_eligible_is_not_charged(db_session: AsyncSes
     assert await count(db_session, "payments") == 0
     [(_, _, _, context)] = await audits(db_session, "DEMO_PAYMENT_FAILED")
     assert '"reason": "NOT_ELIGIBLE"' in context
+
+
+# --- Fictitious test instruments (demo checkout) ------------------------------------------------------------
+
+APPROVE, FUNDS, TECHNICAL = "TEST_CARD_APPROVE", "TEST_CARD_INSUFFICIENT_FUNDS", "TEST_ACCOUNT_TECHNICAL_ERROR"
+
+
+async def stored(db: AsyncSession) -> list[tuple[Any, ...]]:
+    return await rows(db, "SELECT status, payment_id, test_instrument FROM demo_payment_transactions ORDER BY id")
+
+
+async def demo_audits(db: AsyncSession) -> list[tuple[Any, ...]]:
+    return await rows(db, "SELECT action, context FROM audit_logs WHERE action LIKE 'DEMO_PAYMENT_%' "
+                          "AND action <> 'DEMO_PAYMENT_STARTED' ORDER BY id")
+
+
+async def test_the_approving_instrument_pays_once(db_session: AsyncSession, world: World, clock: Clock) -> None:
+    started = await start_demo_payment(db_session, world.laura, world.fee, Decimal("40000"))
+    clock.now = NOW + timedelta(minutes=2)
+
+    approved = await complete_demo_payment_with_instrument(db_session, world.laura, started.id, APPROVE,
+                                                           ip_address="10.0.0.9")
+
+    assert (approved.status, approved.finished_at, approved.test_instrument) == ("APPROVED", clock.now, APPROVE)
+    assert approved.payment_id is not None and approved.receipt_number == f"RC-{approved.payment_id:08d}"
+    # The same accounting as ever: one payment, one allocation to the selected charge.
+    assert await rows(db_session, "SELECT amount, method, source, transaction_reference FROM payments") == [
+        (Decimal("40000.00"), "DEMO_GATEWAY", "DEMO_GATEWAY", started.reference)
+    ]
+    assert await rows(db_session, "SELECT payment_id, charge_id, amount FROM payment_allocations") == [
+        (approved.payment_id, world.fee, Decimal("40000.00"))
+    ]
+    assert await outstanding(db_session, world.fee) == Decimal("60000.00")
+    assert await stored(db_session) == [("APPROVED", approved.payment_id, APPROVE)]  # in the same UPDATE
+    [(_, entity_id, actor, context)] = await audits(db_session, "DEMO_PAYMENT_APPROVED")
+    assert (entity_id, actor) == (started.id, world.laura) and f'"instrument_id": "{APPROVE}"' in context
+    assert len(await audits(db_session, "PAYMENT_REGISTERED")) == 1
+
+
+@pytest.mark.parametrize(("instrument", "status", "action", "reason", "simulated"), [
+    (FUNDS, "REJECTED", "DEMO_PAYMENT_REJECTED", None, "INSUFFICIENT_FUNDS"),
+    (TECHNICAL, "FAILED", "DEMO_PAYMENT_FAILED", "SIMULATED", "TECHNICAL_ERROR"),
+])
+async def test_an_instrument_that_does_not_approve_changes_nothing_financial(
+    db_session: AsyncSession, world: World, clock: Clock, instrument: str, status: str, action: str,
+    reason: str | None, simulated: str,
+) -> None:
+    started = await start_demo_payment(db_session, world.laura, world.fee, Decimal("100000"))
+    before = await financial_state(db_session)
+
+    ended = await complete_demo_payment_with_instrument(db_session, world.laura, started.id, instrument)
+
+    assert (ended.status, ended.payment_id, ended.receipt_number, ended.test_instrument) == (status, None, None,
+                                                                                               instrument)
+    assert await financial_state(db_session) == before and await count(db_session, "payments") == 0
+    assert await outstanding(db_session, world.fee) == Decimal("100000.00")
+    assert await stored(db_session) == [(status, None, instrument)]
+    [(_, _, actor, context)] = await audits(db_session, action)
+    assert actor == world.laura
+    assert f'"instrument_id": "{instrument}"' in context and f'"simulated_reason": "{simulated}"' in context
+    assert ('"reason": "SIMULATED"' in context) == (reason == "SIMULATED")
+
+
+@pytest.mark.parametrize("instrument_id", ["TEST_CARD_UNKNOWN", "APPROVED", "test_card_approve", "", None, 1])
+async def test_an_unknown_instrument_changes_nothing(db_session: AsyncSession, world: World, clock: Clock,
+                                                     instrument_id: Any) -> None:
+    started = await start_demo_payment(db_session, world.laura, world.fee, Decimal("100000"))
+    before = await financial_state(db_session)
+    with pytest.raises(FieldValidationError) as error:
+        await complete_demo_payment_with_instrument(db_session, world.laura, started.id, instrument_id)
+    assert error.value.details is not None and error.value.details[0]["field"] == "instrument_id"
+    assert await stored(db_session) == [("INITIATED", None, None)]
+    assert await financial_state(db_session) == before and await demo_audits(db_session) == []
+    # Still pending: a valid instrument completes it afterwards.
+    assert (await complete_demo_payment_with_instrument(db_session, world.laura, started.id, FUNDS)).status == "REJECTED"
+
+
+async def test_a_retired_instrument_cannot_complete(db_session: AsyncSession, world: World, clock: Clock,
+                                                    monkeypatch: pytest.MonkeyPatch) -> None:
+    started = await start_demo_payment(db_session, world.laura, world.fee, Decimal("100000"))
+    monkeypatch.setattr(demo_instruments, "RETIRED_INSTRUMENT_IDS", frozenset({APPROVE}))
+    with pytest.raises(FieldValidationError) as error:
+        await complete_demo_payment_with_instrument(db_session, world.laura, started.id, APPROVE)
+    assert error.value.details == [{"field": "instrument_id", "message": demo_instruments.RETIRED_MESSAGE}]
+    assert await stored(db_session) == [("INITIATED", None, None)] and await count(db_session, "payments") == 0
+
+
+@pytest.mark.parametrize(("change", "reason"), [
+    ("manual", "OUTSTANDING_CHANGED"),
+    ("UPDATE users SET status = 'DISABLED' WHERE id = :u", "NOT_ELIGIBLE"),
+    ("UPDATE resident_units SET ended_at = UTC_TIMESTAMP(6) WHERE user_id = :u", "NOT_ELIGIBLE"),
+])
+async def test_an_approval_that_can_no_longer_be_applied_keeps_its_instrument(
+    db_session: AsyncSession, world: World, clock: Clock, change: str, reason: str
+) -> None:
+    started = await start_demo_payment(db_session, world.laura, world.fee, Decimal("100000"))
+    if change == "manual":
+        await manual_payment(db_session, world, "30000")  # covers part of the fee meanwhile
+    else:
+        await db_session.execute(text(change), {"u": world.laura})
+    before = await financial_state(db_session)
+
+    with pytest.raises(DemoPaymentNotAppliedError):
+        await complete_demo_payment_with_instrument(db_session, world.laura, started.id, APPROVE)
+
+    # The backend's result is the authority: FAILED (committed), with the instrument that was used.
+    assert await stored(db_session) == [("FAILED", None, APPROVE)]
+    assert await financial_state(db_session) == before
+    [(action, context)] = await demo_audits(db_session)
+    assert action == "DEMO_PAYMENT_FAILED" and f'"reason": "{reason}"' in context
+    assert f'"instrument_id": "{APPROVE}"' in context and "simulated_reason" not in context  # a real failure
+    # The same instrument again: the stored result, nothing new; another instrument: a conflict.
+    again = await complete_demo_payment_with_instrument(db_session, world.laura, started.id, APPROVE)
+    assert (again.status, again.test_instrument, again.payment_id) == ("FAILED", APPROVE, None)
+    with pytest.raises(DemoTransactionFinishedError):
+        await complete_demo_payment_with_instrument(db_session, world.laura, started.id, FUNDS)
+    assert len(await demo_audits(db_session)) == 1 and await count(db_session, "payments") == (
+        1 if change == "manual" else 0)
+
+
+async def test_the_same_instrument_again_returns_the_stored_result(db_session: AsyncSession, world: World,
+                                                                   clock: Clock) -> None:
+    started = await start_demo_payment(db_session, world.laura, world.fee, Decimal("100000"))
+    first = await complete_demo_payment_with_instrument(db_session, world.laura, started.id, APPROVE)
+    clock.now = NOW + timedelta(hours=1)  # even after its expiry time: it is already finished
+
+    again = await complete_demo_payment_with_instrument(db_session, world.laura, started.id, APPROVE)
+
+    assert again == first
+    assert (await count(db_session, "payments"), await count(db_session, "payment_allocations")) == (1, 1)
+    assert [action for action, _ in await demo_audits(db_session)] == ["DEMO_PAYMENT_APPROVED"]
+    # Another instrument never changes a finished transaction.
+    for other in (FUNDS, TECHNICAL):
+        with pytest.raises(DemoTransactionFinishedError):
+            await complete_demo_payment_with_instrument(db_session, world.laura, started.id, other)
+    assert await stored(db_session) == [("APPROVED", first.payment_id, APPROVE)]
+    assert await get_demo_payment(db_session, world.laura, started.id) == first
+
+
+@pytest.mark.parametrize("ended_as", ["APPROVED", "REJECTED", "FAILED", "CANCELLED"])
+async def test_a_transaction_finished_without_an_instrument_never_gets_one(
+    db_session: AsyncSession, world: World, clock: Clock, ended_as: str
+) -> None:
+    # As every transaction finished before instruments existed (test_instrument NULL).
+    started = await start_demo_payment(db_session, world.laura, world.fee, Decimal("100000"))
+    if ended_as == "CANCELLED":
+        ended = await cancel_demo_payment(db_session, world.laura, started.id)
+    else:
+        ended = await complete_demo_payment(db_session, world.laura, started.id, ended_as)
+    state, trail = await financial_state(db_session), await demo_audits(db_session)
+    assert ended.test_instrument is None
+
+    for instrument in (APPROVE, FUNDS, TECHNICAL):
+        with pytest.raises(DemoTransactionFinishedError):
+            await complete_demo_payment_with_instrument(db_session, world.laura, started.id, instrument)
+    assert await stored(db_session) == [(ended_as, ended.payment_id, None)]
+    assert await financial_state(db_session) == state and await demo_audits(db_session) == trail
+    assert await get_demo_payment(db_session, world.laura, started.id) == ended
+
+
+async def test_expiry_cancellation_and_reading_with_instruments(db_session: AsyncSession, world: World,
+                                                                clock: Clock) -> None:
+    # Expired: EXPIRED (committed) without an instrument, then 409, whatever instrument is used.
+    expired = await start_demo_payment(db_session, world.laura, world.fee, Decimal("100000"))
+    clock.now = expired.expires_at
+    with pytest.raises(DemoTransactionExpiredError):
+        await complete_demo_payment_with_instrument(db_session, world.laura, expired.id, APPROVE)
+    with pytest.raises(DemoTransactionExpiredError):
+        await complete_demo_payment_with_instrument(db_session, world.laura, expired.id, APPROVE)
+    assert await stored(db_session) == [("EXPIRED", None, None)]
+
+    # Cancelled: no instrument, and none afterwards.
+    cancelled = await start_demo_payment(db_session, world.laura, world.fee, Decimal("100000"))
+    assert (await cancel_demo_payment(db_session, world.laura, cancelled.id)).test_instrument is None
+    with pytest.raises(DemoTransactionFinishedError):
+        await complete_demo_payment_with_instrument(db_session, world.laura, cancelled.id, FUNDS)
+
+    # Reading shows the instrument of a resolved transaction.
+    rejected = await start_demo_payment(db_session, world.laura, world.fee, Decimal("100000"))
+    ended = await complete_demo_payment_with_instrument(db_session, world.laura, rejected.id, FUNDS)
+    assert await get_demo_payment(db_session, world.laura, rejected.id) == ended
+    assert await stored(db_session) == [("EXPIRED", None, None), ("CANCELLED", None, None), ("REJECTED", None, FUNDS)]
+    assert await count(db_session, "payments") == 0
+    # The CHECK holds for every row: an instrument only on APPROVED, REJECTED or FAILED.
+    assert await rows(db_session, "SELECT COUNT(*) FROM demo_payment_transactions WHERE test_instrument IS NOT NULL "
+                                  "AND status NOT IN ('APPROVED', 'REJECTED', 'FAILED')") == [(0,)]
+
+
+async def test_an_instrument_never_opens_another_residents_transaction(db_session: AsyncSession, world: World,
+                                                                       clock: Clock) -> None:
+    started = await start_demo_payment(db_session, world.laura, world.fee, Decimal("100000"))
+    for transaction_id, resident in ((started.id, world.pedro), (999_999_999, world.laura), (0, world.laura),
+                                     ("1", world.laura)):
+        with pytest.raises(DemoTransactionNotFoundError):
+            await complete_demo_payment_with_instrument(db_session, resident, transaction_id, APPROVE)
+    assert await stored(db_session) == [("INITIATED", None, None)] and await count(db_session, "payments") == 0
 
 
 # --- Real errors -----------------------------------------------------------------------------------------------

@@ -71,6 +71,15 @@ async def complete(factory: Factory, resident: int, transaction_id: int, outcome
             return exc
 
 
+async def complete_with(factory: Factory, resident: int, transaction_id: int, instrument_id: str) -> Any:
+    async with factory() as session:
+        try:
+            return await demo_payments.complete_demo_payment_with_instrument(session, resident, transaction_id,
+                                                                             instrument_id)
+        except AppError as exc:
+            return exc
+
+
 async def manual(factory: Factory, setup: dict[str, int], amount: str) -> Any:
     data = PaymentCreate.model_validate({"resident_id": setup["resident"], "amount": amount, "method": "CASH",
                                          "concept": "MONTHLY_FEE", "payment_date": "2026-10-08"})
@@ -199,6 +208,55 @@ async def test_approval_and_a_manual_payment_on_the_same_charge(
             assert demo.status == "APPROVED" and paid.status == "CREDIT"
         assert await scalar(committed_session_factory, "SELECT SUM(amount) FROM payment_allocations WHERE charge_id = :c",
                             c=fee) == Decimal("100000.00")
+    await assert_never_over_allocated(committed_session_factory)
+
+
+async def test_two_approvals_by_instrument_create_one_payment(
+    committed_session_factory: Factory, setup: dict[str, int], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for round_ in range(1, 4):
+        fee = await add_charge(committed_session_factory, setup["unit"], "100000", date(2026, round_, 5))
+        started = await start(committed_session_factory, setup["resident"], fee, "100000")
+        all_at_the_lock(monkeypatch, 2)
+        first, second = await gather(
+            complete_with(committed_session_factory, setup["resident"], started.id, "TEST_CARD_APPROVE"),
+            complete_with(committed_session_factory, setup["resident"], started.id, "TEST_CARD_APPROVE"))
+        monkeypatch.undo()
+        # The second one finds it finished with the same instrument: the same answer, no second payment.
+        assert first == second and first.status == "APPROVED" and first.test_instrument == "TEST_CARD_APPROVE"
+        assert await scalar(committed_session_factory, "SELECT COUNT(*) FROM payments WHERE transaction_reference = :r",
+                            r=started.reference) == 1
+        assert await scalar(committed_session_factory, "SELECT COUNT(*) FROM audit_logs WHERE action = "
+                                                       "'DEMO_PAYMENT_APPROVED' AND entity_id = :t", t=started.id) == 1
+    assert await scalar(committed_session_factory, "SELECT COUNT(*) FROM payment_allocations") == 3
+    await assert_never_over_allocated(committed_session_factory)
+
+
+@pytest.mark.parametrize("other", ["TEST_CARD_INSUFFICIENT_FUNDS", "TEST_ACCOUNT_TECHNICAL_ERROR"])
+async def test_two_instruments_at_once(
+    committed_session_factory: Factory, setup: dict[str, int], monkeypatch: pytest.MonkeyPatch, other: str
+) -> None:
+    expected = {"TEST_CARD_INSUFFICIENT_FUNDS": "REJECTED", "TEST_ACCOUNT_TECHNICAL_ERROR": "FAILED"}[other]
+    for round_ in range(1, 4):
+        fee = await add_charge(committed_session_factory, setup["unit"], "100000", date(2026, round_, 5))
+        started = await start(committed_session_factory, setup["resident"], fee, "100000")
+        all_at_the_lock(monkeypatch, 2)
+        approved, ended = await gather(
+            complete_with(committed_session_factory, setup["resident"], started.id, "TEST_CARD_APPROVE"),
+            complete_with(committed_session_factory, setup["resident"], started.id, other))
+        monkeypatch.undo()
+        async with committed_session_factory() as session:
+            [(status, instrument)] = (await session.execute(text(
+                "SELECT status, test_instrument FROM demo_payment_transactions WHERE id = :t"), {"t": started.id})).all()
+        payments = await scalar(committed_session_factory, "SELECT COUNT(*) FROM payments WHERE transaction_reference "
+                                                           "= :r", r=started.reference)
+        # Exactly one instrument resolved it, stored with its status; the other changed nothing (409).
+        if status == "APPROVED":
+            assert instrument == "TEST_CARD_APPROVE" and approved.status == "APPROVED" and payments == 1
+            assert isinstance(ended, DemoTransactionFinishedError)
+        else:
+            assert (status, instrument) == (expected, other) and ended.status == expected and payments == 0
+            assert isinstance(approved, DemoTransactionFinishedError)
     await assert_never_over_allocated(committed_session_factory)
 
 

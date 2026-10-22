@@ -65,7 +65,7 @@ def pdf_text(pdf: bytes) -> str:
 async def approve(client: AsyncClient, headers: dict[str, str], charge_id: int, amount: str) -> dict[str, Any]:
     started = await start(client, headers, charge_id, amount)
     assert started.status_code == 201, started.text
-    approved = await client.post(f"{BASE}/{started.json()['id']}/complete", headers=headers, json={"outcome": "APPROVED"})
+    approved = await client.post(f"{BASE}/{started.json()['id']}/complete", headers=headers, json={"instrument_id": "TEST_CARD_APPROVE"})
     assert approved.status_code == 200 and approved.json()["status"] == "APPROVED", approved.text
     return dict(approved.json())
 
@@ -219,7 +219,8 @@ async def test_a_transaction_that_was_not_approved_has_no_receipt(
         clock.now = NOW + TTL
         await client.get(f"{BASE}/{started['id']}")
     else:
-        await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json={"outcome": outcome})
+        instrument = {"REJECTED": "TEST_CARD_INSUFFICIENT_FUNDS", "FAILED": "TEST_ACCOUNT_TECHNICAL_ERROR"}[outcome]  # the test instrument that simulates it
+        await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json={"instrument_id": instrument})
     assert await rows(db_session, "SELECT status, payment_id FROM demo_payment_transactions") == [(outcome, None)]
 
     # No payment exists, so no receipt can be asked for: neither the transaction id nor a guessed one.
@@ -236,7 +237,7 @@ async def test_an_approval_that_could_not_be_applied_has_no_receipt(
     started = (await start(client, headers, world.fee, "1000")).json()
     await db_session.execute(text("UPDATE resident_units SET ended_at = UTC_TIMESTAMP(6) WHERE user_id = :u"),
                              {"u": world.laura})
-    response = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json={"outcome": "APPROVED"})
+    response = await client.post(f"{BASE}/{started['id']}/complete", headers=headers, json={"instrument_id": "TEST_CARD_APPROVE"})
     assert response.status_code == 409 and response.json()["error"]["code"] == "DEMO_PAYMENT_NOT_APPLIED"
     assert await count(db_session, "payments") == 0
     assert (await client.get(receipt_url(1))).status_code == 404

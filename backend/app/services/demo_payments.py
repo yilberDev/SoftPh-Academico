@@ -27,6 +27,13 @@ complete  outcome APPROVED | REJECTED | FAILED (the simulated answer, validated)
                              invariants, APPROVED (payment_id, finished_at), audit
               not payable:   FAILED, audit, COMMIT, 409 (no payment)
           COMMIT
+complete_demo_payment_with_instrument
+          the same, but the simulated answer comes from a fictitious test instrument of
+          services/demo_instruments.py (resolved before any database access; unknown or retired:
+          422 on instrument_id). The instrument is stored in the same UPDATE as the final status
+          (APPROVED, REJECTED or FAILED, also when an approval can no longer be applied) and goes
+          into the audit context. Finished: the same instrument returns it unchanged; another
+          instrument, or a transaction finished without one, is a 409 (never assigned afterwards)
 cancel    the same locks: INITIATED → CANCELLED; CANCELLED again returns it unchanged
 get       a read; an INITIATED transaction past its expiry is first made EXPIRED (same locks)
 payable   read only (no locks, nothing persisted): the obligations of the resident's current
@@ -91,6 +98,8 @@ from app.schemas.invitation import ID_MAX
 from app.services.allocation import receipt_number
 from app.services.audit import record_audit
 from app.services.charges import ChargeSummary, list_outstanding_charges
+from app.services.demo_instruments import DemoInstrumentResolution
+from app.services.demo_instruments import resolve as resolve_instrument
 from app.services.payments import money
 from app.services.structure import lock_unit_path
 
@@ -136,6 +145,7 @@ class DemoPaymentTransactionResult:
     finished_at: datetime | None  # UTC; None while INITIATED
     payment_id: int | None  # APPROVED only
     receipt_number: str | None  # APPROVED only (derived from payment_id)
+    test_instrument: str | None = None  # the fictitious instrument that resolved it, if any
 
 
 @dataclass(frozen=True)
@@ -208,6 +218,7 @@ def _result(transaction: DemoPaymentTransaction) -> DemoPaymentTransactionResult
         finished_at=transaction.finished_at,
         payment_id=transaction.payment_id,
         receipt_number=receipt_number(transaction.payment_id) if transaction.payment_id is not None else None,
+        test_instrument=transaction.test_instrument,
     )
 
 
@@ -303,12 +314,22 @@ def _expire(db: AsyncSession, transaction: DemoPaymentTransaction, ip_address: s
 
 def _end(
     db: AsyncSession, transaction: DemoPaymentTransaction, status: DemoPaymentTransactionStatus, now: datetime,
-    ip_address: str | None, reason: FailureReason | None = None,
+    ip_address: str | None, reason: FailureReason | None = None, instrument: DemoInstrumentResolution | None = None,
 ) -> None:
-    """INITIATED → REJECTED, FAILED or CANCELLED: nothing financial changes."""
+    """INITIATED → REJECTED, FAILED or CANCELLED: nothing financial changes.
+
+    With an instrument, it is set together with the final status (the CHECK allows it only then);
+    simulated_reason (INSUFFICIENT_FUNDS, TECHNICAL_ERROR) is the instrument's answer, unlike reason
+    (OUTSTANDING_CHANGED, NOT_ELIGIBLE), which is the backend's own.
+    """
     transaction.status = status
     transaction.finished_at = now
-    extra = {} if reason is None else {"reason": reason.value}
+    extra: dict[str, Any] = {} if reason is None else {"reason": reason.value}
+    if instrument is not None:
+        transaction.test_instrument = instrument.instrument_id
+        extra["instrument_id"] = instrument.instrument_id
+        if instrument.status == status and instrument.reason is not None:
+            extra["simulated_reason"] = instrument.reason.value
     _audit(db, _END_ACTIONS[status], transaction, transaction.resident_id, ip_address, **extra)
 
 
@@ -332,7 +353,7 @@ async def _check_applied(db: AsyncSession, payment: Payment, charge: Charge) -> 
 
 async def _approve(
     db: AsyncSession, transaction: DemoPaymentTransaction, unit_id: int, label: str | None, now: datetime,
-    ip_address: str | None,
+    ip_address: str | None, instrument_id: str | None = None,
 ) -> FailureReason | None:
     """The payment and its single allocation, or the reason it can no longer be applied (nothing written)."""
     if label is None or await _residence_user(db, unit_id) != transaction.resident_id:
@@ -373,6 +394,7 @@ async def _approve(
     transaction.status = Status.APPROVED
     transaction.payment_id = payment.id
     transaction.finished_at = now
+    transaction.test_instrument = instrument_id  # with the status: never stored while INITIATED (CHECK)
     await db.flush()
     number = receipt_number(payment.id)
     record_audit(
@@ -394,7 +416,8 @@ async def _approve(
         ip_address=ip_address,
     )
     _audit(db, AuditAction.DEMO_PAYMENT_APPROVED, transaction, resident.id, ip_address,
-           payment_id=payment.id, receipt_number=number)
+           payment_id=payment.id, receipt_number=number,
+           **({} if instrument_id is None else {"instrument_id": instrument_id}))
     return None
 
 
@@ -511,7 +534,7 @@ async def _lock_transaction(db: AsyncSession, resident_id: int, transaction_id: 
 
 async def _finish(
     db: AsyncSession, resident_id: int, transaction_id: Any, target: DemoPaymentTransactionStatus,
-    ip_address: str | None,
+    ip_address: str | None, instrument: DemoInstrumentResolution | None = None,
 ) -> DemoPaymentTransactionResult:
     _check_resident_id(resident_id)
     path = await _transaction_path(db, resident_id, transaction_id)
@@ -522,7 +545,12 @@ async def _finish(
             # Finished: nothing changes, whatever is asked.
             result = _result(transaction)
             await db.commit()
-            if result.status == target:
+            if instrument is not None:
+                # By instrument: the same instrument gets the stored result back (even a FAILED approval);
+                # another one, or a transaction finished without an instrument, never gets one now.
+                if result.test_instrument == instrument.instrument_id:
+                    return result
+            elif result.status == target:
                 return result
             if result.status == Status.EXPIRED:
                 raise DemoTransactionExpiredError()
@@ -533,15 +561,16 @@ async def _finish(
             await db.commit()
             raise DemoTransactionExpiredError()
         if target == Status.APPROVED:
-            reason = await _approve(db, transaction, path.unit_id, label, now, ip_address)
+            instrument_id = instrument.instrument_id if instrument is not None else None
+            reason = await _approve(db, transaction, path.unit_id, label, now, ip_address, instrument_id)
             if reason is not None:
                 # The gateway approved, but the payment can no longer be applied: FAILED, account unchanged.
-                _end(db, transaction, Status.FAILED, now, ip_address, reason)
+                _end(db, transaction, Status.FAILED, now, ip_address, reason, instrument)
                 await db.commit()
                 raise DemoPaymentNotAppliedError()
         else:
             _end(db, transaction, target, now, ip_address,
-                 FailureReason.SIMULATED if target == Status.FAILED else None)
+                 FailureReason.SIMULATED if target == Status.FAILED else None, instrument)
         await db.flush()
         result = _result(transaction)
         await db.commit()
@@ -559,6 +588,15 @@ async def complete_demo_payment(
     """Applies the demo gateway's answer to the resident's transaction (at most one payment, ever)."""
     target = Status(_checked_outcome(outcome).value)
     return await _finish(db, resident_id, transaction_id, target, ip_address)
+
+
+async def complete_demo_payment_with_instrument(
+    db: AsyncSession, resident_id: int, transaction_id: int, instrument_id: Any, *, ip_address: str | None = None,
+) -> DemoPaymentTransactionResult:
+    """Completes the resident's transaction with a fictitious test instrument: the catalog, never the
+    caller, decides the simulated answer; the backend's rules still decide the final result."""
+    instrument = resolve_instrument(instrument_id)  # 422 on instrument_id before any database access
+    return await _finish(db, resident_id, transaction_id, instrument.status, ip_address, instrument)
 
 
 async def cancel_demo_payment(
