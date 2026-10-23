@@ -166,6 +166,57 @@ test.describe('360 px', () => {
     expect(labels).toEqual(['Fecha del pago', 'Método', 'Monto aplicado', 'Aplicado el']);
 
     await expectUsable(page.getByRole('link', { name: 'Volver a las obligaciones' }).last(), LINK);
-    await expectUsable(page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Obligaciones' }), LINK);
+    await page.getByRole('button', { name: 'Abrir menú' }).click();
+    await expectUsable(page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Obligaciones' }), 44);
+  });
+
+  test("the administrator's header: the links and the logout fold into an accessible menu", async ({ admin: { page }, seed }) => {
+    await page.goto(`/admin/obligations/${seed.charges.history}`);
+    const menu = page.locator('#admin-menu');
+    const openButton = page.getByRole('button', { name: 'Abrir menú' });
+    // Closed: no row of links, only the button (aria-expanded false, it controls the menu).
+    await expect(openButton).toHaveAttribute('aria-expanded', 'false');
+    await expect(openButton).toHaveAttribute('aria-controls', 'admin-menu');
+    await expect(menu).toBeHidden();
+    await expect(page.getByRole('navigation', { name: 'Principal' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Cerrar sesión' })).toHaveCount(0);
+    await expectUsable(openButton, 44);
+    await expectNoOverflow(page, 'menu closed');
+
+    // Open: the same seven links, the page's area marked with aria-current, and the logout; 44 px each.
+    await openButton.click();
+    const closeButton = page.getByRole('button', { name: 'Cerrar menú' });
+    await expect(closeButton).toHaveAttribute('aria-expanded', 'true');
+    const nav = page.getByRole('navigation', { name: 'Principal' });
+    await expect(nav.getByRole('link')).toHaveText(['Inicio', 'Unidades residenciales', 'Residentes', 'Invitar residente', 'Obligaciones', 'Pagos', 'Feedback']);
+    await expect(nav.locator('[aria-current="page"]')).toHaveText('Obligaciones');
+    for (const link of await nav.getByRole('link').all()) await expectUsable(link, 44);
+    await expectUsable(nav.getByRole('button', { name: 'Cerrar sesión' }), 44);
+    await expectNoOverflow(page, 'menu open');
+
+    // Escape closes it and puts the focus back on the button; the button closes it too.
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(openButton).toBeFocused();
+    await expect(openButton).toHaveAttribute('aria-expanded', 'false');
+    await openButton.click();
+    await closeButton.click();
+    await expect(menu).toBeHidden();
+    await expect(openButton).toHaveAttribute('aria-expanded', 'false');
+
+    // A chosen link closes the menu (the navigation is held back once, to see the menu on this page).
+    await page.evaluate(() => window.addEventListener('click', (event) => event.preventDefault(), { once: true }));
+    await openButton.click();
+    await nav.getByRole('link', { name: 'Pagos' }).click();
+    await expect(menu).toBeHidden();
+    await expect(openButton).toHaveAttribute('aria-expanded', 'false');
+
+    // And it opens its page, where aria-current moves to it.
+    await openButton.click();
+    await nav.getByRole('link', { name: 'Pagos' }).click();
+    await expect(page).toHaveURL(/\/admin\/payments$/);
+    await expect(menu).toBeHidden();
+    await openButton.click();
+    await expect(nav.locator('[aria-current="page"]')).toHaveText('Pagos');
   });
 });

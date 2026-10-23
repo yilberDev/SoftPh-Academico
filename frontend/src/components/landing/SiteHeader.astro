@@ -63,33 +63,8 @@ const navLink = `whitespace-nowrap rounded-md px-1 py-2 text-sm font-medium text
 </header>
 
 <script>
+  import { setupMenu } from '../../lib/landing/menu';
+
   const header = document.querySelector<HTMLElement>('[data-site-header]');
-  if (header) {
-    const button = header.querySelector<HTMLButtonElement>('[data-menu-button]')!;
-    const menu = header.querySelector<HTMLElement>('[data-menu]')!;
-    const label = header.querySelector<HTMLElement>('[data-menu-label]')!;
-    const openIcon = header.querySelector<HTMLElement>('[data-menu-open]')!;
-    const closeIcon = header.querySelector<HTMLElement>('[data-menu-close]')!;
-
-    const setOpen = (open: boolean) => {
-      button.setAttribute('aria-expanded', String(open));
-      menu.classList.toggle('hidden', !open);
-      openIcon.classList.toggle('hidden', open);
-      closeIcon.classList.toggle('hidden', !open);
-      label.textContent = open ? 'Cerrar menú' : 'Abrir menú';
-    };
-
-    button.addEventListener('click', () => setOpen(button.getAttribute('aria-expanded') !== 'true'));
-    menu.querySelectorAll('[data-menu-link]').forEach((link) => link.addEventListener('click', () => setOpen(false)));
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && button.getAttribute('aria-expanded') === 'true') {
-        setOpen(false);
-        button.focus();
-      }
-    });
-    // Back to a wide screen: the menu is not needed (the links are in the header again).
-    window.matchMedia('(min-width: 1024px)').addEventListener('change', (event) => {
-      if (event.matches) setOpen(false);
-    });
-  }
+  if (header) setupMenu(header);
 </script>

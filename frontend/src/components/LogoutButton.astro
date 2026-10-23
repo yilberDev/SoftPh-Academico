@@ -1,18 +1,23 @@
 ---
 interface Props {
   csrfToken: string;
+  /** Replaces the default look (the administrator's header); without it the button looks as always. */
+  class?: string;
 }
 
-const { csrfToken } = Astro.props;
+const DEFAULT_CLASS =
+  'rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:opacity-60';
+
+const { csrfToken, class: className = DEFAULT_CLASS } = Astro.props;
 ---
 
 <button
   type="button"
   data-logout
   data-csrf-token={csrfToken}
-  class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:opacity-60"
+  class={className}
 >
-  Cerrar sesión
+  <slot name="icon" />Cerrar sesión
 </button>
 
 <script>
