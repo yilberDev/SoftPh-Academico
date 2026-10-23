@@ -96,6 +96,7 @@ async def committed_session_factory(migrated_test_database: URL) -> AsyncIterato
             await connection.execute(text("DELETE FROM charges WHERE source_charge_id IS NOT NULL"))
             # Children before parents (foreign keys).
             for table in (
+                "notifications",  # HU-017: references users only
                 "feedback", "payment_allocations", "payments", "charges",
                 "password_reset_tokens", "resident_units", "resident_invitations", "units", "towers", "blocks",
                 "sessions", "login_throttles", "audit_logs", "users",

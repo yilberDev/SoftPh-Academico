@@ -6,7 +6,7 @@ import { demoPaymentsEnabled } from '../../lib/resident/demo-payment-flag-server
 // HU-007: main panel of the resident. The middleware only renders /resident
 // pages for a valid RESIDENTE session. The resident functions are added by
 // their own HUs (HU-008: "Mis pagos"; HU-009: "Enviar feedback", "Mis feedback"; HU-010: the demo
-// payment, only while DEMO_PAYMENTS_ENABLED).
+// payment, only while DEMO_PAYMENTS_ENABLED; HU-017: "Notificaciones").
 const { user, csrf_token: csrfToken } = Astro.locals.auth!;
 const demoPayments = demoPaymentsEnabled();
 
@@ -60,6 +60,12 @@ const cardLink =
             </a>
           </div>
         </div>
+      </li>
+      <li>
+        <a href="/resident/notifications" class={cardLink}>
+          <span class="block font-semibold text-slate-900">Notificaciones</span>
+          <span class="mt-1 block text-sm text-slate-600">Consulta los avisos de tus pagos registrados y de las respuestas a tus feedback, y si llegaron a tu correo.</span>
+        </a>
       </li>
     </ul>
     <p class="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-600">

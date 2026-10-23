@@ -1,0 +1,178 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import ResidentHeader from '../../components/ResidentHeader.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { LOADING_MESSAGE, PAGE_SIZES, parseQuery } from '../../lib/resident/notifications-list';
+
+// HU-017. The middleware only renders /resident pages for a valid RESIDENTE
+// session; the API decides whose notifications are listed (always the session's
+// resident) and authorizes every request on its own (HU-018).
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const initial = parseQuery(Astro.url.searchParams);
+
+const secondaryButton =
+  'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-50';
+const link =
+  'rounded font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+---
+
+<Layout title="Notificaciones — SoftPh-Académico">
+  <ResidentHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-5xl space-y-6 px-4 py-8" data-notifications-page>
+    <div class="min-w-0 space-y-2">
+      <Breadcrumbs items={[{ label: 'Inicio', href: '/resident' }, { label: 'Notificaciones' }]} />
+      <h1 class="text-2xl font-semibold tracking-tight">Notificaciones</h1>
+      <p class="text-slate-600">
+        Los pagos registrados en tu cuenta y las respuestas a tus feedback. Las notificaciones también se envían a tu
+        correo electrónico registrado (la de un pago, con el recibo en PDF), salvo las de los pagos de demostración, que
+        solo aparecen aquí.
+      </p>
+    </div>
+
+    <div data-alert role="alert" class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+      <p data-alert-message></p>
+      <button type="button" data-retry class={`mt-3 hidden ${secondaryButton}`}>Reintentar</button>
+      <a data-login href="/login" class:list={['mt-3 hidden text-sm', link]}>Iniciar sesión</a>
+    </div>
+
+    <section aria-labelledby="notifications-title" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <h2 id="notifications-title" class="sr-only">Mis notificaciones, de la más reciente a la más antigua</h2>
+      <p data-status-line class="border-b border-slate-200 px-4 py-3 text-sm text-slate-600" aria-live="polite">{LOADING_MESSAGE}</p>
+      <ul data-items class="divide-y divide-slate-100" aria-busy="true"></ul>
+      <p data-empty class="hidden px-4 py-10 text-center text-slate-600"></p>
+      <div data-loading class="space-y-3 px-4 py-6" aria-hidden="true">
+        <div class="h-4 w-3/4 animate-pulse rounded bg-slate-100"></div>
+        <div class="h-4 w-2/3 animate-pulse rounded bg-slate-100"></div>
+        <div class="h-4 w-1/2 animate-pulse rounded bg-slate-100"></div>
+      </div>
+      <nav data-pagination aria-label="Paginación de mis notificaciones"
+        class="hidden flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-sm">
+        <div class="flex items-center gap-2">
+          <label for="notifications-page-size" class="text-slate-600">Por página</label>
+          <select id="notifications-page-size" data-page-size class="rounded-lg border border-slate-300 bg-white px-2 py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">
+            {PAGE_SIZES.map((size) => <option value={size} selected={initial.pageSize === size}>{size}</option>)}
+          </select>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" data-page="prev" class={secondaryButton}>Anterior</button>
+          <span data-page-info aria-current="page" class="whitespace-nowrap text-slate-600"></span>
+          <button type="button" data-page="next" class={secondaryButton}>Siguiente</button>
+        </div>
+      </nav>
+    </section>
+  </main>
+</Layout>
+
+<script>
+  import { listMyNotifications, type ResidentNotification } from '../../lib/api/notifications';
+  import {
+    EMAIL_STATUS_BADGES,
+    EMPTY_MESSAGE,
+    LOADING_MESSAGE,
+    createResidentNotificationList,
+    notificationView,
+    pageText,
+    parseQuery,
+    rangeText,
+    type ResidentNotificationState
+  } from '../../lib/resident/notifications-list';
+
+  const page = document.querySelector<HTMLElement>('[data-notifications-page]')!;
+  const $ = <T extends Element>(selector: string) => page.querySelector<T>(selector)!;
+  const show = (element: Element, visible: boolean) => element.classList.toggle('hidden', !visible);
+
+  const items = $<HTMLElement>('[data-items]');
+  const statusLine = $<HTMLElement>('[data-status-line]');
+  const empty = $<HTMLElement>('[data-empty]');
+  const loading = $<HTMLElement>('[data-loading]');
+  const alert = $<HTMLElement>('[data-alert]');
+  const retry = $<HTMLButtonElement>('[data-retry]');
+  const login = $<HTMLAnchorElement>('[data-login]');
+  const pagination = $<HTMLElement>('[data-pagination]');
+  const pageInfo = $<HTMLElement>('[data-page-info]');
+  const prev = $<HTMLButtonElement>('[data-page="prev"]');
+  const next = $<HTMLButtonElement>('[data-page="next"]');
+  const pageSize = $<HTMLSelectElement>('[data-page-size]');
+
+  function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text = ''): HTMLElementTagNameMap[K] {
+    const node = document.createElement(tag);
+    node.className = className;
+    node.textContent = text;
+    return node;
+  }
+
+  function item(notification: ResidentNotification): HTMLLIElement {
+    const view = notificationView(notification);
+    const li = element('li', 'space-y-2 px-4 py-4');
+    const header = element('div', 'flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1');
+    header.append(
+      element('h3', 'font-semibold text-slate-900', view.title),
+      element('p', 'text-xs text-slate-500', `${view.event} · ${view.date}`)
+    );
+    const footer = element('div', 'flex flex-wrap items-center gap-x-4 gap-y-2 text-sm');
+    footer.append(
+      element('span', `inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${EMAIL_STATUS_BADGES[view.emailStatus]}`, view.emailText)
+    );
+    const anchor = element('a', 'rounded font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600', view.linkText);
+    anchor.href = view.href;
+    anchor.setAttribute('aria-label', `${view.linkText}: ${view.title}, ${view.date}`);
+    footer.append(anchor);
+    li.append(header, element('p', 'break-words text-sm text-slate-700', view.message), footer);
+    if (view.emailHelp) li.append(element('p', 'text-xs text-slate-600', view.emailHelp));
+    return li;
+  }
+
+  function render(state: ResidentNotificationState): void {
+    items.setAttribute('aria-busy', String(state.kind === 'loading'));
+    show(loading, state.kind === 'loading');
+    show(empty, state.kind === 'empty' || state.kind === 'no-results');
+    if (state.kind !== 'results') items.replaceChildren();
+    show(pagination, state.kind === 'results');
+    pagination.classList.toggle('flex', state.kind === 'results');
+    show(alert, state.kind === 'error');
+    switch (state.kind) {
+      case 'loading':
+        statusLine.textContent = LOADING_MESSAGE;
+        prev.disabled = true;
+        next.disabled = true;
+        break;
+      case 'results':
+        items.replaceChildren(...state.page.items.map(item));
+        statusLine.textContent = rangeText(state.page);
+        pageInfo.textContent = pageText(state.page);
+        prev.disabled = state.page.page <= 1;
+        next.disabled = state.page.page >= state.page.total_pages;
+        pageSize.value = String(state.page.page_size);
+        break;
+      case 'empty':
+      case 'no-results':
+        statusLine.textContent = '0 notificaciones';
+        empty.textContent = EMPTY_MESSAGE;
+        break;
+      case 'error':
+        statusLine.textContent = state.sessionExpired ? 'Sesión terminada.' : 'No se pudo consultar el listado.';
+        $('[data-alert-message]').textContent = state.message;
+        show(retry, !state.sessionExpired);
+        show(login, state.sessionExpired);
+        break;
+    }
+  }
+
+  const list = createResidentNotificationList(parseQuery(new URLSearchParams(window.location.search)), {
+    load: listMyNotifications,
+    render,
+    remember: (queryString) =>
+      history.replaceState(null, '', queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname)
+  });
+
+  prev.addEventListener('click', () => void list.goToPage(list.query.page - 1));
+  next.addEventListener('click', () => void list.goToPage(list.query.page + 1));
+  pageSize.addEventListener('change', () => void list.setPageSize(Number(pageSize.value)));
+  retry.addEventListener('click', () => void list.refresh());
+  // Personal data: shown again when the page comes back from the browser cache.
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) void list.refresh();
+  });
+
+  void list.start();
+</script>

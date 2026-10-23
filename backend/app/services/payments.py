@@ -9,9 +9,11 @@ register  One atomic transaction, then the receipt:
               pending charges of the apartment (X)         FIFO: due_date, created_at, id
               payment + allocations + PAYMENT_REGISTERED
               invariants checked again (never over-allocated)
+              notification to the resident (HU-017, PENDING)
             COMMIT
             PDF receipt + email (no transaction or lock open)
             receipt result + RECEIPT_EMAIL_SENT / RECEIPT_EMAIL_FAILED   (another transaction)
+              + the notification's delivery result (HU-017)
 
           A failed PDF or email never undoes the payment. The client chooses the
           resident; the apartment, the registration time, the snapshots, the
@@ -68,6 +70,14 @@ from app.schemas.payment import (
 from app.services.allocation import PendingCharge, allocate_fifo, payment_status, receipt_number
 from app.services.audit import record_audit
 from app.services.mail import MailSender
+from app.services.notifications import (
+    NO_CONTACT_ERROR,
+    add_notification,
+    has_contact,
+    payment_event_key,
+    payment_notice,
+    record_delivery,
+)
 from app.services.receipts import ReceiptData, build_receipt_email, build_receipt_pdf
 from app.services.structure import Actor, lock_unit_path
 
@@ -335,6 +345,10 @@ async def _register(db: AsyncSession, data: PaymentCreate, actor: Actor) -> _Reg
         payment_date=data.payment_date,
         registered_at=now,
     )
+    # HU-017 criterion 2: the payment's notification, committed with the payment itself.
+    await add_notification(db, resident.id, payment_notice(
+        payment_id=payment.id, receipt_number=number, amount=money(data.amount), payment_date=data.payment_date,
+    ))
     email = resident.email
     await db.commit()
     return _Registered(response=response, receipt=receipt, email=email)
@@ -342,6 +356,10 @@ async def _register(db: AsyncSession, data: PaymentCreate, actor: Actor) -> _Reg
 
 def _utc(moment: datetime) -> datetime:
     return moment.replace(tzinfo=UTC)
+
+
+class _NoContact(Exception):
+    """The resident has no valid email address (CU-017 2a); recorded as the error NoContact."""
 
 
 async def _record_receipt(db: AsyncSession, payment_id: int, number: str, error: str | None, actor: Actor) -> None:
@@ -366,6 +384,7 @@ async def _record_receipt(db: AsyncSession, payment_id: int, number: str, error:
         context=context,
         ip_address=actor.ip_address,
     )
+    await record_delivery(db, payment_event_key(payment_id), error)  # HU-017: the same result
     await db.commit()
 
 
@@ -376,11 +395,13 @@ async def register_payment(
     response, receipt = registered.response, registered.receipt
     error: str | None = None
     try:
+        if not has_contact(registered.email):  # CU-017 2a: nothing to send it to
+            raise _NoContact()
         # Off the event loop; no transaction or lock is open while the PDF and SMTP run.
         pdf = await anyio.to_thread.run_sync(build_receipt_pdf, receipt)
         await mailer.send(build_receipt_email(to=registered.email, data=receipt, pdf=pdf))
     except Exception as exc:  # any PDF/SMTP/network failure; the message is never logged
-        error = type(exc).__name__
+        error = NO_CONTACT_ERROR if isinstance(exc, _NoContact) else type(exc).__name__
         logger.warning("Receipt email not sent (payment_id=%s, error=%s)", response.id, error)
     try:
         await _record_receipt(db, response.id, response.receipt_number, error, actor)

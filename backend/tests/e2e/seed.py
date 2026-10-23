@@ -63,6 +63,7 @@ RESIDENT_EMAIL = "laura.e2e@example.com"
 
 # Children before parents (foreign keys): the same order as tests/integration/conftest.py.
 TABLES = (
+    "notifications",  # HU-017: the seed's payments notify their residents; references users only
     "feedback", "demo_payment_transactions", "payment_allocations", "payments", "charges",
     "password_reset_tokens", "resident_units", "resident_invitations", "units", "towers", "blocks",
     "sessions", "login_throttles", "audit_logs", "users",

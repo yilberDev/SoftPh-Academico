@@ -1,9 +1,10 @@
 """Feedback management by the administrator (HU-005).
 
 respond   BEGIN · lock the feedback (FOR UPDATE) · same version? · still PENDING? ·
-          admin_response, version + 1 · FEEDBACK_RESPONDED · COMMIT ·
+          admin_response, version + 1 · FEEDBACK_RESPONDED · notification
+          record (HU-017, PENDING) · COMMIT ·
           notification to the resident (no transaction or lock open) ·
-          FEEDBACK_NOTIFICATION_SENT / _FAILED (another transaction).
+          FEEDBACK_NOTIFICATION_SENT / _FAILED + its delivery result (another transaction).
 resolve   The same, but: resolution_note (internal), status RESOLVED, resolved_at;
           FEEDBACK_RESOLVED. Never RESOLVED → PENDING (no reopening in HU-005).
 
@@ -47,6 +48,7 @@ from app.models import (
     FeedbackCategory,
     FeedbackStatus,
     FeedbackUrgency,
+    NotificationEvent,
     ResidentUnit,
     Tower,
     Unit,
@@ -78,6 +80,13 @@ from app.schemas.feedback import (
 from app.services.audit import record_audit
 from app.services.feedback_email import FeedbackNotice, build_feedback_email
 from app.services.mail import MailSender
+from app.services.notifications import (
+    NO_CONTACT_ERROR,
+    add_notification,
+    feedback_notice,
+    has_contact,
+    record_delivery,
+)
 from app.services.structure import Actor
 
 logger = logging.getLogger(__name__)
@@ -269,13 +278,24 @@ def ensure_changeable(status: FeedbackStatus, *, current_version: int, sent_vers
         raise FeedbackAlreadyResolvedError()
 
 
+class _NoContact(Exception):
+    """The resident has no valid email address (CU-017 2a); recorded as the error NoContact."""
+
+
 def _audit(db: AsyncSession, action: AuditAction, feedback_id: int, actor: Actor, context: dict[str, Any]) -> None:
     record_audit(db, action=action, entity_type=ENTITY, entity_id=feedback_id, actor_user_id=actor.user_id,
                  context=context, ip_address=actor.ip_address)
 
 
+async def _add_notification(db: AsyncSession, feedback: Feedback, event: NotificationEvent) -> str:
+    """HU-017: the notification of the change, in its transaction (to the feedback's own resident)."""
+    notice = feedback_notice(feedback_id=feedback.id, event=event, version=feedback.version, subject=feedback.subject)
+    await add_notification(db, feedback.resident_id, notice)
+    return notice.event_key
+
+
 async def _notify(
-    db: AsyncSession, feedback_id: int, notice: FeedbackNotice, actor: Actor, mailer: MailSender
+    db: AsyncSession, feedback_id: int, notice: FeedbackNotice, actor: Actor, mailer: MailSender, event_key: str
 ) -> NotificationStatus:
     """After the COMMIT: email the resident, then record the result in another transaction."""
     row = (
@@ -288,11 +308,13 @@ async def _notify(
     await db.commit()  # nothing stays open while SMTP runs
     error: str | None = None
     try:
+        if not has_contact(row.email):  # CU-017 2a: nothing to send it to
+            raise _NoContact()
         email = build_feedback_email(notice=notice, to=row.email, resident_name=row.full_name,
                                      subject=row.subject, admin_response=row.admin_response)
         await mailer.send(email)
     except Exception as exc:  # any SMTP/network failure; the message is never logged
-        error = type(exc).__name__
+        error = NO_CONTACT_ERROR if isinstance(exc, _NoContact) else type(exc).__name__
         logger.warning("Feedback notification not sent (feedback_id=%s, error=%s)", feedback_id, error)
     context: dict[str, Any] = {"notification": notice.value}
     if error is not None:
@@ -300,6 +322,7 @@ async def _notify(
     try:
         _audit(db, AuditAction.FEEDBACK_NOTIFICATION_SENT if error is None else AuditAction.FEEDBACK_NOTIFICATION_FAILED,
                feedback_id, actor, context)
+        await record_delivery(db, event_key, error)  # HU-017: the same result
         await db.commit()
     except Exception as exc:
         # The change stays committed; only the notification result is unconfirmed.
@@ -322,8 +345,9 @@ async def respond(
         "status": FeedbackStatus.PENDING.value, "previous_version": data.version, "version": data.version + 1,
         "replaced_response": replaced,
     })
+    event_key = await _add_notification(db, feedback, NotificationEvent.FEEDBACK_RESPONDED)
     await db.commit()  # the response is saved from here on
-    notification = await _notify(db, feedback_id, FeedbackNotice.RESPONSE, actor, mailer)
+    notification = await _notify(db, feedback_id, FeedbackNotice.RESPONSE, actor, mailer, event_key)
     return FeedbackActionResult(feedback=await get_feedback(db, feedback_id), notification_status=notification)
 
 
@@ -341,8 +365,9 @@ async def resolve(
         "previous_version": data.version, "version": data.version + 1,
         "with_response": feedback.admin_response is not None,
     })
+    event_key = await _add_notification(db, feedback, NotificationEvent.FEEDBACK_RESOLVED)
     await db.commit()
-    notification = await _notify(db, feedback_id, FeedbackNotice.RESOLUTION, actor, mailer)
+    notification = await _notify(db, feedback_id, FeedbackNotice.RESOLUTION, actor, mailer, event_key)
     return FeedbackActionResult(feedback=await get_feedback(db, feedback_id), notification_status=notification)
 
 

@@ -101,6 +101,8 @@ ACCESS_POLICY: dict[tuple[str, str], Access] = {
     ("GET", "/resident/payments/{payment_id}/receipt"): Access.RESIDENTE,  # HU-010: receipt of a demo payment
     # HU-014: the resident's own account statement (the resident is the session's).
     ("GET", "/resident/account-statement"): Access.RESIDENTE,
+    # HU-017: the resident's own notifications (the resident is the session's).
+    ("GET", "/resident/notifications"): Access.RESIDENTE,
     # HU-009: the resident's own feedback (the resident is the session's).
     ("POST", "/resident/feedback"): Access.RESIDENTE,
     ("GET", "/resident/feedback"): Access.RESIDENTE,
@@ -443,6 +445,12 @@ async def test_resident_reaches_every_resident_route(
     statement = await client.get(f"{API}/resident/account-statement", headers=headers)
     assert statement.status_code == 200 and statement.json()["resident"]["id"] == resident_id, statement.text
     visited.add(("GET", "/resident/account-statement"))
+    # HU-017: the notifications of the approved demo payment (panel only) and of the manual payment above.
+    notifications = await client.get(f"{API}/resident/notifications?page=1&page_size=10", headers=headers)
+    assert notifications.status_code == 200, notifications.text
+    assert [(n["event_type"], n["entity_id"], n["email_status"]) for n in notifications.json()["items"]] == [
+        ("PAYMENT_REGISTERED", approved, "NOT_REQUIRED"), ("PAYMENT_REGISTERED", payment.id, "SENT")]
+    visited.add(("GET", "/resident/notifications"))
 
     assert sorted(visited) == ROUTES_OF[Access.RESIDENTE]
 

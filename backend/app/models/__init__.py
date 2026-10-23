@@ -20,6 +20,7 @@ from app.models.finance import (
 )
 from app.models.invitation import DeliveryStatus, InvitationStatus, ResidentInvitation, ResidentUnit
 from app.models.login_throttle import LoginThrottle
+from app.models.notification import Notification, NotificationEmailStatus, NotificationEvent
 from app.models.password_reset import PasswordResetToken
 from app.models.session import UserSession
 from app.models.structure import Block, Tower, Unit
@@ -41,6 +42,9 @@ __all__ = [
     "FinancialConcept",
     "InvitationStatus",
     "LoginThrottle",
+    "Notification",
+    "NotificationEmailStatus",
+    "NotificationEvent",
     "PasswordResetToken",
     "Payment",
     "PaymentAllocation",

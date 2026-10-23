@@ -420,9 +420,10 @@ def before_instruments(migrated_test_database: URL) -> Iterator[URL]:
 
 def test_the_instrument_migration_is_the_head(migrated_test_database: URL) -> None:
     script = ScriptDirectory.from_config(alembic_config(migrated_test_database))
-    assert script.get_heads() == [NEW_REVISION]
     assert script.get_revision(NEW_REVISION).down_revision == PREVIOUS_REVISION
-    assert current_revision(migrated_test_database) == NEW_REVISION
+    # HU-017 (d33ea6140186) comes after it; test_notifications_migration.py checks the head.
+    assert NEW_REVISION in {revision.revision for revision in script.walk_revisions()}
+    assert NEW_REVISION in {revision.down_revision for revision in script.walk_revisions()}
 
 
 def test_existing_transactions_stay_valid_with_null(before_instruments: URL) -> None:

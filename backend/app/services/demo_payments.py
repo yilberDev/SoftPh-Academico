@@ -48,7 +48,9 @@ After the lock, sums are consistent reads, never FOR SHARE (see
 payments._covered: locking reads of allocations deadlocked apartments). Any
 error rolls everything back; only an expiry or an approval that can no longer
 be applied is committed (EXPIRED / FAILED) before its error. No global FIFO:
-the approved amount goes to the selected charge only. No email (HU-017).
+the approved amount goes to the selected charge only. No email (HU-010 decision): an
+approved and applied payment only adds the resident's notification (HU-017, NOT_REQUIRED)
+in the same transaction; any other outcome creates no payment and notifies nothing.
 """
 
 import secrets
@@ -100,6 +102,7 @@ from app.services.audit import record_audit
 from app.services.charges import ChargeSummary, list_outstanding_charges
 from app.services.demo_instruments import DemoInstrumentResolution
 from app.services.demo_instruments import resolve as resolve_instrument
+from app.services.notifications import add_notification, demo_payment_notice
 from app.services.payments import money
 from app.services.structure import lock_unit_path
 
@@ -418,6 +421,10 @@ async def _approve(
     _audit(db, AuditAction.DEMO_PAYMENT_APPROVED, transaction, resident.id, ip_address,
            payment_id=payment.id, receipt_number=number,
            **({} if instrument_id is None else {"instrument_id": instrument_id}))
+    # HU-017 criterion 2: committed with the approval itself; no email (HU-010).
+    await add_notification(db, resident.id, demo_payment_notice(
+        payment_id=payment.id, receipt_number=number, amount=amount, payment_date=payment.payment_date,
+    ))
     return None
 
 

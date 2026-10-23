@@ -7,7 +7,7 @@ interface Props {
 }
 
 // The resident's navigation (HU-007 panel; HU-014 account statement; HU-008 payments; HU-009 feedback;
-// HU-010 demo payment, only while DEMO_PAYMENTS_ENABLED). Same layout as AdminHeader.
+// HU-010 demo payment, only while DEMO_PAYMENTS_ENABLED; HU-017 notifications). Same layout as AdminHeader.
 const { csrfToken } = Astro.props;
 const path = Astro.url.pathname;
 const links = [
@@ -17,7 +17,8 @@ const links = [
   ...(demoPaymentsEnabled()
     ? [{ href: '/resident/demo-payments', label: 'Pago de demostración', active: path.startsWith('/resident/demo-payments') }]
     : []),
-  { href: '/resident/feedback', label: 'Mis feedback', active: path.startsWith('/resident/feedback') }
+  { href: '/resident/feedback', label: 'Mis feedback', active: path.startsWith('/resident/feedback') },
+  { href: '/resident/notifications', label: 'Notificaciones', active: path.startsWith('/resident/notifications') }
 ];
 ---
 
