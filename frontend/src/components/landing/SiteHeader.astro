@@ -1,0 +1,95 @@
+---
+// Header of the public landing page: the brand, the links to its sections and the access to SoftPh (the
+// real login page, which sends a signed-in user to the home page of their role). On narrow screens the
+// links fold into a menu button (aria-expanded, Escape and a chosen link close it).
+import ButtonLink from './ButtonLink.astro';
+import Icon from './Icon.astro';
+import Logo from './Logo.astro';
+import { LOGIN_PATH, NAV_LINKS, SECTIONS } from '../../lib/landing/content';
+import { FOCUS_RING } from '../../lib/landing/ui';
+
+const navLink = `whitespace-nowrap rounded-md px-1 py-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 motion-reduce:transition-none ${FOCUS_RING}`;
+---
+
+<header class="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 backdrop-blur-md supports-[backdrop-filter]:bg-white/85" data-site-header>
+  <div class="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+    <a href={`#${SECTIONS.home}`} class={`rounded-md ${FOCUS_RING}`} aria-label="SoftPh, ir al inicio">
+      <Logo />
+    </a>
+
+    <nav aria-label="Secciones" class="hidden lg:block">
+      <ul class="flex items-center gap-7">
+        {NAV_LINKS.map(({ label, href }) => <li><a href={href} class={navLink}>{label}</a></li>)}
+      </ul>
+    </nav>
+
+    <div class="hidden items-center gap-1 lg:flex">
+      <ButtonLink href={LOGIN_PATH} variant="ghost">Iniciar sesión</ButtonLink>
+      <ButtonLink href={LOGIN_PATH}>Ingresar a SoftPh</ButtonLink>
+    </div>
+
+    <button
+      type="button"
+      class={`inline-flex h-11 w-11 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100 lg:hidden ${FOCUS_RING}`}
+      aria-expanded="false"
+      aria-controls="site-menu"
+      data-menu-button
+    >
+      <span class="sr-only" data-menu-label>Abrir menú</span>
+      <span data-menu-open><Icon name="menu" class="h-6 w-6" /></span>
+      <span data-menu-close class="hidden"><Icon name="x" class="h-6 w-6" /></span>
+    </button>
+  </div>
+
+  <div id="site-menu" class="hidden border-t border-slate-200 bg-white lg:hidden" data-menu>
+    <nav aria-label="Secciones" class="mx-auto max-w-7xl px-4 py-3 sm:px-6">
+      <ul class="space-y-1">
+        {
+          NAV_LINKS.map(({ label, href }) => (
+            <li>
+              <a href={href} class={`block rounded-md px-3 py-3 text-base font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 ${FOCUS_RING}`} data-menu-link>
+                {label}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+      <div class="mt-3 grid gap-2 border-t border-slate-200 pt-4 sm:grid-cols-2">
+        <ButtonLink href={LOGIN_PATH} variant="secondary">Iniciar sesión</ButtonLink>
+        <ButtonLink href={LOGIN_PATH}>Ingresar a SoftPh</ButtonLink>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<script>
+  const header = document.querySelector<HTMLElement>('[data-site-header]');
+  if (header) {
+    const button = header.querySelector<HTMLButtonElement>('[data-menu-button]')!;
+    const menu = header.querySelector<HTMLElement>('[data-menu]')!;
+    const label = header.querySelector<HTMLElement>('[data-menu-label]')!;
+    const openIcon = header.querySelector<HTMLElement>('[data-menu-open]')!;
+    const closeIcon = header.querySelector<HTMLElement>('[data-menu-close]')!;
+
+    const setOpen = (open: boolean) => {
+      button.setAttribute('aria-expanded', String(open));
+      menu.classList.toggle('hidden', !open);
+      openIcon.classList.toggle('hidden', open);
+      closeIcon.classList.toggle('hidden', !open);
+      label.textContent = open ? 'Cerrar menú' : 'Abrir menú';
+    };
+
+    button.addEventListener('click', () => setOpen(button.getAttribute('aria-expanded') !== 'true'));
+    menu.querySelectorAll('[data-menu-link]').forEach((link) => link.addEventListener('click', () => setOpen(false)));
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && button.getAttribute('aria-expanded') === 'true') {
+        setOpen(false);
+        button.focus();
+      }
+    });
+    // Back to a wide screen: the menu is not needed (the links are in the header again).
+    window.matchMedia('(min-width: 1024px)').addEventListener('change', (event) => {
+      if (event.matches) setOpen(false);
+    });
+  }
+</script>

@@ -1,0 +1,30 @@
+---
+// Footer of the public landing page: the brand, the links to its sections and the sign-in. No company or
+// legal information is shown because none is defined for the project.
+import Logo from './Logo.astro';
+import { LOGIN_PATH, NAV_LINKS } from '../../lib/landing/content';
+import { FOCUS_RING } from '../../lib/landing/ui';
+
+const link = `inline-flex min-h-11 items-center rounded-md text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 motion-reduce:transition-none ${FOCUS_RING}`;
+const links = [...NAV_LINKS, { label: 'Iniciar sesión', href: LOGIN_PATH }];
+---
+
+<footer class="border-t border-slate-200 bg-slate-100/70">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="flex flex-col gap-6 py-10 md:flex-row md:items-start md:justify-between md:gap-10 lg:py-12">
+      <div class="max-w-md">
+        <Logo />
+        <p class="mt-3 text-sm leading-6 text-slate-600">
+          Plataforma para la gestión de propiedad horizontal en Colombia: residentes, pagos, estados de cuenta, solicitudes y
+          notificaciones en un solo lugar.
+        </p>
+      </div>
+      <nav aria-label="Secciones de la página">
+        <ul class="flex flex-wrap gap-x-6 gap-y-0">
+          {links.map(({ label, href }) => <li><a href={href} class={link}>{label}</a></li>)}
+        </ul>
+      </nav>
+    </div>
+    <p class="border-t border-slate-200 py-6 text-xs text-slate-600">SoftPh · Gestión de propiedad horizontal.</p>
+  </div>
+</footer>

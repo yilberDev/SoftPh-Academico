@@ -1,0 +1,26 @@
+---
+// A line icon of the public landing page (lib/landing/icons.ts). Always decorative (aria-hidden):
+// the text next to each icon says what it means.
+import { ICONS, type IconName } from '../../lib/landing/icons';
+
+interface Props {
+  name: IconName;
+  class?: string;
+}
+
+const { name, class: className = 'h-5 w-5' } = Astro.props;
+---
+
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.75"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  aria-hidden="true"
+  focusable="false"
+  class={className}
+  set:html={ICONS[name]}
+/>

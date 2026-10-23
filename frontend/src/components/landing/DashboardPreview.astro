@@ -1,0 +1,140 @@
+---
+// Illustrative picture of the administrator's summary for the landing hero: fixed example values, no
+// data of any community and no behavior. One accessible image (role="img") with a description; the
+// visible caption says it is illustrative. The icon sidebar folds away and the table drops its concept
+// column on narrow screens.
+import Icon from './Icon.astro';
+import {
+  DASHBOARD_CHART,
+  DASHBOARD_KPIS,
+  DASHBOARD_MOVEMENTS,
+  DASHBOARD_NAV,
+  ILLUSTRATIVE_NOTE,
+  STATUS_BADGES,
+  formatExampleAmount,
+  type KpiTone
+} from '../../lib/landing/content';
+
+const CHART_HEIGHT_PX = 72; // the tallest bar (value 100)
+// Older months lighter, the current one solid (literal classes, so Tailwind sees them).
+const BAR_TONES = ['bg-teal-600/30', 'bg-teal-600/40', 'bg-teal-600/50', 'bg-teal-600/65', 'bg-teal-600/55', 'bg-teal-700'];
+const KPI_TONES: Record<KpiTone, string> = { neutral: 'text-slate-900', danger: 'text-rose-700', warning: 'text-amber-700' };
+const description =
+  'Vista ilustrativa del resumen administrativo de SoftPh, con datos de ejemplo: indicadores de recaudo, saldo pendiente, residentes y solicitudes, un gráfico de recaudo por mes y las últimas obligaciones.';
+---
+
+<figure>
+  <div
+    role="img"
+    aria-label={description}
+    class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_20px_25px_-5px_rgba(15,23,42,0.08),0_8px_10px_-6px_rgba(15,23,42,0.04)]"
+  >
+    <div class="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-100/80 px-4 py-2.5">
+      <div class="flex min-w-0 items-center gap-1.5">
+        <span class="h-2.5 w-2.5 shrink-0 rounded-full bg-rose-400"></span>
+        <span class="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-400"></span>
+        <span class="h-2.5 w-2.5 shrink-0 rounded-full bg-teal-500"></span>
+        <span class="ml-2 whitespace-nowrap text-[11px] font-medium text-slate-600">Panel administrativo</span>
+      </div>
+      <div class="flex shrink-0 items-center gap-2 text-slate-500">
+        <span class="rounded bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200">Octubre</span>
+        <Icon name="bell" class="h-4 w-4" />
+      </div>
+    </div>
+
+    <div class="flex">
+      <ul class="hidden w-14 shrink-0 flex-col items-center gap-2.5 border-r border-slate-200 bg-slate-50 py-4 sm:flex">
+        {
+          DASHBOARD_NAV.map((icon, index) => (
+            <li class:list={['flex h-8 w-8 items-center justify-center rounded-md',
+              index === 0 ? 'bg-teal-700 text-white' : 'text-slate-500']}>
+              <Icon name={icon} class="h-4 w-4" />
+            </li>
+          ))
+        }
+      </ul>
+
+      <div class="min-w-0 flex-1 space-y-4 p-4 sm:p-5">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-[0.9375rem] font-semibold tracking-tight text-slate-900">Resumen administrativo</p>
+            <p class="truncate text-xs text-slate-500">Estado general del periodo</p>
+          </div>
+          <span class="inline-flex shrink-0 items-center gap-1.5 rounded bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-teal-800">
+            <span class="h-1.5 w-1.5 rounded-full bg-teal-600"></span>Ejemplo
+          </span>
+        </div>
+
+        <ul class="grid grid-cols-2 gap-2.5 xl:grid-cols-4">
+          {
+            DASHBOARD_KPIS.map(({ label, value, detail, tone }) => (
+              <li class="min-w-0 rounded-lg bg-slate-50 p-3 ring-1 ring-inset ring-slate-200/70">
+                <p class="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+                <p class:list={['mt-1 truncate text-base font-bold tabular-nums tracking-tight', KPI_TONES[tone]]}>{value}</p>
+                <p class="truncate text-[11px] text-slate-500">{detail}</p>
+              </li>
+            ))
+          }
+        </ul>
+
+        <div class="rounded-lg bg-slate-50 p-3.5 ring-1 ring-inset ring-slate-200/70">
+          <div class="flex items-center justify-between gap-2">
+            <p class="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-700">Recaudo por mes</p>
+            <p class="shrink-0 text-[10px] text-slate-500">Últimos 6 meses</p>
+          </div>
+          <div class="relative mt-3">
+            <div class="pointer-events-none absolute inset-x-0 top-0 border-t border-dashed border-slate-200"></div>
+            <div class="pointer-events-none absolute inset-x-0 top-1/2 border-t border-dashed border-slate-200"></div>
+            <div class="relative flex items-end gap-3 border-b border-slate-300 sm:gap-5" style={`height: ${CHART_HEIGHT_PX}px`}>
+              {
+                DASHBOARD_CHART.map(({ value }, index) => (
+                  <div
+                    class:list={['flex-1 rounded-t-[3px]', BAR_TONES[index] ?? BAR_TONES[0]]}
+                    style={`height: ${Math.round((value / 100) * CHART_HEIGHT_PX)}px`}
+                  ></div>
+                ))
+              }
+            </div>
+            <div class="mt-1.5 flex gap-3 sm:gap-5">
+              {
+                DASHBOARD_CHART.map(({ month }, index) => (
+                  <span class:list={['flex-1 text-center text-[10px] uppercase',
+                    index === DASHBOARD_CHART.length - 1 ? 'font-bold text-teal-700' : 'text-slate-500']}>{month}</span>
+                ))
+              }
+            </div>
+          </div>
+        </div>
+
+        <table class="w-full text-left text-xs">
+          <thead>
+            <tr class="bg-slate-100 text-[10px] uppercase tracking-wider text-slate-500">
+              <th class="rounded-l px-2.5 py-2 font-semibold">Unidad</th>
+              <th class="hidden px-2.5 py-2 font-semibold sm:table-cell">Concepto</th>
+              <th class="px-2.5 py-2 text-right font-semibold">Valor</th>
+              <th class="rounded-r px-2.5 py-2 text-center font-semibold">Estado</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            {
+              DASHBOARD_MOVEMENTS.map(({ unit, concept, amount, status }) => (
+                <tr>
+                  <td class="whitespace-nowrap px-2.5 py-2 font-mono text-[11px] font-medium text-slate-800">{unit}</td>
+                  <td class="hidden px-2.5 py-2 text-slate-600 sm:table-cell">{concept}</td>
+                  <td class="whitespace-nowrap px-2.5 py-2 text-right font-medium tabular-nums text-slate-900">{formatExampleAmount(amount)}</td>
+                  <td class="px-2.5 py-2 text-center">
+                    <span class:list={['inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset', STATUS_BADGES[status]]}>{status}</span>
+                  </td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <figcaption class="mt-3 flex items-center justify-center gap-1.5 text-xs text-slate-500 lg:justify-start">
+    <Icon name="info" class="h-3.5 w-3.5 shrink-0" />
+    {ILLUSTRATIVE_NOTE}
+  </figcaption>
+</figure>

@@ -1,0 +1,95 @@
+---
+// Illustrative table of obligations for the landing page: example rows (never real data) and totals and
+// counts by status derived from those rows. A real table with its caption; on narrow screens each row
+// stacks with its labels, so nothing scrolls sideways. Nothing here is interactive (no filters, no exports).
+import Icon from './Icon.astro';
+import {
+  EXAMPLE_ROWS,
+  ILLUSTRATIVE_NOTE,
+  STATUS_BADGES,
+  STATUS_TEXT,
+  exampleCounts,
+  exampleTotals,
+  formatExampleAmount,
+  obligationsLabel,
+  type ExampleStatus
+} from '../../lib/landing/content';
+
+const totals = exampleTotals(EXAMPLE_ROWS);
+const counts = exampleCounts(EXAMPLE_ROWS);
+const summary: { status: ExampleStatus; label: string }[] = [
+  { status: 'Pagado', label: 'Recaudado' },
+  { status: 'Pendiente', label: 'Pendiente' },
+  { status: 'En mora', label: 'En mora' }
+];
+const cell = 'px-5 py-3.5 max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-4 max-md:px-0 max-md:py-1 max-md:before:text-xs max-md:before:font-medium max-md:before:text-slate-500 max-md:before:content-[attr(data-label)]';
+---
+
+<div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_4px_6px_-1px_rgba(15,23,42,0.07),0_2px_4px_-2px_rgba(15,23,42,0.04)]" data-financial-preview>
+  <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
+    <div class="flex items-center gap-3">
+      <span class="flex h-9 w-9 items-center justify-center rounded-md bg-white text-teal-700 ring-1 ring-slate-200">
+        <Icon name="fileText" class="h-[1.125rem] w-[1.125rem]" />
+      </span>
+      <p class="font-semibold text-slate-900">Obligaciones del periodo</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="inline-flex items-center gap-1.5 rounded-md bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200">
+        <Icon name="calendar" class="h-3.5 w-3.5 text-teal-700" />Octubre
+      </span>
+      <span class="rounded-full bg-slate-200/70 px-2.5 py-1 text-xs font-medium text-slate-700">Ejemplo</span>
+    </div>
+  </div>
+
+  <dl class="grid divide-y divide-slate-200 border-b border-slate-200 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+    {
+      summary.map(({ status, label }) => (
+        <div class="px-5 py-4 sm:px-6 sm:py-5">
+          <dt class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</dt>
+          <dd class:list={['mt-1 text-2xl font-bold tabular-nums tracking-tight', STATUS_TEXT[status]]} data-example-total={status}>
+            {formatExampleAmount(totals[status])}
+          </dd>
+          <dd class="mt-0.5 text-xs text-slate-500">{obligationsLabel(counts[status])}</dd>
+        </div>
+      ))
+    }
+  </dl>
+
+  <table class="w-full text-left text-sm max-md:block">
+    <caption class="sr-only">Ejemplo ilustrativo de obligaciones por unidad, con su concepto, fecha, valor y estado</caption>
+    <thead class="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500 max-md:hidden">
+      <tr>
+        <th scope="col" class="px-5 py-3 font-semibold">Unidad</th>
+        <th scope="col" class="px-5 py-3 font-semibold">Concepto</th>
+        <th scope="col" class="px-5 py-3 font-semibold">Fecha</th>
+        <th scope="col" class="px-5 py-3 text-right font-semibold">Valor</th>
+        <th scope="col" class="px-5 py-3 text-center font-semibold">Estado</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100 max-md:block">
+      {
+        EXAMPLE_ROWS.map((row) => (
+          <tr class="max-md:block max-md:px-5 max-md:py-3" data-example-row>
+            <td class:list={[cell, 'whitespace-nowrap font-medium text-slate-900']} data-label="Unidad">
+              <span class="flex items-center gap-2">
+                <Icon name="home" class="hidden h-4 w-4 shrink-0 text-slate-400 md:block" />
+                <span class="font-mono text-xs">{row.unit}</span>
+              </span>
+            </td>
+            <td class:list={[cell, 'text-slate-600']} data-label="Concepto">{row.concept}</td>
+            <td class:list={[cell, 'whitespace-nowrap tabular-nums text-slate-600']} data-label="Fecha">{row.date}</td>
+            <td class:list={[cell, 'whitespace-nowrap font-semibold tabular-nums text-slate-900 md:text-right']} data-label="Valor">{formatExampleAmount(row.amount)}</td>
+            <td class:list={[cell, 'md:text-center']} data-label="Estado">
+              <span class:list={['inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset', STATUS_BADGES[row.status]]}>{row.status}</span>
+            </td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+
+  <div class="flex flex-col gap-1 border-t border-slate-200 bg-slate-50 px-5 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+    <p class="flex items-center gap-1.5"><Icon name="info" class="h-3.5 w-3.5 shrink-0" />{ILLUSTRATIVE_NOTE}</p>
+    <p class="font-medium text-slate-700">{obligationsLabel(EXAMPLE_ROWS.length)} de ejemplo</p>
+  </div>
+</div>

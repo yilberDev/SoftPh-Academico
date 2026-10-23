@@ -1,1 +1,8 @@
 @import "tailwindcss";
+
+/* In-page links (the landing page's sections) glide only for users who did not ask for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}

@@ -1,0 +1,16 @@
+---
+// A link that looks like a button on the public landing page (lib/landing/ui.ts holds the variants).
+import { buttonClasses, type ButtonSize, type ButtonVariant } from '../../lib/landing/ui';
+
+interface Props {
+  href: string;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  class?: string;
+  [attribute: `data-${string}`]: string | boolean | undefined;
+}
+
+const { href, variant = 'primary', size = 'md', class: className, ...rest } = Astro.props;
+---
+
+<a href={href} class:list={[buttonClasses(variant, size), className]} {...rest}><slot /></a>
