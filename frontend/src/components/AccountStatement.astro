@@ -1,0 +1,322 @@
+---
+// HU-011 (administrator) / HU-014 (resident): the account statement of the resident's current apartment.
+// The browser loads it from the API (it authorizes every request on its own, HU-018); one response draws the
+// whole statement, so lines and totals always belong to the same moment.
+import { LOADING_MESSAGE, UNIT_NOTE } from '../lib/account-statement/statement-view';
+import { STACKED_TABLE } from '../lib/obligations/charge-format';
+
+interface Props {
+  mode: 'admin' | 'resident';
+  residentId?: number;
+}
+const { mode, residentId } = Astro.props;
+
+const card = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6';
+const secondaryButton =
+  'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:cursor-not-allowed disabled:opacity-50';
+const sections = [
+  { key: 'overdue', title: 'Obligaciones en mora', help: 'Con saldo pendiente después de su fecha de pago.' },
+  { key: 'pending', title: 'Obligaciones pendientes', help: 'Con saldo pendiente, dentro de su fecha de pago.' },
+  { key: 'paid', title: 'Obligaciones pagadas', help: 'Cubiertas por completo con pagos aplicados.' }
+] as const;
+---
+
+<div class="space-y-6" data-account-statement data-mode={mode} data-resident-id={residentId ?? ''}>
+  <p data-status-line class="text-sm text-slate-600" aria-live="polite">{LOADING_MESSAGE}</p>
+
+  <div data-loading class="space-y-3" aria-hidden="true">
+    <div class="h-24 animate-pulse rounded-2xl bg-slate-100"></div>
+    <div class="h-40 animate-pulse rounded-2xl bg-slate-100"></div>
+  </div>
+
+  <div data-alert role="alert" class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+    <p data-alert-message></p>
+    <button type="button" data-retry class={`mt-3 ${secondaryButton}`}>Reintentar</button>
+  </div>
+
+  <div data-content class="hidden space-y-6">
+    <div data-notice role="status" class="hidden rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"></div>
+
+    <section aria-labelledby="statement-summary-title" class={card}>
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 id="statement-summary-title" class="text-lg font-semibold">Resumen de la cuenta</h2>
+          <p class="mt-1 text-sm text-slate-600">
+            <span data-resident-name class="font-medium text-slate-900"></span>
+            · Unidad <span data-unit class="font-mono"></span>
+          </p>
+          <p class="mt-1 text-xs text-slate-500">Estado calculado al <span data-as-of></span>. {UNIT_NOTE}</p>
+        </div>
+        <div class="flex flex-col items-end gap-2">
+          <span data-account-badge class="inline-flex rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset"></span>
+          <button type="button" data-refresh class={secondaryButton}>Actualizar</button>
+        </div>
+      </div>
+      <p data-account-help class="mt-3 text-sm text-slate-700"></p>
+      <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+        <div class="rounded-xl bg-slate-50 px-4 py-3">
+          <dt class="text-slate-500">Total pendiente de pago</dt>
+          <dd data-total="pending_balance" class="mt-1 text-lg font-semibold text-slate-900"></dd>
+        </div>
+        <div class="rounded-xl bg-slate-50 px-4 py-3">
+          <dt class="text-slate-500">En mora</dt>
+          <dd data-total="overdue_balance" class="mt-1 text-lg font-semibold text-slate-900"></dd>
+        </div>
+        <div class="rounded-xl bg-slate-50 px-4 py-3">
+          <dt class="text-slate-500">Saldo a favor</dt>
+          <dd data-total="credit_balance" class="mt-1 text-lg font-semibold text-slate-900"></dd>
+        </div>
+        <div class="rounded-xl bg-slate-50 px-4 py-3">
+          <dt class="text-slate-500">Total de obligaciones</dt>
+          <dd data-total="total_charged" class="mt-1 font-medium text-slate-900"></dd>
+        </div>
+        <div class="rounded-xl bg-slate-50 px-4 py-3">
+          <dt class="text-slate-500">Pagos aplicados a obligaciones</dt>
+          <dd data-total="total_applied" class="mt-1 font-medium text-slate-900"></dd>
+        </div>
+        <div class="rounded-xl bg-slate-50 px-4 py-3">
+          <dt class="text-slate-500">Obligaciones con saldo</dt>
+          <dd data-count class="mt-1 font-medium text-slate-900"></dd>
+        </div>
+      </dl>
+    </section>
+
+    <p data-empty class="hidden rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center text-slate-600 shadow-sm"></p>
+
+    <div data-movements class="space-y-6">
+      {
+        sections.map(({ key, title, help }) => (
+          <section aria-labelledby={`statement-${key}-title`} class={card} data-section={key}>
+            <h2 id={`statement-${key}-title`} class="text-lg font-semibold">
+              {title} <span data-section-count class="text-sm font-normal text-slate-500"></span>
+            </h2>
+            <p class="mt-1 text-sm text-slate-600">{help}</p>
+            <p data-section-empty class="mt-3 hidden text-sm italic text-slate-500"></p>
+            <div class="mt-3 overflow-x-auto">
+              <table class={STACKED_TABLE}>
+                <thead class="bg-slate-50 text-slate-700 max-sm:hidden">
+                  <tr>
+                    <th scope="col" class="px-3 py-2 font-medium">Obligación</th>
+                    <th scope="col" class="whitespace-nowrap px-3 py-2 font-medium">Vence</th>
+                    <th scope="col" class="whitespace-nowrap px-3 py-2 text-right font-medium">Valor</th>
+                    <th scope="col" class="whitespace-nowrap px-3 py-2 text-right font-medium">Abonado</th>
+                    <th scope="col" class="whitespace-nowrap px-3 py-2 text-right font-medium">Saldo</th>
+                    <th scope="col" class="px-3 py-2 font-medium">Estado</th>
+                  </tr>
+                </thead>
+                <tbody data-rows class="sm:divide-y sm:divide-slate-100"></tbody>
+              </table>
+            </div>
+          </section>
+        ))
+      }
+
+      <section aria-labelledby="statement-payments-title" class={card}>
+        <h2 id="statement-payments-title" class="text-lg font-semibold">
+          Pagos registrados <span data-payments-count class="text-sm font-normal text-slate-500"></span>
+        </h2>
+        <p data-payments-note class="mt-1 text-sm text-slate-600"></p>
+        <p data-payments-empty class="mt-3 hidden text-sm italic text-slate-500"></p>
+        <div class="mt-3 overflow-x-auto">
+          <table class={STACKED_TABLE}>
+            <thead class="bg-slate-50 text-slate-700 max-sm:hidden">
+              <tr>
+                <th scope="col" class="whitespace-nowrap px-3 py-2 font-medium">Fecha</th>
+                <th scope="col" class="whitespace-nowrap px-3 py-2 font-medium">Recibo</th>
+                <th scope="col" class="px-3 py-2 font-medium">Concepto y aplicación</th>
+                <th scope="col" class="whitespace-nowrap px-3 py-2 text-right font-medium">Valor</th>
+                <th scope="col" class="whitespace-nowrap px-3 py-2 text-right font-medium">Saldo a favor</th>
+                <th scope="col" class="px-3 py-2 font-medium">Estado</th>
+              </tr>
+            </thead>
+            <tbody data-payment-rows class="sm:divide-y sm:divide-slate-100"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+  import {
+    getMyAccountStatement,
+    getResidentAccountStatement,
+    type AccountStatement,
+    type StatementObligation,
+    type StatementPayment
+  } from '../lib/api/account-statement';
+  import {
+    ACCOUNT_STATUS_BADGES,
+    ACCOUNT_STATUS_HELP,
+    ACCOUNT_STATUS_LABELS,
+    ADMIN_NOT_AVAILABLE,
+    EMPTY_MESSAGE,
+    LOADING_MESSAGE,
+    NO_OVERDUE_MESSAGE,
+    NO_PAID_MESSAGE,
+    NO_PAYMENTS_MESSAGE,
+    NO_PENDING_MESSAGE,
+    REFRESHING_MESSAGE,
+    RESIDENT_PAYMENTS_NOTE,
+    allocationLines,
+    createStatementLoader,
+    groupObligations,
+    obligationText,
+    payerText,
+    type StatementState
+  } from '../lib/account-statement/statement-view';
+  import { STACKED_CELL, STACKED_ROW, STATUS_BADGES, STATUS_LABELS } from '../lib/obligations/charge-format';
+  import {
+    METHOD_LABELS,
+    STATUS_BADGES as PAYMENT_BADGES,
+    STATUS_LABELS as PAYMENT_LABELS,
+    formatCop,
+    formatDate,
+    paymentConceptText
+  } from '../lib/resident/payment-format';
+
+  const EMPTY_BY_SECTION = { overdue: NO_OVERDUE_MESSAGE, pending: NO_PENDING_MESSAGE, paid: NO_PAID_MESSAGE } as const;
+
+  function cell(label: string, text: string, extra = ''): HTMLTableCellElement {
+    const td = document.createElement('td');
+    td.className = `px-3 py-2 align-top ${STACKED_CELL} ${extra}`;
+    td.dataset.label = label;
+    td.textContent = text;
+    return td;
+  }
+
+  function badgeCell(label: string, text: string, classes: string): HTMLTableCellElement {
+    const td = cell(label, '');
+    const badge = document.createElement('span');
+    badge.className = `inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${classes}`;
+    badge.textContent = text;
+    td.append(badge);
+    return td;
+  }
+
+  function obligationRow(item: StatementObligation): HTMLTableRowElement {
+    const tr = document.createElement('tr');
+    tr.className = STACKED_ROW;
+    tr.append(
+      cell('Obligación', obligationText(item), 'font-medium text-slate-900'),
+      cell('Vence', formatDate(item.due_date), 'whitespace-nowrap'),
+      cell('Valor', formatCop(item.amount), 'whitespace-nowrap sm:text-right'),
+      cell('Abonado', formatCop(item.applied_amount), 'whitespace-nowrap sm:text-right'),
+      cell('Saldo', formatCop(item.outstanding_amount), 'whitespace-nowrap font-medium sm:text-right'),
+      badgeCell('Estado', STATUS_LABELS[item.status], STATUS_BADGES[item.status])
+    );
+    return tr;
+  }
+
+  function paymentRow(payment: StatementPayment, statement: AccountStatement, admin: boolean): HTMLTableRowElement {
+    const tr = document.createElement('tr');
+    tr.className = STACKED_ROW;
+    const concept = cell('Concepto y aplicación', paymentConceptText(payment.concept, payment.concept_description));
+    const details = [`${METHOD_LABELS[payment.method]}`, ...(admin ? [`Pagó: ${payerText(payment)}`] : [])];
+    const lines = allocationLines(payment, statement.obligations);
+    for (const text of [...details, ...(lines.length ? lines.map((line) => `Aplicado a ${line}`) : ['Sin aplicar a obligaciones'])]) {
+      const p = document.createElement('p');
+      p.className = 'text-xs text-slate-600';
+      p.textContent = text;
+      concept.append(p);
+    }
+    tr.append(
+      cell('Fecha', formatDate(payment.payment_date), 'whitespace-nowrap'),
+      cell('Recibo', payment.receipt_number, 'whitespace-nowrap font-mono'),
+      concept,
+      cell('Valor', formatCop(payment.amount), 'whitespace-nowrap sm:text-right'),
+      cell('Saldo a favor', formatCop(payment.credit_amount), 'whitespace-nowrap sm:text-right'),
+      badgeCell('Estado', PAYMENT_LABELS[payment.status], PAYMENT_BADGES[payment.status])
+    );
+    return tr;
+  }
+
+  for (const root of document.querySelectorAll<HTMLElement>('[data-account-statement]')) {
+    const admin = root.dataset.mode === 'admin';
+    const residentId = Number(root.dataset.residentId);
+    const $ = <T extends Element>(selector: string) => root.querySelector<T>(selector)!;
+    const show = (element: Element, visible: boolean) => element.classList.toggle('hidden', !visible);
+    const refreshButton = $<HTMLButtonElement>('[data-refresh]');
+
+    function drawStatement(statement: AccountStatement): void {
+      const { summary } = statement;
+      $('[data-resident-name]').textContent = statement.resident.full_name;
+      $('[data-unit]').textContent = statement.resident.unit.label;
+      $('[data-as-of]').textContent = formatDate(statement.as_of);
+      const badge = $<HTMLElement>('[data-account-badge]');
+      badge.textContent = ACCOUNT_STATUS_LABELS[summary.status];
+      badge.className = `inline-flex rounded-full px-3 py-1 text-sm font-medium ring-1 ring-inset ${ACCOUNT_STATUS_BADGES[summary.status]}`;
+      $('[data-account-help]').textContent = ACCOUNT_STATUS_HELP[summary.status];
+      for (const element of root.querySelectorAll<HTMLElement>('[data-total]')) {
+        element.textContent = formatCop(summary[element.dataset.total as 'pending_balance']);
+      }
+      $('[data-count]').textContent = `${summary.pending_obligations} de ${summary.obligations}`;
+
+      show($('[data-empty]'), !statement.has_movements);
+      $('[data-empty]').textContent = EMPTY_MESSAGE;
+      show($('[data-movements]'), statement.has_movements);
+      const groups = groupObligations(statement.obligations);
+      for (const section of root.querySelectorAll<HTMLElement>('[data-section]')) {
+        const key = section.dataset.section as keyof typeof groups;
+        const items = groups[key];
+        section.querySelector('[data-section-count]')!.textContent = `(${items.length})`;
+        section.querySelector<HTMLElement>('[data-rows]')!.replaceChildren(...items.map(obligationRow));
+        const empty = section.querySelector<HTMLElement>('[data-section-empty]')!;
+        empty.textContent = EMPTY_BY_SECTION[key];
+        show(empty, items.length === 0);
+        show(section.querySelector('table')!, items.length > 0);
+      }
+      $('[data-payments-count]').textContent = `(${statement.payments.length})`;
+      $('[data-payments-note]').textContent = admin
+        ? 'Todos los pagos registrados para la unidad, con quién los realizó.'
+        : RESIDENT_PAYMENTS_NOTE;
+      $<HTMLElement>('[data-payment-rows]').replaceChildren(
+        ...statement.payments.map((payment) => paymentRow(payment, statement, admin))
+      );
+      $('[data-payments-empty]').textContent = NO_PAYMENTS_MESSAGE;
+      show($('[data-payments-empty]'), statement.payments.length === 0);
+    }
+
+    function render(state: StatementState): void {
+      show($('[data-loading]'), state.kind === 'loading');
+      show($('[data-alert]'), state.kind === 'error' || state.kind === 'unavailable');
+      show($('[data-retry]'), state.kind === 'error');
+      show($('[data-content]'), state.kind === 'ready');
+      const statusLine = $('[data-status-line]');
+      switch (state.kind) {
+        case 'loading':
+          statusLine.textContent = LOADING_MESSAGE;
+          break;
+        case 'ready':
+          statusLine.textContent = state.refreshing ? REFRESHING_MESSAGE : '';
+          refreshButton.disabled = state.refreshing;
+          show($('[data-notice]'), state.notice !== null);
+          $('[data-notice]').textContent = state.notice ?? '';
+          drawStatement(state.statement);
+          break;
+        case 'unavailable':
+        case 'error':
+          statusLine.textContent = '';
+          $('[data-alert-message]').textContent = state.message;
+          break;
+      }
+    }
+
+    const loader = createStatementLoader({
+      load: admin ? () => getResidentAccountStatement(residentId) : getMyAccountStatement,
+      render,
+      navigate: (path) => window.location.assign(path),
+      notFoundMessage: admin ? ADMIN_NOT_AVAILABLE : undefined
+    });
+    refreshButton.addEventListener('click', () => void loader.refresh());
+    $('[data-retry]').addEventListener('click', () => void loader.refresh());
+    // Criterion 4.2: coming back to the tab (or to the page from history) shows the latest data.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && loader.state.kind === 'ready') void loader.refresh();
+    });
+    window.addEventListener('pageshow', (event) => {
+      if (event.persisted) void loader.refresh();
+    });
+    void loader.start();
+  }
+</script>

@@ -1,0 +1,227 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import AdminHeader from '../../../components/AdminHeader.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import { STACKED_TABLE } from '../../../lib/obligations/charge-format';
+import { CRITERIA_PROMPT, REPORTS_PATH, criteriaFromUrl } from '../../../lib/reports/reports';
+
+// HU-012 criterion 2 (CU-012 steps 4-8): the payments registered between two dates. The browser asks
+// GET /api/v1/admin/reports/payments, which checks the criteria and the role on its own.
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const initial = criteriaFromUrl(Astro.url.searchParams);
+const inputClass =
+  'mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30 aria-[invalid=true]:border-red-500';
+const primaryButton =
+  'rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:opacity-60';
+const secondaryButton =
+  'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+const card = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6';
+---
+
+<Layout title="Reporte de pagos — SoftPh-Académico">
+  <AdminHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-5xl space-y-6 px-4 py-8" data-payments-report>
+    <Breadcrumbs items={[{ label: 'Reportes financieros', href: REPORTS_PATH }, { label: 'Pagos registrados' }]} />
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">Reporte de pagos registrados</h1>
+      <p class="mt-1 text-slate-600">{CRITERIA_PROMPT}</p>
+    </div>
+
+    <form data-criteria class={`${card} grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end`} novalidate>
+      <div>
+        <label for="report-date-from" class="block text-sm font-medium text-slate-700">Fecha inicial</label>
+        <input id="report-date-from" name="date_from" type="date" required value={initial.dateFrom} class={inputClass} />
+        <p id="report-date-from-error" data-error-for="date_from" class="mt-1 hidden text-sm text-red-700"></p>
+      </div>
+      <div>
+        <label for="report-date-to" class="block text-sm font-medium text-slate-700">Fecha final</label>
+        <input id="report-date-to" name="date_to" type="date" required value={initial.dateTo} class={inputClass} />
+        <p id="report-date-to-error" data-error-for="date_to" class="mt-1 hidden text-sm text-red-700"></p>
+      </div>
+      <button type="submit" data-generate class={primaryButton}>Generar reporte</button>
+    </form>
+
+    <p data-status-line class="text-sm text-slate-600" aria-live="polite"></p>
+    <div data-alert role="alert" class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+      <p data-alert-message></p>
+      <button type="button" data-retry class={`mt-3 ${secondaryButton}`}>Reintentar</button>
+    </div>
+
+    <div data-result class="hidden space-y-6">
+      <section aria-labelledby="payments-totals-title" class={card}>
+        <h2 id="payments-totals-title" class="text-lg font-semibold">Totales del <span data-range></span></h2>
+        <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-4">
+          <div class="rounded-xl bg-slate-50 px-4 py-3"><dt class="text-slate-500">Pagos</dt><dd data-total="payments" class="mt-1 text-lg font-semibold"></dd></div>
+          <div class="rounded-xl bg-slate-50 px-4 py-3"><dt class="text-slate-500">Valor recibido</dt><dd data-total="total_amount" class="mt-1 text-lg font-semibold"></dd></div>
+          <div class="rounded-xl bg-slate-50 px-4 py-3"><dt class="text-slate-500">Aplicado a obligaciones</dt><dd data-total="total_applied" class="mt-1 text-lg font-semibold"></dd></div>
+          <div class="rounded-xl bg-slate-50 px-4 py-3"><dt class="text-slate-500">Saldo a favor</dt><dd data-total="total_credit" class="mt-1 text-lg font-semibold"></dd></div>
+        </dl>
+        <h3 class="mt-5 text-sm font-semibold text-slate-700">Por método de pago</h3>
+        <ul data-by-method class="mt-2 grid gap-2 text-sm sm:grid-cols-3"></ul>
+      </section>
+      <p data-empty class="hidden rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center text-slate-600 shadow-sm"></p>
+      <section data-list aria-labelledby="payments-list-title" class={card}>
+        <h2 id="payments-list-title" class="text-lg font-semibold">Pagos</h2>
+        <div class="mt-3 overflow-x-auto">
+          <table class={STACKED_TABLE}>
+            <thead class="bg-slate-50 text-slate-700 max-sm:hidden">
+              <tr>
+                <th scope="col" class="whitespace-nowrap px-3 py-2 font-medium">Fecha</th>
+                <th scope="col" class="whitespace-nowrap px-3 py-2 font-medium">Recibo</th>
+                <th scope="col" class="px-3 py-2 font-medium">Residente y unidad</th>
+                <th scope="col" class="px-3 py-2 font-medium">Concepto y método</th>
+                <th scope="col" class="whitespace-nowrap px-3 py-2 text-right font-medium">Valor</th>
+                <th scope="col" class="whitespace-nowrap px-3 py-2 text-right font-medium">Aplicado</th>
+                <th scope="col" class="whitespace-nowrap px-3 py-2 text-right font-medium">Saldo a favor</th>
+                <th scope="col" class="px-3 py-2 font-medium">Estado</th>
+              </tr>
+            </thead>
+            <tbody data-rows class="sm:divide-y sm:divide-slate-100"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  import { getPaymentsReport, type PaymentsReport } from '../../../lib/api/reports';
+  import type { Payment } from '../../../lib/api/payments';
+  import { STACKED_CELL, STACKED_ROW } from '../../../lib/obligations/charge-format';
+  import {
+    LOADING_MESSAGE,
+    NO_PAYMENTS_MESSAGE,
+    createReportLoader,
+    validatePaymentsCriteria,
+    type DateField,
+    type ReportState
+  } from '../../../lib/reports/reports';
+  import {
+    METHOD_LABELS,
+    STATUS_BADGES,
+    STATUS_LABELS,
+    formatCop,
+    formatDate,
+    paymentConceptText
+  } from '../../../lib/resident/payment-format';
+
+  const page = document.querySelector<HTMLElement>('[data-payments-report]')!;
+  const $ = <T extends Element>(selector: string) => page.querySelector<T>(selector)!;
+  const show = (element: Element, visible: boolean) => element.classList.toggle('hidden', !visible);
+  const form = $<HTMLFormElement>('[data-criteria]');
+  const inputs: Record<DateField, HTMLInputElement> = { date_from: $('#report-date-from'), date_to: $('#report-date-to') };
+  let lastQuery = '';
+
+  function cell(label: string, text: string, extra = ''): HTMLTableCellElement {
+    const td = document.createElement('td');
+    td.className = `px-3 py-2 align-top ${STACKED_CELL} ${extra}`;
+    td.dataset.label = label;
+    td.textContent = text;
+    return td;
+  }
+
+  function twoLines(label: string, first: string, second: string): HTMLTableCellElement {
+    const td = cell(label, first);
+    const p = document.createElement('p');
+    p.className = 'text-xs text-slate-600';
+    p.textContent = second;
+    td.append(p);
+    return td;
+  }
+
+  function row(payment: Payment): HTMLTableRowElement {
+    const tr = document.createElement('tr');
+    tr.className = STACKED_ROW;
+    const status = cell('Estado', '');
+    const badge = document.createElement('span');
+    badge.className = `inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_BADGES[payment.status]}`;
+    badge.textContent = STATUS_LABELS[payment.status];
+    status.append(badge);
+    tr.append(
+      cell('Fecha', formatDate(payment.payment_date), 'whitespace-nowrap'),
+      cell('Recibo', payment.receipt_number, 'whitespace-nowrap font-mono'),
+      twoLines('Residente y unidad', payment.resident.full_name, payment.unit.label),
+      twoLines('Concepto y método', paymentConceptText(payment.concept, payment.concept_description),
+        METHOD_LABELS[payment.method]),
+      cell('Valor', formatCop(payment.amount), 'whitespace-nowrap sm:text-right'),
+      cell('Aplicado', formatCop(payment.applied_amount), 'whitespace-nowrap sm:text-right'),
+      cell('Saldo a favor', formatCop(payment.credit_amount), 'whitespace-nowrap sm:text-right'),
+      status
+    );
+    return tr;
+  }
+
+  function renderErrors(errors: Partial<Record<DateField, string>>): void {
+    let first: HTMLInputElement | null = null;
+    for (const [field, input] of Object.entries(inputs) as [DateField, HTMLInputElement][]) {
+      const message = errors[field];
+      const error = $<HTMLElement>(`[data-error-for="${field}"]`);
+      error.textContent = message ?? '';
+      show(error, Boolean(message));
+      input.setAttribute('aria-invalid', message ? 'true' : 'false');
+      if (message) {
+        input.setAttribute('aria-describedby', error.id);
+        first ??= input;
+      } else {
+        input.removeAttribute('aria-describedby');
+      }
+    }
+    first?.focus();
+  }
+
+  function drawReport(report: PaymentsReport): void {
+    $('[data-range]').textContent = `${formatDate(report.date_from)} al ${formatDate(report.date_to)}`;
+    $('[data-total="payments"]').textContent = String(report.payments);
+    for (const key of ['total_amount', 'total_applied', 'total_credit'] as const) {
+      $(`[data-total="${key}"]`).textContent = formatCop(report[key]);
+    }
+    $('[data-by-method]').replaceChildren(
+      ...report.by_method.map(({ method, payments, amount }) => {
+        const li = document.createElement('li');
+        li.className = 'rounded-lg border border-slate-200 px-3 py-2';
+        li.textContent = `${METHOD_LABELS[method]}: ${payments} · ${formatCop(amount)}`;
+        return li;
+      })
+    );
+    show($('[data-empty]'), !report.has_data);
+    $('[data-empty]').textContent = NO_PAYMENTS_MESSAGE;
+    show($('[data-list]'), report.has_data);
+    $('[data-rows]').replaceChildren(...report.items.map(row));
+  }
+
+  function render(state: ReportState<PaymentsReport>): void {
+    const busy = state.kind === 'loading';
+    $<HTMLButtonElement>('[data-generate]').disabled = busy;
+    $('[data-status-line]').textContent = busy ? LOADING_MESSAGE : '';
+    show($('[data-alert]'), state.kind === 'error');
+    show($('[data-result]'), state.kind === 'ready');
+    renderErrors(state.kind === 'invalid' ? state.errors : {});
+    if (state.kind === 'error') $('[data-alert-message]').textContent = state.message;
+    if (state.kind === 'ready') drawReport(state.report);
+  }
+
+  const loader = createReportLoader<PaymentsReport>({
+    load: getPaymentsReport,
+    render,
+    navigate: (path) => window.location.assign(path)
+  });
+
+  function generate(): void {
+    const checked = validatePaymentsCriteria(inputs.date_from.value, inputs.date_to.value);
+    if (!checked.query) {
+      loader.invalid(checked.errors);
+      return;
+    }
+    lastQuery = checked.query;
+    history.replaceState(null, '', `${window.location.pathname}?${checked.query}`);
+    void loader.generate(checked.query);
+  }
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    generate();
+  });
+  $('[data-retry]').addEventListener('click', () => void loader.generate(lastQuery));
+  // Criteria in the URL (a reload or a shared link): the same report again.
+  if (inputs.date_from.value && inputs.date_to.value) generate();
+</script>

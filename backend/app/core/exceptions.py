@@ -285,6 +285,16 @@ class ResidentDeletionBlockedError(ConflictError):
         self.details = [{"field": condition, "message": text} for condition, text in reasons]
 
 
+# --- HU-011 / HU-014: account statement ----------------------------------------------------
+
+
+class AccountStatementUnavailableError(NotFoundError):
+    """HU-014: the signed-in resident has no current apartment, so there is no statement to show."""
+
+    code = "ACCOUNT_STATEMENT_UNAVAILABLE"
+    message = "No tienes una unidad residencial vigente, por lo que no hay un estado de cuenta para consultar."
+
+
 # --- HU-005: feedback management ------------------------------------------------------
 
 

@@ -1,0 +1,21 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import AccountStatement from '../../components/AccountStatement.astro';
+import ResidentHeader from '../../components/ResidentHeader.astro';
+
+// HU-014. The middleware only renders /resident pages for a valid RESIDENTE session; the statement is
+// loaded by the browser from GET /api/v1/resident/account-statement, which takes the resident from the
+// session (never from the page). It does not depend on DEMO_PAYMENTS_ENABLED.
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+---
+
+<Layout title="Mi estado de cuenta — SoftPh-Académico">
+  <ResidentHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-5xl space-y-6 px-4 py-8">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">Mi estado de cuenta</h1>
+      <p class="mt-1 text-slate-600">Las obligaciones de tu unidad residencial, tus pagos registrados y el saldo de tu cuenta.</p>
+    </div>
+    <AccountStatement mode="resident" />
+  </main>
+</Layout>

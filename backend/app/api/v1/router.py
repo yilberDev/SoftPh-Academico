@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    account_statements,
     activation,
     auth,
     charges,
@@ -9,6 +10,7 @@ from app.api.v1 import (
     invitations,
     password_reset,
     payments,
+    reports,
     resident_feedback,
     resident_payments,
     residents,
@@ -25,10 +27,15 @@ api_router.include_router(invitations.router)
 # HU-019: public activation (Origin + one-time token, no session).
 api_router.include_router(activation.router)
 api_router.include_router(structure.router)
-# HU-006: registered residents (administrator, read-only).
+# HU-006 / HU-015: registered residents (administrator: list, detail, update, logical deletion).
 api_router.include_router(residents.router)
+# HU-011 / HU-014: the account statement of a resident's current apartment (administrator / the resident).
+api_router.include_router(account_statements.admin_router)
+api_router.include_router(account_statements.resident_router)
 # HU-004: manual payments (administrator).
 api_router.include_router(payments.router)
+# HU-012: financial reports (administrator, read only).
+api_router.include_router(reports.router)
 # HU-005: feedback management (administrator).
 api_router.include_router(feedback.router)
 # Obligations extension: charges of the apartments (administrator).

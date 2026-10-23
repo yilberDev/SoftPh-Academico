@@ -243,3 +243,8 @@ export function deletedNotice(params: URLSearchParams): string | null {
 export function residentPath(id: number): string {
   return `${LIST_PATH}/${id}`;
 }
+
+/** HU-011: the account statement of the resident's apartment. */
+export function accountStatementPath(id: number): string {
+  return `${residentPath(id)}/account-statement`;
+}

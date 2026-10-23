@@ -43,6 +43,11 @@ const secondaryButton =
         <Breadcrumbs items={[{ label: 'Residentes' }]} />
         <h1 class="text-2xl font-semibold tracking-tight">Residentes</h1>
         <p class="text-slate-600">Residentes registrados en la Urbanización San Joaquín.</p>
+        <p class="text-sm">
+          <a href="/admin/reports/pending-balances" class="rounded font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">
+            Ver los residentes con obligaciones pendientes
+          </a>
+        </p>
       </div>
       <a
         href="/admin/residents/invite"
@@ -91,7 +96,7 @@ const secondaryButton =
         {LOADING_MESSAGE}
       </p>
       <div class="overflow-x-auto">
-        <table class="w-full min-w-[62rem] divide-y divide-slate-200 text-left text-sm" data-table aria-busy="true">
+        <table class="w-full min-w-[68rem] divide-y divide-slate-200 text-left text-sm" data-table aria-busy="true">
           <thead class="bg-slate-50 text-slate-700">
             <tr>
               {
@@ -153,7 +158,7 @@ const secondaryButton =
     rangeText,
     type ListState
   } from '../../../lib/residents/residents-list';
-  import { residentPath } from '../../../lib/residents/resident-detail';
+  import { accountStatementPath, residentPath } from '../../../lib/residents/resident-detail';
 
   const page = document.querySelector<HTMLElement>('[data-residents-page]')!;
   const form = page.querySelector<HTMLFormElement>('[data-filters]')!;
@@ -207,7 +212,13 @@ const secondaryButton =
     link.className = 'rounded font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
     link.textContent = 'Ver detalle';
     link.setAttribute('aria-label', `Ver detalle de ${resident.full_name}`);
-    actions.append(link);
+    // HU-011: the account statement of the resident's apartment.
+    const statement = document.createElement('a');
+    statement.href = accountStatementPath(resident.id);
+    statement.className = `ml-4 ${link.className}`;
+    statement.textContent = 'Estado de cuenta';
+    statement.setAttribute('aria-label', `Estado de cuenta de ${resident.full_name}`);
+    actions.append(link, statement);
     tr.append(status, actions);
     return tr;
   }

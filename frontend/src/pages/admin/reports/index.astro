@@ -1,0 +1,40 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import AdminHeader from '../../../components/AdminHeader.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import { PAYMENTS_REPORT_PATH, PENDING_REPORT_PATH } from '../../../lib/reports/reports';
+
+// HU-012 (CU-012 steps 1-3): the financial reports module and its options.
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const cardLink =
+  'block h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-emerald-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+const options = [
+  { href: PAYMENTS_REPORT_PATH, title: 'Pagos registrados',
+    text: 'El historial de pagos registrados entre dos fechas, con cada pago identificado y sus totales.' },
+  { href: PENDING_REPORT_PATH, title: 'Saldos pendientes',
+    text: 'Las unidades residenciales que deben, con su residente, el saldo pendiente, la mora y el estado de su cuenta.' },
+  { href: '/admin/residents', title: 'Estado de cuenta de un residente',
+    text: 'Elige un residente del listado para consultar sus obligaciones, pagos, saldos y estado.' }
+];
+---
+
+<Layout title="Reportes financieros — SoftPh-Académico">
+  <AdminHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-5xl space-y-6 px-4 py-8">
+    <Breadcrumbs items={[{ label: 'Reportes financieros' }]} />
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">Reportes financieros</h1>
+      <p class="mt-1 text-slate-600">Elige el tipo de información que quieres consultar.</p>
+    </div>
+    <ul class="grid gap-4 sm:grid-cols-3">
+      {options.map(({ href, title, text }) => (
+        <li>
+          <a href={href} class={cardLink}>
+            <span class="block font-semibold text-slate-900">{title}</span>
+            <span class="mt-1 block text-sm text-slate-600">{text}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </main>
+</Layout>

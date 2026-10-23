@@ -76,6 +76,11 @@ ACCESS_POLICY: dict[tuple[str, str], Access] = {
     ("GET", "/admin/residents/{resident_id}"): Access.ADMINISTRADOR,
     ("PATCH", "/admin/residents/{resident_id}"): Access.ADMINISTRADOR,
     ("DELETE", "/admin/residents/{resident_id}"): Access.ADMINISTRADOR,
+    # HU-011: the account statement of a registered resident's current apartment (read only).
+    ("GET", "/admin/residents/{resident_id}/account-statement"): Access.ADMINISTRADOR,
+    # HU-012: financial reports (read only).
+    ("GET", "/admin/reports/payments"): Access.ADMINISTRADOR,
+    ("GET", "/admin/reports/pending-balances"): Access.ADMINISTRADOR,
     # HU-004: manual payments.
     ("GET", "/admin/payments"): Access.ADMINISTRADOR,
     ("POST", "/admin/payments"): Access.ADMINISTRADOR,
@@ -94,6 +99,8 @@ ACCESS_POLICY: dict[tuple[str, str], Access] = {
     ("GET", "/resident/payments"): Access.RESIDENTE,
     ("GET", "/resident/payments/{payment_id}"): Access.RESIDENTE,
     ("GET", "/resident/payments/{payment_id}/receipt"): Access.RESIDENTE,  # HU-010: receipt of a demo payment
+    # HU-014: the resident's own account statement (the resident is the session's).
+    ("GET", "/resident/account-statement"): Access.RESIDENTE,
     # HU-009: the resident's own feedback (the resident is the session's).
     ("POST", "/resident/feedback"): Access.RESIDENTE,
     ("GET", "/resident/feedback"): Access.RESIDENTE,
@@ -159,6 +166,7 @@ QUERIES: dict[tuple[str, str], str] = {
     ("DELETE", "/towers/{tower_id}"): "?version=1",
     ("DELETE", "/units/{unit_id}"): "?version=1",
     ("DELETE", "/admin/residents/{resident_id}"): "?updated_at=2026-10-22T00:00:00Z",
+    ("GET", "/admin/reports/payments"): "?date_from=2026-01-01&date_to=2026-12-31",
 }
 
 
@@ -323,6 +331,16 @@ async def test_administrator_reaches_every_administrator_route(
     # HU-015: the resident's detail, an update and the logical deletion, reached by the administrator. The
     # apartment still owes the monthly fee and the penalty above, so the deletion is refused (CU-015 7b).
     resident = await ok("GET", "/admin/residents/{resident_id}", f"/admin/residents/{resident_id}", 200)
+    # HU-011: the account statement of that resident's apartment.
+    statement = await ok("GET", "/admin/residents/{resident_id}/account-statement",
+                         f"/admin/residents/{resident_id}/account-statement", 200)
+    assert statement["summary"]["status"] in {"PENDING", "OVERDUE"} and statement["has_movements"] is True
+    # HU-012: the payments report of the year and the apartments that owe (that resident's among them).
+    report = await ok("GET", "/admin/reports/payments", "/admin/reports/payments?date_from=2026-01-01"
+                      "&date_to=2026-12-31", 200)
+    assert report["payments"] == 1
+    owing = await ok("GET", "/admin/reports/pending-balances", "/admin/reports/pending-balances?scope=ALL", 200)
+    assert [item["resident"]["id"] for item in owing["items"]] == [resident_id]
     resident = await ok("PATCH", "/admin/residents/{resident_id}", f"/admin/residents/{resident_id}", 200, {
         "full_name": "Laura Gómez Ruiz", "document_number": "1012345678", "phone": None,
         "updated_at": resident["updated_at"]})
@@ -421,6 +439,10 @@ async def test_resident_reaches_every_resident_route(
     cancelled = await client.post(f"{API}/resident/demo-payments/{again.json()['id']}/cancel", headers=headers)
     assert cancelled.status_code == 200 and cancelled.json()["status"] == "CANCELLED", cancelled.text
     visited.add(("POST", "/resident/demo-payments/{transaction_id}/cancel"))
+    # HU-014: the resident's own account statement.
+    statement = await client.get(f"{API}/resident/account-statement", headers=headers)
+    assert statement.status_code == 200 and statement.json()["resident"]["id"] == resident_id, statement.text
+    visited.add(("GET", "/resident/account-statement"))
 
     assert sorted(visited) == ROUTES_OF[Access.RESIDENTE]
 
@@ -555,7 +577,7 @@ async def test_no_resident_route_selects_another_person() -> None:
             continue
         assert not re.search(r"\{(user|resident|owner|account)_?id\}", path), path
     assert {path for path in administration if re.search(r"\{(user|resident|owner|account)_?id\}", path)} == {
-        "/admin/residents/{resident_id}"}
+        "/admin/residents/{resident_id}", "/admin/residents/{resident_id}/account-statement"}
 
 
 async def test_unpublished_resident_routes_do_not_exist(

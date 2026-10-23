@@ -1,0 +1,49 @@
+---
+import Layout from '../../../../layouts/Layout.astro';
+import AdminHeader from '../../../../components/AdminHeader.astro';
+import AccountStatement from '../../../../components/AccountStatement.astro';
+import Breadcrumbs from '../../../../components/Breadcrumbs.astro';
+import { isValidId } from '../../../../lib/api/structure-server';
+import { LIST_PATH, residentPath } from '../../../../lib/residents/resident-detail';
+
+// HU-011. The middleware only renders /admin pages for a valid ADMINISTRADOR session; the statement is
+// loaded by the browser from GET /api/v1/admin/residents/{id}/account-statement (authorized on its own).
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const { id } = Astro.params;
+const residentId = isValidId(id) ? Number(id) : null;
+if (residentId === null) {
+  Astro.response.status = 404;
+}
+---
+
+<Layout title="Estado de cuenta del residente — SoftPh-Académico">
+  <AdminHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-5xl space-y-6 px-4 py-8">
+    <Breadcrumbs
+      items={[
+        { label: 'Residentes', href: LIST_PATH },
+        ...(residentId === null ? [] : [{ label: 'Residente', href: residentPath(residentId) }]),
+        { label: 'Estado de cuenta' }
+      ]}
+    />
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">Estado de cuenta del residente</h1>
+      <p class="mt-1 text-slate-600">Obligaciones, pagos registrados, saldos y estado de la cuenta de su unidad residencial.</p>
+      <p class="mt-1 text-sm">
+        <a href="/admin/reports/pending-balances" class="rounded font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">
+          Ver todos los residentes con obligaciones pendientes
+        </a>
+      </p>
+    </div>
+    {
+      residentId === null ? (
+        <div class="rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
+          <p class="text-slate-700">El residente seleccionado no está disponible.</p>
+          <a href={LIST_PATH} class="mt-4 inline-block rounded text-sm font-medium text-emerald-800 hover:underline">Volver a residentes</a>
+        </div>
+      ) : (
+        <AccountStatement mode="admin" residentId={residentId} />
+      )
+    }
+  </main>
+</Layout>

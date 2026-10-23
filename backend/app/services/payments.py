@@ -24,7 +24,7 @@ Balances are derived (charges - allocations; payments - allocations), never stor
 import logging
 import math
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -438,6 +438,27 @@ def _filtered(statement: Select[Any], query: PaymentListQuery) -> Select[Any]:
     return statement.where(*conditions)
 
 
+def _payment_columns(applied: Any) -> tuple[Any, ...]:
+    """The columns of one PaymentRead (_payment_read), with the applied amount of _applied_amount."""
+    return (
+        Payment.id,
+        Payment.resident_id,
+        Payment.resident_name_snapshot,
+        Payment.unit_id,
+        Payment.unit_label_snapshot,
+        Payment.amount,
+        Payment.method,
+        Payment.concept,
+        Payment.concept_description,
+        Payment.payment_date,
+        Payment.registered_at,
+        Payment.transaction_reference,
+        Payment.notes,
+        Payment.receipt_email_status,
+        applied.label("applied"),
+    )
+
+
 async def list_payments(db: AsyncSession, query: PaymentListQuery) -> PaymentPage:
     total = int(await db.scalar(_filtered(select(func.count(Payment.id)).select_from(Payment), query)) or 0)
     total_pages = math.ceil(total / query.page_size)
@@ -448,26 +469,7 @@ async def list_payments(db: AsyncSession, query: PaymentListQuery) -> PaymentPag
         keys = [*_sort_keys(query.sort_by, applied), Payment.id]
         rows = (
             await db.execute(
-                _filtered(
-                    select(
-                        Payment.id,
-                        Payment.resident_id,
-                        Payment.resident_name_snapshot,
-                        Payment.unit_id,
-                        Payment.unit_label_snapshot,
-                        Payment.amount,
-                        Payment.method,
-                        Payment.concept,
-                        Payment.concept_description,
-                        Payment.payment_date,
-                        Payment.registered_at,
-                        Payment.transaction_reference,
-                        Payment.notes,
-                        Payment.receipt_email_status,
-                        applied.label("applied"),
-                    ).select_from(Payment),
-                    query,
-                )
+                _filtered(select(*_payment_columns(applied)).select_from(Payment), query)
                 .order_by(*(key.desc() if descending else key.asc() for key in keys))
                 .limit(query.page_size)
                 .offset((query.page - 1) * query.page_size)
@@ -497,3 +499,51 @@ def _payment_read(row: Any) -> PaymentRead:
         status=payment_status(amount, applied),
         receipt_email_status=ReceiptEmailStatus(row.receipt_email_status),
     )
+
+
+# --- HU-012: financial reports (read only, consistent reads) ---------------------------------------------
+
+
+async def payments_between(db: AsyncSession, date_from: date, date_to: date) -> list[PaymentRead]:
+    """Every payment whose payment_date is in [date_from, date_to], oldest first: the rows of list_payments."""
+    applied = _applied_amount()
+    query = PaymentListQuery(date_from=date_from, date_to=date_to)
+    rows = (
+        await db.execute(
+            _filtered(select(*_payment_columns(applied)).select_from(Payment), query)
+            .order_by(Payment.payment_date, Payment.id)
+        )
+    ).all()
+    return [_payment_read(row) for row in rows]
+
+
+async def unit_balances(db: AsyncSession) -> dict[int, AccountBalance]:
+    """unit_balance of every apartment with charges or payments, grouped: the same four sums, by apartment.
+
+    Pending = charges - allocations to them; credit = payments - allocations from them. Consistent
+    reads (no locks), for reports: four grouped queries instead of four per apartment.
+    """
+
+    async def by_unit(statement: Any) -> dict[int, Decimal]:
+        return {row[0]: money(row[1]) for row in (await db.execute(statement)).all()}
+
+    charged = await by_unit(select(Charge.unit_id, func.sum(Charge.amount)).group_by(Charge.unit_id))
+    covered = await by_unit(
+        select(Charge.unit_id, func.sum(PaymentAllocation.amount))
+        .join(Charge, Charge.id == PaymentAllocation.charge_id)
+        .group_by(Charge.unit_id)
+    )
+    paid = await by_unit(select(Payment.unit_id, func.sum(Payment.amount)).group_by(Payment.unit_id))
+    applied = await by_unit(
+        select(Payment.unit_id, func.sum(PaymentAllocation.amount))
+        .join(Payment, Payment.id == PaymentAllocation.payment_id)
+        .group_by(Payment.unit_id)
+    )
+    zero = money(None)
+    return {
+        unit_id: AccountBalance(
+            pending_balance=charged.get(unit_id, zero) - covered.get(unit_id, zero),
+            credit_balance=paid.get(unit_id, zero) - applied.get(unit_id, zero),
+        )
+        for unit_id in sorted(set(charged) | set(paid))
+    }

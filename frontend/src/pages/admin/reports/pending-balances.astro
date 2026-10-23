@@ -1,0 +1,188 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import AdminHeader from '../../../components/AdminHeader.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import { STACKED_TABLE } from '../../../lib/obligations/charge-format';
+import { REPORTS_PATH, SCOPE_LABELS, parseScope } from '../../../lib/reports/reports';
+
+// HU-012 criterion 3 and HU-011 criterion 3.2: the apartments that owe and their residents, each one
+// linked to its HU-011 statement. Built by GET /api/v1/admin/reports/pending-balances (authorized on its own).
+const { csrf_token: csrfToken } = Astro.locals.auth!;
+const scope = parseScope(Astro.url.searchParams);
+const inputClass =
+  'mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30';
+const secondaryButton =
+  'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:opacity-50';
+const card = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6';
+---
+
+<Layout title="Reporte de saldos pendientes — SoftPh-Académico">
+  <AdminHeader csrfToken={csrfToken} />
+  <main class="mx-auto max-w-5xl space-y-6 px-4 py-8" data-pending-report>
+    <Breadcrumbs items={[{ label: 'Reportes financieros', href: REPORTS_PATH }, { label: 'Saldos pendientes' }]} />
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">Saldos pendientes</h1>
+      <p class="mt-1 text-slate-600">
+        Las unidades residenciales que tienen obligaciones pendientes, con su residente y el estado de su cuenta. Abre el
+        estado de cuenta de cada residente para ver el detalle.
+      </p>
+    </div>
+
+    <form data-criteria class={`${card} grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end`}>
+      <div>
+        <label for="report-scope" class="block text-sm font-medium text-slate-700">Unidades</label>
+        <select id="report-scope" name="scope" class={inputClass}>
+          {(['ALL', 'OVERDUE'] as const).map((value) => <option value={value} selected={scope === value}>{SCOPE_LABELS[value]}</option>)}
+        </select>
+      </div>
+      <button type="button" data-refresh class={secondaryButton}>Actualizar</button>
+    </form>
+
+    <p data-status-line class="text-sm text-slate-600" aria-live="polite"></p>
+    <div data-alert role="alert" class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+      <p data-alert-message></p>
+      <button type="button" data-retry class={`mt-3 ${secondaryButton}`}>Reintentar</button>
+    </div>
+
+    <div data-result class="hidden space-y-6">
+      <section aria-labelledby="pending-totals-title" class={card}>
+        <h2 id="pending-totals-title" class="text-lg font-semibold">Totales al <span data-as-of></span></h2>
+        <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-4">
+          <div class="rounded-xl bg-slate-50 px-4 py-3"><dt class="text-slate-500">Unidades con saldo</dt><dd data-total="units" class="mt-1 text-lg font-semibold"></dd></div>
+          <div class="rounded-xl bg-slate-50 px-4 py-3"><dt class="text-slate-500">Unidades en mora</dt><dd data-total="overdue_units" class="mt-1 text-lg font-semibold"></dd></div>
+          <div class="rounded-xl bg-slate-50 px-4 py-3"><dt class="text-slate-500">Total pendiente</dt><dd data-total="total_pending" class="mt-1 text-lg font-semibold"></dd></div>
+          <div class="rounded-xl bg-slate-50 px-4 py-3"><dt class="text-slate-500">Total en mora</dt><dd data-total="total_overdue" class="mt-1 text-lg font-semibold"></dd></div>
+        </dl>
+      </section>
+      <p data-empty class="hidden rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center text-slate-600 shadow-sm"></p>
+      <section data-list aria-labelledby="pending-list-title" class={card}>
+        <h2 id="pending-list-title" class="text-lg font-semibold">Unidades con obligaciones pendientes</h2>
+        <div class="mt-3 overflow-x-auto">
+          <table class={STACKED_TABLE}>
+            <thead class="bg-slate-50 text-slate-700 max-sm:hidden">
+              <tr>
+                <th scope="col" class="whitespace-nowrap px-3 py-2 font-medium">Unidad</th>
+                <th scope="col" class="px-3 py-2 font-medium">Residente</th>
+                <th scope="col" class="px-3 py-2 font-medium">Estado</th>
+                <th scope="col" class="whitespace-nowrap px-3 py-2 text-right font-medium">Pendiente</th>
+                <th scope="col" class="whitespace-nowrap px-3 py-2 text-right font-medium">En mora</th>
+                <th scope="col" class="whitespace-nowrap px-3 py-2 text-right font-medium">Saldo a favor</th>
+                <th scope="col" class="whitespace-nowrap px-3 py-2 font-medium">Vence desde</th>
+              </tr>
+            </thead>
+            <tbody data-rows class="sm:divide-y sm:divide-slate-100"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  import { getPendingBalancesReport, type PendingBalance, type PendingBalancesReport, type PendingScope } from '../../../lib/api/reports';
+  import { ACCOUNT_STATUS_BADGES, ACCOUNT_STATUS_LABELS } from '../../../lib/account-statement/statement-view';
+  import { STACKED_CELL, STACKED_ROW } from '../../../lib/obligations/charge-format';
+  import {
+    LOADING_MESSAGE,
+    NO_OVERDUE_MESSAGE,
+    NO_PENDING_MESSAGE,
+    NO_RESIDENT,
+    createReportLoader,
+    parseScope,
+    statementLink,
+    type ReportState
+  } from '../../../lib/reports/reports';
+  import { formatCop, formatDate } from '../../../lib/resident/payment-format';
+
+  const page = document.querySelector<HTMLElement>('[data-pending-report]')!;
+  const $ = <T extends Element>(selector: string) => page.querySelector<T>(selector)!;
+  const show = (element: Element, visible: boolean) => element.classList.toggle('hidden', !visible);
+  const select = $<HTMLSelectElement>('#report-scope');
+  let scope: PendingScope = parseScope(new URLSearchParams(window.location.search));
+
+  function cell(label: string, text: string, extra = ''): HTMLTableCellElement {
+    const td = document.createElement('td');
+    td.className = `px-3 py-2 align-top ${STACKED_CELL} ${extra}`;
+    td.dataset.label = label;
+    td.textContent = text;
+    return td;
+  }
+
+  function row(item: PendingBalance): HTMLTableRowElement {
+    const tr = document.createElement('tr');
+    tr.className = STACKED_ROW;
+    const resident = cell('Residente', '');
+    const link = statementLink(item.resident);
+    if (item.resident && link) {
+      const a = document.createElement('a');
+      a.href = link;
+      a.className = 'rounded font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+      a.textContent = item.resident.full_name;
+      a.setAttribute('aria-label', `Estado de cuenta de ${item.resident.full_name}`);
+      resident.append(a);
+    } else {
+      resident.textContent = NO_RESIDENT;
+      resident.classList.add('italic', 'text-slate-500');
+    }
+    const status = cell('Estado', '');
+    const badge = document.createElement('span');
+    badge.className = `inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${ACCOUNT_STATUS_BADGES[item.status]}`;
+    badge.textContent = ACCOUNT_STATUS_LABELS[item.status];
+    status.append(badge);
+    tr.append(
+      cell('Unidad', item.unit.label, 'whitespace-nowrap font-mono'),
+      resident,
+      status,
+      cell('Pendiente', formatCop(item.pending_balance), 'whitespace-nowrap font-medium sm:text-right'),
+      cell('En mora', formatCop(item.overdue_balance), 'whitespace-nowrap sm:text-right'),
+      cell('Saldo a favor', formatCop(item.credit_balance), 'whitespace-nowrap sm:text-right'),
+      cell('Vence desde', formatDate(item.oldest_due_date), 'whitespace-nowrap')
+    );
+    return tr;
+  }
+
+  function drawReport(report: PendingBalancesReport): void {
+    $('[data-as-of]').textContent = formatDate(report.as_of);
+    $('[data-total="units"]').textContent = String(report.units);
+    $('[data-total="overdue_units"]').textContent = String(report.overdue_units);
+    $('[data-total="total_pending"]').textContent = formatCop(report.total_pending);
+    $('[data-total="total_overdue"]').textContent = formatCop(report.total_overdue);
+    show($('[data-empty]'), !report.has_data);
+    $('[data-empty]').textContent = report.scope === 'OVERDUE' ? NO_OVERDUE_MESSAGE : NO_PENDING_MESSAGE;
+    show($('[data-list]'), report.has_data);
+    $('[data-rows]').replaceChildren(...report.items.map(row));
+  }
+
+  function render(state: ReportState<PendingBalancesReport>): void {
+    const busy = state.kind === 'loading';
+    $<HTMLButtonElement>('[data-refresh]').disabled = busy;
+    $('[data-status-line]').textContent = busy ? LOADING_MESSAGE : '';
+    show($('[data-alert]'), state.kind === 'error');
+    show($('[data-result]'), state.kind === 'ready');
+    if (state.kind === 'error') $('[data-alert-message]').textContent = state.message;
+    if (state.kind === 'ready') drawReport(state.report);
+  }
+
+  const loader = createReportLoader<PendingBalancesReport>({
+    load: (query) => getPendingBalancesReport(query as PendingScope),
+    render,
+    navigate: (path) => window.location.assign(path)
+  });
+
+  function generate(): void {
+    history.replaceState(null, '', scope === 'ALL' ? window.location.pathname : `${window.location.pathname}?scope=${scope}`);
+    void loader.generate(scope);
+  }
+
+  select.addEventListener('change', () => {
+    scope = select.value === 'OVERDUE' ? 'OVERDUE' : 'ALL';
+    generate();
+  });
+  $('[data-criteria]').addEventListener('submit', (event) => event.preventDefault());
+  $('[data-refresh]').addEventListener('click', generate);
+  $('[data-retry]').addEventListener('click', generate);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && loader.state.kind === 'ready') generate();
+  });
+  generate();
+</script>

@@ -22,6 +22,12 @@ const cardLink =
     <p class="mt-3 text-slate-600">Iniciaste sesión en el panel de residentes de la Urbanización San Joaquín.</p>
     <ul class="mt-6 grid gap-4 sm:grid-cols-2">
       <li>
+        <a href="/resident/account-statement" class={cardLink}>
+          <span class="block font-semibold text-slate-900">Estado de cuenta</span>
+          <span class="mt-1 block text-sm text-slate-600">Consulta las obligaciones de tu unidad residencial, tus pagos, el total pendiente y el estado de tu cuenta.</span>
+        </a>
+      </li>
+      <li>
         <a href="/resident/payments" class={cardLink}>
           <span class="block font-semibold text-slate-900">Mis pagos</span>
           <span class="mt-1 block text-sm text-slate-600">Consulta los pagos registrados en tu cuenta, su estado y su detalle.</span>
@@ -57,7 +63,7 @@ const cardLink =
       </li>
     </ul>
     <p class="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-600">
-      Aquí encontrarás tu estado de cuenta y tus solicitudes a medida que estén disponibles.
+      Aquí encontrarás tus solicitudes a medida que estén disponibles.
     </p>
   </main>
 </Layout>

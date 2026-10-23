@@ -969,24 +969,87 @@ async def list_charges(db: AsyncSession, query: ChargeListQuery, today: date) ->
     return ChargePage(items=items, page=query.page, page_size=query.page_size, total=total, total_pages=total_pages)
 
 
+async def _unit_charges(
+    db: AsyncSession, unit_id: int, today: date, *, outstanding_only: bool
+) -> tuple[ChargeSummary, ...]:
+    """The obligations of one apartment in FIFO order (due_date, created_at, id), as list_charges shows them."""
+    if not _is_date(today):
+        raise ValueError("today is a calendar date (Bogotá).")
+    if not _positive_id(unit_id):
+        raise ValueError("unit_id is an apartment (a positive id).")
+    statement, applied, _ = _charge_columns(today)
+    conditions = [Charge.unit_id == unit_id] + ([applied < Charge.amount] if outstanding_only else [])
+    ordered = statement.where(*conditions).order_by(Charge.due_date, Charge.created_at, Charge.id)
+    rows = (await db.execute(ordered)).all()
+    return tuple(_summary(row) for row in rows)
+
+
 async def list_outstanding_charges(db: AsyncSession, unit_id: int, today: date) -> tuple[ChargeSummary, ...]:
     """Every obligation of one apartment not fully covered yet, in FIFO order (due_date, created_at, id).
 
     The same columns, applied amount and status as list_charges (consistent reads, no locks): a
     snapshot for display only. Whoever pays checks the balance again under the apartment lock.
     """
+    return await _unit_charges(db, unit_id, today, outstanding_only=True)
+
+
+async def list_unit_charges(db: AsyncSession, unit_id: int, today: date) -> tuple[ChargeSummary, ...]:
+    """Every obligation of one apartment, paid ones included (HU-011/HU-014 account statement), FIFO order.
+
+    The same rows, applied amount and status as list_outstanding_charges, without its filter.
+    """
+    return await _unit_charges(db, unit_id, today, outstanding_only=False)
+
+
+@dataclass(frozen=True)
+class UnitOutstanding:
+    """HU-012: what one apartment still owes, from its obligations (the rows of list_charges, aggregated)."""
+
+    unit: ChargeUnit
+    pending_amount: Decimal  # SUM(outstanding) of the obligations with a balance
+    overdue_amount: Decimal  # the part of it in OVERDUE obligations (en mora)
+    pending_obligations: int
+    overdue_obligations: int
+    oldest_due_date: date  # of the obligations with a balance
+
+
+async def outstanding_by_unit(db: AsyncSession, today: date) -> tuple[UnitOutstanding, ...]:
+    """Every apartment with an obligation not fully covered, by label (block, tower, apartment numbers).
+
+    The same applied amount, outstanding amount and status (for Bogotá's today) as list_charges:
+    _charge_columns, grouped in MySQL. Consistent reads, no locks.
+    """
     if not _is_date(today):
         raise ValueError("today is a calendar date (Bogotá).")
-    if not _positive_id(unit_id):
-        raise ValueError("unit_id is an apartment (a positive id).")
-    statement, applied, _ = _charge_columns(today)
-    rows = (
-        await db.execute(
-            statement.where(Charge.unit_id == unit_id, applied < Charge.amount)
-            .order_by(Charge.due_date, Charge.created_at, Charge.id)
+    rows_of_charges = _charge_columns(today)[0].subquery()
+    c = rows_of_charges.c
+    outstanding = c.amount - c.applied
+    overdue = c.status == ChargeStatus.OVERDUE.value
+    statement = (
+        select(
+            c.unit_id, c.unit_deleted_at, c.block_number, c.tower_number, c.unit_number,
+            func.sum(outstanding).label("pending"),
+            func.sum(case((overdue, outstanding), else_=0)).label("overdue"),
+            func.count().label("pending_obligations"),
+            func.sum(case((overdue, 1), else_=0)).label("overdue_obligations"),
+            func.min(c.due_date).label("oldest_due_date"),
         )
-    ).all()
-    return tuple(_summary(row) for row in rows)
+        .where(c.applied < c.amount)
+        .group_by(c.unit_id, c.unit_deleted_at, c.block_number, c.tower_number, c.unit_number)
+        .order_by(c.block_number, c.tower_number, c.unit_number, c.unit_id)
+    )
+    return tuple(
+        UnitOutstanding(
+            unit=ChargeUnit(row.unit_id, unit_label(row.block_number, row.tower_number, row.unit_number),
+                            row.unit_deleted_at is not None),
+            pending_amount=money(row.pending),
+            overdue_amount=money(row.overdue),
+            pending_obligations=int(row.pending_obligations),
+            overdue_obligations=int(row.overdue_obligations or 0),
+            oldest_due_date=row.oldest_due_date,
+        )
+        for row in (await db.execute(statement)).all()
+    )
 
 
 async def get_charge(db: AsyncSession, charge_id: int, today: date) -> ChargeDetail:
