@@ -42,4 +42,4 @@ Además de la ficha, conservan en una sección separada la descripción derivada
 - [CU-018 — Controlar acceso según rol](CU-018.md)
 - [CU-019 — Activar cuenta de residente](CU-019.md)
 
-_Pendiente de documentar: CU-011, CU-012, CU-014, CU-015 y CU-017 solo tienen su ficha oficial; su correspondencia con la implementación se documentará cuando se implementen sus historias de usuario (la [matriz de trazabilidad](../matriz-trazabilidad.md) las registra como pendientes)._
+_Pendiente de documentar: CU-011, CU-012, CU-014, CU-015 y CU-017 solo tienen su ficha oficial y una nota técnica breve en su sección «Trazabilidad». Sus historias de usuario ya tienen implementación técnica (HU-015 en el commit `faf73fd`; HU-011, HU-012 y HU-014 en `f5afd2b`; HU-017 en `c7d9c4d`); la correspondencia por criterio con la implementación está en la [matriz de trazabilidad](../matriz-trazabilidad.md#evaluación-por-criterio-2026-10-22-sobre-c7d9c4d), pero la correspondencia paso a paso de estos casos de uso no se ha documentado todavía._

@@ -26,4 +26,6 @@ El documento académico original no se modifica. Cualquier diferencia de diseño
 - [RF-018 — Control de acceso según el rol](RF-018.md)
 - [RF-019 — Invitación y activación de cuenta del residente](RF-019.md)
 
-_RF-011, RF-012, RF-014, RF-015 y RF-017 tienen transcripción literal de su ficha académica (título tal como aparece en el campo «Nombre»), pero su implementación sigue pendiente: ver la [matriz de trazabilidad](../matriz-trazabilidad.md)._
+_RF-011, RF-012, RF-014, RF-015 y RF-017 tienen transcripción literal de su ficha académica (título tal como aparece en el campo «Nombre»)._
+
+_Seguimiento (2026-10-22): sus historias tienen implementación técnica (HU-015 en el commit `faf73fd`; HU-011, HU-012 y HU-014 en `f5afd2b`; HU-017 en `c7d9c4d`), lo que no equivale a su aceptación académica. El estado por criterio, la validación E2E, las limitaciones y las decisiones pendientes están en la [matriz de trazabilidad](../matriz-trazabilidad.md#evaluación-por-criterio-2026-10-22-sobre-c7d9c4d)._

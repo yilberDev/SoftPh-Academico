@@ -26,4 +26,6 @@ El documento académico original no se modifica. Cualquier diferencia de diseño
 - [HU-018 — Control de acceso según rol](HU-018.md)
 - [HU-019 — Invitación y activación de cuenta del residente](HU-019.md)
 
-_HU-011, HU-012, HU-014, HU-015 y HU-017 tienen transcripción literal de su ficha académica (título tal como aparece en el campo «Nombre historia»), pero su implementación sigue pendiente: ver la [matriz de trazabilidad](../matriz-trazabilidad.md). Sus nombres difieren de los del catálogo del repositorio; la normalización queda pendiente de decisión._
+_HU-011, HU-012, HU-014, HU-015 y HU-017 tienen transcripción literal de su ficha académica (título tal como aparece en el campo «Nombre historia»). Sus nombres difieren de los del catálogo del repositorio; la normalización queda pendiente de decisión._
+
+_Seguimiento (2026-10-22): las cinco tienen implementación técnica (HU-015 en el commit `faf73fd`; HU-011, HU-012 y HU-014 en `f5afd2b`; HU-017 en `c7d9c4d`). Eso no equivale a su aceptación académica. Según la [matriz de trazabilidad](../matriz-trazabilidad.md#evaluación-por-criterio-2026-10-22-sobre-c7d9c4d): HU-011, HU-012, HU-014 y HU-015 no tienen pruebas E2E (su interfaz solo está cubierta por pruebas del frontend sin navegador); HU-015 aplica una eliminación lógica y bloqueos aprobados como política técnica; HU-017 tiene E2E y una excepción aprobada (los pagos de demostración no envían el recibo por correo) pendiente de aceptación académica._
