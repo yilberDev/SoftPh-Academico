@@ -1,6 +1,6 @@
 import type { Download, Locator, Page, Request } from '@playwright/test';
 import { E2E_ORIGIN } from '../playwright.config';
-import { addDays, periodOf, type Seed } from './support/data';
+import { addDays, periodOf, residentPassword, type Seed } from './support/data';
 import { createCharge, expect, normalized, test, type Api } from './support/fixtures';
 
 /**
@@ -263,6 +263,140 @@ test.describe('demo payment', () => {
     await expect(adminRow).toContainText('Aplicado');
     await expect(adminRow).not.toContainText('Aplicado parcialmente');
     expect(normalized(await adminRow.textContent())).toContain('$ 40.000,50');
+  });
+
+  test('A2: paying the whole balance settles the obligation: "Pagada" with 0 left in both statements, never offered again, a reload pays nothing more', async ({ page, seed, admin, signIn }) => {
+    const before = await admin.api.json<{ total: number }>(await admin.api.get('/admin/payments'));
+    await prepare(admin.api, seed, signIn);
+    // The resident signs in on the login page (prepare signed in through the API: that session is dropped first).
+    await page.context().clearCookies();
+    await page.goto('/login');
+    await page.getByLabel('Correo electrónico').fill(seed.resident_email);
+    await page.getByLabel('Contraseña').fill(residentPassword());
+    await page.getByRole('button', { name: 'Ingresar' }).click();
+    await expect(page).toHaveURL(/\/resident$/);
+    const menu = page.getByRole('navigation', { name: 'Principal' });
+    await menu.getByRole('link', { name: 'Pago de demostración' }).click();
+    await expect(page.locator('[data-section="list"]')).toBeVisible();
+
+    // 1. The penalty is pending and offered, with its whole balance.
+    await expect(obligations(page)).toHaveCount(2);
+    const penalty = obligation(page, 'Penalización: Ruido E2E');
+    expect(normalized(await definition(penalty, 'Saldo pendiente').textContent())).toBe('$ 50.000,00');
+
+    // 2. The whole balance (the form's default amount), through the real form and checkout.
+    const posts = demoPosts(page);
+    await penalty.getByRole('button', { name: 'Pagar esta obligación' }).click();
+    await expect(page.getByLabel('Monto a pagar (COP)')).toHaveValue('50000');
+    await page.getByRole('button', { name: 'Continuar' }).click();
+    const review = page.locator('[data-section="review"]');
+    expect(normalized(await definition(review, 'Monto a pagar').textContent())).toBe('$ 50.000,00');
+    await expect(definition(review, 'Tipo de pago')).toHaveText('Pago del saldo completo');
+    expect(normalized(await definition(review, 'Saldo pendiente si se aprueba').textContent())).toBe('$ 0,00');
+    await page.getByRole('button', { name: 'Iniciar pago de demostración' }).click();
+    await expect(page).toHaveURL(CHECKOUT_URL);
+    await expect(choosing(page)).toBeVisible();
+    const { charge_id: chargeId } = posts[0].postDataJSON() as { charge_id: number };
+    expect(posts[0].postDataJSON()).toEqual({ charge_id: chargeId, amount: '50000' }); // the field's text, as typed
+    expect(normalized(await definition(gateway(page), 'Saldo pendiente actual').textContent())).toBe('$ 50.000,00');
+    await processWith(page, INSTRUMENTS.approve);
+
+    // 3. Approved; the server no longer lists the obligation, so the summary drops its balance (nothing left).
+    await expect(page.getByRole('heading', { name: 'Pago aprobado y registrado' })).toBeVisible();
+    await expect(gateway(page)).toContainText('Aprobado');
+    const receiptNumber = normalized(await definition(gateway(page), 'Número del pago en tu historial').textContent());
+    expect(receiptNumber).toMatch(/^RC-\d{8}$/);
+    await expect(main(page).locator('[data-summary-concept]')).toHaveText('Pago de demostración');
+    await expect(definition(gateway(page), 'Saldo pendiente actual')).toHaveCount(0);
+    expect(posts.map((post) => new URL(post.url()).pathname)).toEqual([
+      '/api/v1/resident/demo-payments', `/api/v1/resident/demo-payments/${new URL(page.url()).searchParams.get('transaction')}/complete`
+    ]);
+
+    // 6 (reload). The same result is read again from the server: no new request, nothing to process again.
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Pago aprobado y registrado' })).toBeVisible();
+    await expect(definition(gateway(page), 'Número del pago en tu historial')).toHaveText(receiptNumber);
+    await expect(instruments(page)).toBeHidden();
+    expect(posts).toHaveLength(2);
+
+    // The payment in "Mis pagos": once, applied in full to the penalty.
+    await page.getByRole('link', { name: 'Ver el pago en Mis pagos' }).click();
+    await expect(page.getByRole('main').locator('p', { hasText: /^Estado: \S/ })).toHaveText('Estado: Aplicado');
+    const result = (label: string) => definition(page.getByRole('region', { name: 'Resultado del pago' }), label);
+    expect(normalized(await result('Monto aplicado').textContent())).toBe('$ 50.000,00');
+    expect(normalized(await result('Saldo a favor').textContent())).toBe('$ 0,00');
+    const covered = page.getByRole('region', { name: 'Obligaciones cubiertas' }).locator('tbody tr');
+    await expect(covered).toHaveCount(1);
+    await expect(covered.getByRole('rowheader')).toHaveText('Penalización: Ruido E2E');
+    expect(normalized(await covered.getByRole('cell').nth(3).textContent())).toBe('$ 50.000,00');
+    await menu.getByRole('link', { name: 'Mis pagos' }).click();
+    await expect(page.locator('[data-status-line]')).not.toHaveText('Consultando tus pagos...');
+    await expect(page.locator('[data-rows] tr')).toHaveCount(1);
+
+    // 4. The resident's statement (account-statement.spec.ts): the penalty "Pagada" with 0 left; the fee still owed.
+    const cell = (row: Locator, label: string) => row.locator(`td[data-label="${label}"]`);
+    async function expectSettled(): Promise<void> {
+      const statement = page.locator('[data-account-statement]');
+      await expect(statement.locator('[data-content]')).toBeVisible();
+      await expect(statement.locator('[data-status-line]')).toHaveText('');
+      for (const [key, value] of Object.entries({
+        pending_balance: '$ 100.000,00', overdue_balance: '$ 100.000,00', credit_balance: '$ 0,00',
+        total_charged: '$ 150.000,00', total_applied: '$ 50.000,00'
+      })) {
+        expect(normalized(await page.locator(`[data-total="${key}"]`).textContent()), key).toBe(value);
+      }
+      const paid = page.locator('[data-section="paid"] [data-rows] tr');
+      await expect(paid).toHaveCount(1);
+      await expect(cell(paid, 'Obligación')).toHaveText('Penalización: Ruido E2E');
+      expect(normalized(await cell(paid, 'Valor').textContent())).toBe('$ 50.000,00');
+      expect(normalized(await cell(paid, 'Abonado').textContent())).toBe('$ 50.000,00');
+      expect(normalized(await cell(paid, 'Saldo').textContent())).toBe('$ 0,00');
+      await expect(cell(paid, 'Estado')).toHaveText('Pagada');
+      await expect(page.locator('[data-section="pending"] [data-rows] tr')).toHaveCount(0);
+      await expect(page.locator('[data-section="overdue"] [data-rows] tr')).toHaveCount(1);
+      const payments = page.locator('[data-payment-rows] tr');
+      await expect(payments).toHaveCount(1);
+      await expect(cell(payments, 'Recibo')).toHaveText(receiptNumber);
+      await expect(cell(payments, 'Estado')).toHaveText('Aplicado');
+    }
+    await menu.getByRole('link', { name: 'Estado de cuenta' }).click();
+    await expect(page).toHaveURL(/\/resident\/account-statement$/);
+    await expectSettled();
+
+    // 6. No longer offered: only the fee is left, the API does not list it, and starting one is refused.
+    await menu.getByRole('link', { name: 'Pago de demostración' }).click();
+    await expect(page.locator('[data-section="list"]')).toBeVisible();
+    await expect(obligations(page)).toHaveCount(1);
+    await expect(obligation(page, 'Penalización: Ruido E2E')).toHaveCount(0);
+    await expect(obligation(page, /^Mensualidad — /)).toHaveCount(1);
+    const resident = await signIn('resident');
+    const payable = await resident.json<{ items: { charge_id: number }[] }>(await resident.get('/resident/demo-payments/obligations'));
+    expect(payable.items.map((item) => item.charge_id)).not.toContain(chargeId);
+    const again = await resident.post('/resident/demo-payments', { charge_id: chargeId, amount: '1' });
+    expect(again.status()).toBe(409);
+    expect(((await again.json()) as { error: { code: string } }).error.code).toBe('CHARGE_NOT_PAYABLE');
+
+    // 5. The administrator: one payment more in total, by the demo gateway; the obligation "Pagada" with 0 left.
+    const asAdmin = await signIn('admin');
+    const after = await asAdmin.json<{ total: number }>(await asAdmin.get('/admin/payments'));
+    expect(after.total).toBe(before.total + 1);
+    await page.goto('/admin/payments');
+    const adminRow = page.locator('[data-rows] tr').filter({ hasText: receiptNumber });
+    await expect(adminRow).toHaveCount(1);
+    await expect(adminRow).toContainText('Laura Gómez');
+    await expect(adminRow).toContainText('Pasarela de demostración');
+    await expect(adminRow).toContainText('Aplicado');
+    expect(normalized(await adminRow.textContent())).toContain('$ 50.000,00');
+    await page.goto(`/admin/obligations/${chargeId}`);
+    const information = (label: string) => definition(page.getByRole('region', { name: 'Información' }), label);
+    expect(normalized(await information('Aplicado').textContent())).toBe('$ 50.000,00');
+    expect(normalized(await information('Saldo').textContent())).toBe('$ 0,00');
+    await expect(information('Estado')).toHaveText('Pagada');
+    const applications = page.getByRole('region', { name: 'Pagos aplicados' }).locator('tbody tr');
+    await expect(applications).toHaveCount(1);
+    await expect(applications.getByRole('rowheader')).toHaveText(receiptNumber);
+    await page.goto(`/admin/residents/${seed.laura_id}/account-statement`);
+    await expectSettled();
   });
 
   test('a reload recovers the checkout without starting it again; a rejection, another instrument (a new transaction), a processing error and a cancellation: nothing is paid', async ({ page, seed, admin, signIn }) => {
