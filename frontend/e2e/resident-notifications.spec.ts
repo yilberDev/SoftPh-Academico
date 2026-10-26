@@ -217,8 +217,9 @@ test.describe('360 × 800', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth)).toBe(true);
     const box = await items(page).first().boundingBox();
     expect(box && box.x >= 0 && box.x + box.width <= 360).toBe(true);
-    // The header menu reaches the page too.
+    // The header menu reaches the page too (on a narrow screen, behind its button).
     await page.goto('/resident');
+    await page.getByRole('button', { name: 'Abrir menú' }).click();
     await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Notificaciones' }).click();
     await expect(page).toHaveURL(/\/resident\/notifications$/);
     expect(await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth)).toBe(true);

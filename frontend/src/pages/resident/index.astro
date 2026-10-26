@@ -1,75 +1,255 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import ResidentHeader from '../../components/ResidentHeader.astro';
+import Icon from '../../components/landing/Icon.astro';
+import { loadResidentDashboard } from '../../lib/api/resident-dashboard-server';
+import {
+  ACTIVITY_EMPTY,
+  ACTIVITY_ERROR,
+  NOTIFICATIONS_PATH,
+  UNAVAILABLE_VALUE,
+  activityItems,
+  residentModules,
+  residentSummaryTiles,
+  unitText,
+  type SummaryTone
+} from '../../lib/resident/dashboard';
 import { demoPaymentsEnabled } from '../../lib/resident/demo-payment-flag-server';
+import { CARD, FOCUS_RING, buttonClasses } from '../../lib/landing/ui';
 
-// HU-007: main panel of the resident. The middleware only renders /resident
-// pages for a valid RESIDENTE session. The resident functions are added by
-// their own HUs (HU-008: "Mis pagos"; HU-009: "Enviar feedback", "Mis feedback"; HU-010: the demo
-// payment, only while DEMO_PAYMENTS_ENABLED; HU-017: "Notificaciones").
+// HU-007: main panel of the resident. The middleware only renders /resident pages for a valid RESIDENTE
+// session. The resident functions are added by their own HUs (HU-014: "Estado de cuenta"; HU-008: "Mis
+// pagos"; HU-009: "Enviar feedback", "Mis feedback"; HU-010: the demo payment, only while
+// DEMO_PAYMENTS_ENABLED; HU-017: "Notificaciones").
 const { user, csrf_token: csrfToken } = Astro.locals.auth!;
-const demoPayments = demoPaymentsEnabled();
 
-const cardLink =
-  'block h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-emerald-300 hover:bg-emerald-50/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+// Read-only data of the resident's own endpoints, computed by the backend; a failed part shows as unavailable.
+const sources = await loadResidentDashboard(Astro.request);
+const tiles = residentSummaryTiles(sources);
+const unit = unitText(sources.statement);
+const activity = sources.notifications === null ? null : activityItems(sources.notifications);
+const modules = residentModules(demoPaymentsEnabled());
+
+const today = new Intl.DateTimeFormat('es-CO', { dateStyle: 'full', timeZone: 'America/Bogota' }).format(new Date());
+
+const iconBox = 'flex h-11 w-11 shrink-0 items-center justify-center rounded-md';
+const TILE_ICON: Record<SummaryTone, string> = {
+  neutral: 'bg-teal-50 text-teal-700',
+  attention: 'bg-amber-50 text-amber-700',
+  danger: 'bg-rose-50 text-rose-700'
+};
+const TILE_VALUE: Record<SummaryTone, string> = {
+  neutral: 'text-slate-900',
+  attention: 'text-amber-800',
+  danger: 'text-rose-700'
+};
 ---
 
 <Layout title="Panel del residente — SoftPh-Académico">
   <ResidentHeader csrfToken={csrfToken} />
-  <main class="mx-auto max-w-5xl px-4 py-10">
-    <p class="text-sm font-medium text-emerald-700">Residente</p>
-    <h1 class="mt-1 break-words text-2xl font-semibold tracking-tight sm:text-3xl">Hola, {user.full_name}</h1>
-    <p class="mt-3 text-slate-600">Iniciaste sesión en el panel de residentes de la Urbanización San Joaquín.</p>
-    <ul class="mt-6 grid gap-4 sm:grid-cols-2">
-      <li>
-        <a href="/resident/account-statement" class={cardLink}>
-          <span class="block font-semibold text-slate-900">Estado de cuenta</span>
-          <span class="mt-1 block text-sm text-slate-600">Consulta las obligaciones de tu unidad residencial, tus pagos, el total pendiente y el estado de tu cuenta.</span>
-        </a>
-      </li>
-      <li>
-        <a href="/resident/payments" class={cardLink}>
-          <span class="block font-semibold text-slate-900">Mis pagos</span>
-          <span class="mt-1 block text-sm text-slate-600">Consulta los pagos registrados en tu cuenta, su estado y su detalle.</span>
-        </a>
-      </li>
-      {
-        demoPayments && (
-          <li>
-            <a href="/resident/demo-payments" class={cardLink}>
-              <span class="block font-semibold text-slate-900">Pago de demostración</span>
-              <span class="mt-1 block text-sm text-slate-600">
-                Simula el pago de una obligación pendiente con la pasarela interna. Sin dinero real ni proveedores externos.
-              </span>
-            </a>
-          </li>
-        )
-      }
-      <li>
-        <div class="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 class="font-semibold text-slate-900">Feedback</h2>
-          <p class="mt-1 text-sm text-slate-600">Comparte una queja, sugerencia o solicitud con la administración y consulta su estado.</p>
-          <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3">
-            <a href="/resident/feedback/new"
-              class="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">
-              Enviar feedback
-            </a>
-            <a href="/resident/feedback"
-              class="rounded text-sm font-medium text-emerald-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">
-              Mis feedback
-            </a>
+  <div class="bg-[radial-gradient(ellipse_at_top_left,var(--color-teal-50),transparent_55%)]">
+    <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+      <!-- Bienvenida -->
+      <section
+        aria-labelledby="welcome-title"
+        class="relative overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-br from-white via-white to-teal-50/70 p-6 shadow-[0_1px_2px_0_rgba(15,23,42,0.04)] sm:p-8"
+      >
+        <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div class="max-w-2xl">
+            <p class="inline-flex max-w-full items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-teal-800">
+              <span class="h-2 w-2 shrink-0 rounded-full bg-teal-600" aria-hidden="true"></span>
+              <span>Portal del residente · Urbanización San Joaquín</span>
+            </p>
+            <h1 id="welcome-title" class="mt-4 break-words text-3xl font-bold tracking-tight text-balance text-slate-900 sm:text-4xl">
+              Hola, {user.full_name}
+            </h1>
+            <p class="mt-3 text-base leading-relaxed text-slate-600 sm:text-lg">
+              Desde aquí consultas tu estado de cuenta y tus pagos, compartes feedback con la administración y revisas tus
+              notificaciones.
+            </p>
+          </div>
+          <div class="flex shrink-0 flex-col gap-2 text-sm text-slate-600 sm:flex-row sm:flex-wrap sm:gap-x-6 lg:flex-col lg:items-end">
+            {
+              unit && (
+                <p class="inline-flex items-center gap-2" data-unit>
+                  <Icon name="home" class="h-4 w-4 shrink-0 text-teal-700" />
+                  <span>
+                    <span class="sr-only">Unidad residencial: </span>
+                    <span class="font-medium text-slate-900">{unit}</span>
+                  </span>
+                </p>
+              )
+            }
+            <p class="inline-flex items-center gap-2">
+              <Icon name="calendar" class="h-4 w-4 shrink-0 text-teal-700" />
+              <span class="inline-block first-letter:uppercase">{today}</span>
+            </p>
           </div>
         </div>
-      </li>
-      <li>
-        <a href="/resident/notifications" class={cardLink}>
-          <span class="block font-semibold text-slate-900">Notificaciones</span>
-          <span class="mt-1 block text-sm text-slate-600">Consulta los avisos de tus pagos registrados y de las respuestas a tus feedback, y si llegaron a tu correo.</span>
-        </a>
-      </li>
-    </ul>
-    <p class="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-600">
-      Aquí encontrarás tus solicitudes a medida que estén disponibles.
-    </p>
-  </main>
+      </section>
+
+      <!-- Resumen -->
+      <section aria-labelledby="summary-title" class="mt-10">
+        <h2 id="summary-title" class="text-xl font-semibold tracking-tight text-slate-900">Resumen</h2>
+        <p class="mt-1 text-sm text-slate-600">Datos actuales de tu cuenta. Abre cada uno para ver el detalle.</p>
+        <ul class="mt-5 grid gap-4 md:grid-cols-3" data-summary>
+          {
+            tiles.map((tile) => (
+              <li>
+                <a
+                  href={tile.href}
+                  data-summary-tile={tile.key}
+                  class={`${CARD} flex h-full items-start gap-4 p-5 transition-colors hover:border-teal-300 motion-reduce:transition-none ${FOCUS_RING}`}
+                >
+                  <span class:list={[iconBox, TILE_ICON[tile.tone]]}>
+                    <Icon name={tile.icon} />
+                  </span>
+                  <span class="min-w-0">
+                    <span class="block text-sm font-medium text-slate-600">{tile.label}</span>
+                    {tile.value === null ? (
+                      <span class="mt-1 block text-base font-semibold text-slate-500" data-summary-value>
+                        {UNAVAILABLE_VALUE}
+                      </span>
+                    ) : (
+                      <span
+                        class:list={['mt-1 block break-words text-2xl font-semibold tracking-tight tabular-nums lg:text-3xl', TILE_VALUE[tile.tone]]}
+                        data-summary-value
+                      >
+                        {tile.value}
+                      </span>
+                    )}
+                    <span class="mt-1 block text-xs leading-relaxed text-slate-500" data-summary-detail>
+                      {tile.detail}
+                    </span>
+                  </span>
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </section>
+
+      <div class="mt-12 grid gap-10 lg:grid-cols-3 lg:gap-8">
+        <!-- Accesos rápidos -->
+        <section aria-labelledby="modules-title" class="lg:col-span-2">
+          <h2 id="modules-title" class="text-xl font-semibold tracking-tight text-slate-900">Accesos rápidos</h2>
+          <p class="mt-1 text-sm text-slate-600">Las funciones de tu portal.</p>
+          <ul class="mt-5 grid gap-4 sm:grid-cols-2" data-modules>
+            {
+              modules.map((module, index) => (
+                <li
+                  class:list={[
+                    CARD,
+                    'group relative flex flex-col p-5 sm:p-6',
+                    module.href && 'transition-[border-color,box-shadow] hover:border-teal-300 hover:shadow-md focus-within:border-teal-300 motion-reduce:transition-none'
+                  ]}
+                  data-module
+                >
+                  <span class={`${iconBox} bg-teal-50 text-teal-700`}>
+                    <Icon name={module.icon} />
+                  </span>
+                  <h3 class="mt-4 text-lg font-semibold tracking-tight text-slate-900">
+                    {module.href ? (
+                      <a
+                        href={module.href}
+                        aria-describedby={`module-${index}-description`}
+                        class={`rounded-sm after:absolute after:inset-0 after:rounded-lg after:content-[''] group-hover:text-teal-800 ${FOCUS_RING}`}
+                      >
+                        {module.title}
+                      </a>
+                    ) : (
+                      module.title
+                    )}
+                  </h3>
+                  <p id={`module-${index}-description`} class="mt-2 flex-1 text-sm leading-relaxed text-slate-600">
+                    {module.description}
+                  </p>
+                  {module.href ? (
+                    <p class="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-semibold text-teal-700" aria-hidden="true">
+                      {module.action}
+                      <Icon
+                        name="arrowRight"
+                        class="h-4 w-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0"
+                      />
+                    </p>
+                  ) : (
+                    <div class="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+                      {module.links?.map((link, linkIndex) => (
+                        <a href={link.href} class={buttonClasses(linkIndex === 0 ? 'primary' : 'secondary')}>
+                          {link.label}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </li>
+              ))
+            }
+          </ul>
+        </section>
+
+        <!-- Actividad reciente -->
+        <section aria-labelledby="activity-title" data-activity>
+          <h2 id="activity-title" class="text-xl font-semibold tracking-tight text-slate-900">Actividad reciente</h2>
+          <p class="mt-1 text-sm text-slate-600">Tus últimas notificaciones de pagos y feedback.</p>
+          <div class={`${CARD} mt-5`}>
+            {
+              activity === null ? (
+                <p class="flex items-start gap-3 p-5 text-sm text-slate-600" data-activity-state="error">
+                  <Icon name="info" class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                  {ACTIVITY_ERROR}
+                </p>
+              ) : activity.length === 0 ? (
+                <div class="flex flex-col items-center px-6 py-10 text-center" data-activity-state="empty">
+                  <span class={`${iconBox} bg-slate-100 text-slate-500`}>
+                    <Icon name="bell" />
+                  </span>
+                  <p class="mt-3 max-w-xs text-sm leading-relaxed text-slate-600">{ACTIVITY_EMPTY}</p>
+                </div>
+              ) : (
+                <>
+                  <ul class="divide-y divide-slate-100">
+                    {activity.map((item) => (
+                      <li class="flex gap-3 p-4 sm:p-5" data-activity-item>
+                        <span class={`${iconBox} h-9 w-9 bg-teal-50 text-teal-700`}>
+                          <Icon name={item.icon} class="h-[1.125rem] w-[1.125rem]" />
+                        </span>
+                        <div class="min-w-0 flex-1">
+                          {item.event !== item.title && (
+                            <p class="mb-0.5 text-xs font-semibold uppercase tracking-wider text-teal-800">{item.event}</p>
+                          )}
+                          <p id={`activity-${item.id}-title`} class="break-words text-sm font-semibold text-slate-900">
+                            {item.title}
+                          </p>
+                          <p class="mt-0.5 line-clamp-2 break-words text-sm text-slate-600">{item.message}</p>
+                          <div class="mt-1 flex flex-wrap items-center justify-between gap-x-3">
+                            <p class="text-xs text-slate-500">{item.date}</p>
+                            <a
+                              href={item.href}
+                              aria-describedby={`activity-${item.id}-title`}
+                              class={`-mx-1 inline-flex min-h-11 items-center rounded-md px-1 text-sm font-semibold text-teal-700 hover:text-teal-900 hover:underline ${FOCUS_RING}`}
+                            >
+                              {item.linkText}
+                            </a>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  <p class="border-t border-slate-100 px-4 py-2 sm:px-5">
+                    <a
+                      href={NOTIFICATIONS_PATH}
+                      class={`inline-flex min-h-11 items-center gap-1.5 rounded-md text-sm font-semibold text-teal-700 hover:text-teal-900 ${FOCUS_RING}`}
+                    >
+                      Ver todas las notificaciones
+                      <Icon name="arrowRight" class="h-4 w-4" />
+                    </a>
+                  </p>
+                </>
+              )
+            }
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
 </Layout>
