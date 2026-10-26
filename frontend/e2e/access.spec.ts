@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { E2E_ORIGIN } from '../playwright.config';
 import { adminPassword, residentPassword } from './support/data';
 import { expect, test } from './support/fixtures';
@@ -91,4 +92,122 @@ test.describe('no session', () => {
     expect(((await withoutToken.json()) as { error: { code: string } }).error.code).toBe('CSRF_FAILED');
     expect(withoutToken.headers()['cache-control']).toBe('no-store');
   });
+});
+
+/** The real login form, filled and sent. */
+async function submit(page: Page, email: string, password: string): Promise<void> {
+  await page.getByLabel('Correo electrónico').fill(email);
+  await page.getByLabel('Contraseña').fill(password);
+  await page.getByRole('button', { name: 'Ingresar' }).click();
+}
+
+/** RF-002 criterion 2 (administrator) and RF-007 criterion 2 (resident): wrong credentials on the real form. */
+test.describe('invalid credentials', () => {
+  const GENERIC = 'Correo electrónico o contraseña no válidos.';
+  const UNKNOWN_EMAIL = 'no-registrado.e2e@example.com'; // not in the seed
+
+  /** Not signed in: the generic alert, still on /login, no session cookie and the API sees no session. */
+  async function expectRefused(page: Page): Promise<void> {
+    await expect(page.getByRole('alert')).toHaveText(GENERIC);
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByLabel('Contraseña')).toHaveValue('');
+    await expect(page.getByRole('button', { name: 'Ingresar' })).toBeEnabled();
+    expect((await page.context().cookies()).map((cookie) => cookie.name)).not.toContain('softph_session');
+    expect((await page.request.get('/api/v1/auth/session')).status()).toBe(401);
+  }
+
+  const cases = [
+    { title: 'RF-002: the administrator with a wrong password', role: 'admin', home: /\/admin$/ },
+    { title: 'RF-007: the resident with a wrong password', role: 'resident', home: /\/resident$/ }
+  ] as const;
+
+  for (const { title, role, home } of cases) {
+    test(`${title}: the generic alert, no session; then the right password signs in`, async ({ page, seed }) => {
+      const email = role === 'admin' ? seed.admin_email : seed.resident_email;
+      const password = role === 'admin' ? adminPassword() : residentPassword();
+      await page.goto('/login');
+      await submit(page, email, `${password}-incorrecta`);
+      await expectRefused(page);
+
+      await submit(page, email, password);
+      await expect(page).toHaveURL(home);
+    });
+  }
+
+  test('an email that is not registered: the same generic alert, no session; then a valid account signs in', async ({ page, seed }) => {
+    await page.goto('/login');
+    await submit(page, UNKNOWN_EMAIL, residentPassword());
+    await expectRefused(page);
+
+    await submit(page, seed.resident_email, residentPassword());
+    await expect(page).toHaveURL(/\/resident$/);
+  });
+});
+
+/**
+ * A3 (RF-002, RF-007, RF-018): "Cerrar sesión" in the header ends the session on the server, not only in this
+ * browser. The session cookie is copied before logging out into a separate browser context (another tab or a
+ * stolen copy): it works there first, and after the logout the same cookie is refused by the pages and the API.
+ */
+test.describe('logout', () => {
+  const COOKIE = 'softph_session';
+  const cases = [
+    // Protected APIs with NoStoreRoute: their 401 is never cached either.
+    { role: 'administrator', home: /\/admin$/, page: '/admin/obligations', api: '/api/v1/admin/charges' },
+    { role: 'resident', home: /\/resident$/, page: '/resident/payments', api: '/api/v1/resident/payments' }
+  ] as const;
+
+  for (const { role, home, page: protectedPage, api } of cases) {
+    test(`the ${role} logs out from the header: back to the login, and the old session cookie no longer opens anything`, async ({ page, seed, browser }) => {
+      const [email, password, expectedRole] = role === 'administrator'
+        ? [seed.admin_email, adminPassword(), 'ADMINISTRADOR']
+        : [seed.resident_email, residentPassword(), 'RESIDENTE'];
+
+      // 1. The real login form, to the role's home page.
+      await page.goto('/login');
+      await submit(page, email, password);
+      await expect(page).toHaveURL(home);
+      const session = (await page.context().cookies()).find((cookie) => cookie.name === COOKIE);
+      expect(session, 'the session cookie after signing in').toBeTruthy();
+
+      // The copied cookie is a working session elsewhere (the control for step 4).
+      const copy = await browser.newContext({ baseURL: E2E_ORIGIN });
+      try {
+        await copy.addCookies([session!]);
+        const active = await copy.request.get('/api/v1/auth/session');
+        expect(active.status()).toBe(200);
+        expect(((await active.json()) as { user: { role: string } }).user.role).toBe(expectedRole);
+        expect((await copy.request.get(api)).status()).toBe(200);
+
+        // 2. The header's "Cerrar sesión": the server answers the logout, then the login page.
+        const [logout] = await Promise.all([
+          page.waitForResponse((answer) => new URL(answer.url()).pathname === '/api/v1/auth/logout'),
+          page.getByRole('button', { name: 'Cerrar sesión' }).click() // the header's control (admin-dashboard.spec.ts)
+        ]);
+        expect(logout.request().method()).toBe('POST');
+        expect(logout.status()).toBe(204);
+        await expect(page).toHaveURL(/\/login$/);
+        await expect(page.getByRole('heading', { name: 'Iniciar sesión' })).toBeVisible();
+        expect((await page.context().cookies()).map((cookie) => cookie.name)).not.toContain(COOKIE);
+
+        // 3. This browser: no session for the API; a protected page goes to the login.
+        expect((await page.request.get('/api/v1/auth/session')).status()).toBe(401);
+        await page.goto(protectedPage);
+        await expect(page).toHaveURL(/\/login$/);
+
+        // 4. The old cookie, still sent by the other context, was revoked on the server.
+        expect((await copy.cookies()).find((cookie) => cookie.name === COOKIE)?.value).toBe(session!.value);
+        expect((await copy.request.get('/api/v1/auth/session')).status()).toBe(401);
+        const refused = await copy.request.get(api);
+        expect(refused.status()).toBe(401);
+        expect(refused.headers()['cache-control']).toBe('no-store');
+        const other = await copy.newPage();
+        await other.goto(protectedPage);
+        await expect(other).toHaveURL(/\/login$/);
+        await expect(other.getByRole('heading', { name: 'Iniciar sesión' })).toBeVisible();
+      } finally {
+        await copy.close();
+      }
+    });
+  }
 });
