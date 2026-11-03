@@ -113,8 +113,9 @@ def demo_payment_notice(*, payment_id: int, receipt_number: str, amount: Decimal
 
 
 def feedback_notice(*, feedback_id: int, event: NotificationEvent, version: int, subject: str | None) -> Notice:
-    # The subject (≤ 150 characters) identifies the feedback; the response is read in its detail and
-    # sent in the email. The resolution note is internal and never appears here.
+    # The subject (≤ 150 characters) identifies the feedback. The notification only links to it: the
+    # response is shown in the resident's feedback detail (GET /resident/feedback/{id}) and sent in the
+    # email. The resolution note is internal and never appears here or in that detail.
     shown = f"«{subject}»" if subject else f"«{NO_SUBJECT}»"
     if event == NotificationEvent.FEEDBACK_RESPONDED:
         title, message = "Respuesta a tu feedback", f"La administración revisó tu feedback {shown} y te respondió."

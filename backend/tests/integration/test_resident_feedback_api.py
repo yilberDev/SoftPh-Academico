@@ -27,9 +27,11 @@ NOT_ALLOWED = "Este campo no está permitido."
 CATEGORY_MESSAGE = "Selecciona una categoría: queja, sugerencia, solicitud u otros."
 URGENCY_MESSAGE = "Selecciona la urgencia: alta, media o baja."
 ITEM_KEYS = {"id", "subject", "category", "urgency", "status", "created_at"}
-DETAIL_KEYS = ITEM_KEYS | {"message"}
-SENSITIVE_KEYS = {"resident_id", "resident", "resolution_note", "admin_response", "resolved_at", "version",
-                  "ip_address", "audit", "action_history", "updated_at"}
+# The detail adds what the administration told the resident (HU-005 3.2, HU-017 1); never the internal note.
+ADMINISTRATION_KEYS = {"admin_response", "resolved_at"}
+DETAIL_KEYS = ITEM_KEYS | {"message"} | ADMINISTRATION_KEYS
+SENSITIVE_KEYS = {"resident_id", "resident", "resolution_note", "version", "ip_address", "audit", "action_history",
+                  "updated_at"}
 BODY = {"subject": "Ruido", "message": "Hay ruido después de las 10 p. m.", "category": "COMPLAINT", "urgency": "HIGH"}
 
 world = service_tests.world  # the same fixture
@@ -83,7 +85,7 @@ async def test_1_8_the_resident_sends_a_feedback(client: AsyncClient, db_session
     assert created_at.endswith(("Z", "+00:00"))
     feedback_id = body.pop("id")
     assert body == {"subject": "Portería", "message": "Hola.\nNo funciona el citófono.", "category": "REQUEST",
-                    "urgency": "LOW", "status": "PENDING"}
+                    "urgency": "LOW", "status": "PENDING", "admin_response": None, "resolved_at": None}
     row = (await db_session.execute(select(Feedback).where(Feedback.id == feedback_id))).scalar_one()
     assert (row.resident_id, row.status, row.category, row.urgency) == (world["laura"], "PENDING", "REQUEST", "LOW")
     assert (row.admin_response, row.resolution_note, row.resolved_at, row.version) == (None, None, None, 1)
@@ -293,7 +295,7 @@ async def test_40_44_own_feedback(client: AsyncClient, world: dict[str, int], la
     assert body["created_at"].startswith("2026-10-03T15:00:00")
     assert {k: v for k, v in body.items() if k != "created_at"} == {
         "id": world["f1"], "subject": "Ruido", "message": "Hay ruido después de las 10 p. m.", "category": "COMPLAINT",
-        "urgency": "HIGH", "status": "PENDING"}
+        "urgency": "HIGH", "status": "PENDING", "admin_response": None, "resolved_at": None}
     historical = (await client.get(f"{API}/{world['f4']}")).json()
     assert (historical["category"], historical["urgency"], historical["message"]) == (None, None, "Mensaje anterior.")
 
@@ -309,7 +311,7 @@ async def test_41_43_foreign_and_missing_look_exactly_the_same(client: AsyncClie
     assert "agua" not in foreign.text.lower()
 
 
-async def test_45_48_responses_never_carry_sensitive_keys_or_values(
+async def test_45_48_responses_never_carry_the_internal_note_or_sensitive_keys(
     client: AsyncClient, db_session: AsyncSession, world: dict[str, int], laura: dict[str, str]
 ) -> None:
     resolved = await client.get(f"{API}/{world['f2']}")  # resolved: it HAS a response, a note and a date
@@ -318,8 +320,16 @@ async def test_45_48_responses_never_carry_sensitive_keys_or_values(
     admin_email = await db_session.scalar(select(User.email).where(User.id == world["admin"]))
     for response in (resolved, listed, created):
         assert not keys_of(response.json()) & SENSITIVE_KEYS, response.request.url
-        for value in (NOTE, RESPONSE, "2026-10-05T12", "Laura", "laura@example.com", "Pedro", admin_email):
+        for value in (NOTE, "Laura", "laura@example.com", "Pedro", admin_email):
             assert value not in response.text, value  # type: ignore[operator]
+    # HU-005 3.2 / HU-017 1: the detail shows the response and the resolution date (UTC); the list never does.
+    detail = resolved.json()
+    assert detail["admin_response"] == RESPONSE
+    assert detail["resolved_at"].startswith("2026-10-05T12:00:00") and detail["resolved_at"].endswith(("Z", "+00:00"))
+    assert not keys_of(listed.json()) & ADMINISTRATION_KEYS
+    for value in (RESPONSE, "2026-10-05T12"):
+        assert value not in listed.text, value
+    assert (created.json()["admin_response"], created.json()["resolved_at"]) == (None, None)
 
 
 @pytest.mark.parametrize("feedback_id", ["0", "-1", "abc", str(2**64)])

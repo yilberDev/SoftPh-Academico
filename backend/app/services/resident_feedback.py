@@ -6,13 +6,15 @@ the caller (the future API takes it from the session, never from the client).
 A feedback of another resident is "not found", exactly as a feedback that does
 not exist (FeedbackNotFoundError, 404 "El feedback no existe.").
 
-What the resident reads is only what the resident wrote, plus its status:
-subject, message, category, urgency, status (PENDING or RESOLVED, as stored)
-and the sending date (created_at, UTC). Never the administrator's internal
-note (resolution_note), the response (admin_response, not part of HU-009 in
-this stage), the resolution date, the administrator, the audit or anybody
-else's data. category and urgency are NULL for the feedback stored before
-HU-009 and are returned as NULL (nothing invented).
+What the resident reads is what the resident wrote, plus its status: subject,
+message, category, urgency, status (PENDING or RESOLVED, as stored) and the
+sending date (created_at, UTC). The detail adds what the administration told
+the resident (HU-005 criterion 3.2, HU-017 criterion 1): the response
+(admin_response) and the resolution date (resolved_at, UTC), each NULL until
+it exists. Never the administrator's internal note (resolution_note), the
+administrator, the audit or anybody else's data; the list carries none of the
+administrator's fields. category and urgency are NULL for the feedback stored
+before HU-009 and are returned as NULL (nothing invented).
 
 list    one COUNT and one page (ORDER BY created_at DESC, id DESC, LIMIT, OFFSET in MySQL)
 get     one query
@@ -86,7 +88,8 @@ class ResidentFeedbackPage:
 
 @dataclass(frozen=True)
 class ResidentFeedbackDetail:
-    """One feedback of the resident (criterion 5.2: sending date, message and current status)."""
+    """One feedback of the resident (criterion 5.2: sending date, message and current status), with the
+    administration's response and the resolution date once they exist (never the internal note)."""
 
     id: int
     subject: str | None
@@ -95,6 +98,8 @@ class ResidentFeedbackDetail:
     urgency: FeedbackUrgency | None
     status: FeedbackStatus
     created_at: datetime  # sending date, UTC
+    admin_response: str | None  # None until the administrator answers (HU-005)
+    resolved_at: datetime | None  # None until it is resolved; UTC
 
 
 def _category(value: str | None) -> FeedbackCategory | None:
@@ -153,8 +158,9 @@ async def get_resident_feedback(db: AsyncSession, resident_id: int, feedback_id:
         raise FeedbackNotFoundError()
     row = (
         await db.execute(
+            # Never resolution_note: the internal note is not even read.
             select(Feedback.id, Feedback.subject, Feedback.message, Feedback.category, Feedback.urgency,
-                   Feedback.status, Feedback.created_at)
+                   Feedback.status, Feedback.created_at, Feedback.admin_response, Feedback.resolved_at)
             .where(Feedback.id == feedback_id, Feedback.resident_id == resident_id)
         )
     ).first()
@@ -163,6 +169,7 @@ async def get_resident_feedback(db: AsyncSession, resident_id: int, feedback_id:
     return ResidentFeedbackDetail(
         id=row.id, subject=row.subject, message=row.message, category=_category(row.category),
         urgency=_urgency(row.urgency), status=FeedbackStatus(row.status), created_at=row.created_at,
+        admin_response=row.admin_response, resolved_at=row.resolved_at,
     )
 
 

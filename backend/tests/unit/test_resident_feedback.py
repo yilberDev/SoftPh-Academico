@@ -51,8 +51,10 @@ def test_the_resident_is_always_required(resident_id: Any) -> None:
 
 
 def test_only_the_residents_own_data_can_be_returned() -> None:
-    # What the resident wrote and its status; never the administrator's fields, the resident or the audit.
+    # What the resident wrote and its status; the detail adds the response and the resolution date, never
+    # the internal note, the resident or the audit.
     assert [f.name for f in fields(ResidentFeedbackSummary)] == ["id", "subject", "category", "urgency", "status",
                                                                   "created_at"]
     assert [f.name for f in fields(ResidentFeedbackDetail)] == ["id", "subject", "message", "category", "urgency",
-                                                                 "status", "created_at"]
+                                                                 "status", "created_at", "admin_response",
+                                                                 "resolved_at"]

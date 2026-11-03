@@ -69,6 +69,7 @@ import {
   NOT_FOUND_HINT,
   NOT_FOUND_MESSAGE,
   detailLines,
+  responseOf,
   isFeedbackId,
   loadDetailPage
 } from '../src/lib/resident/feedback-detail.ts';
@@ -86,7 +87,8 @@ function feedback(id: number, overrides: Partial<ResidentFeedback> = {}): Reside
 }
 
 function detail(overrides: Partial<ResidentFeedbackDetail> = {}): ResidentFeedbackDetail {
-  return { ...feedback(5), message: 'Hay ruido después de las 10 p. m.\nTodos los días.', ...overrides };
+  return { ...feedback(5), message: 'Hay ruido después de las 10 p. m.\nTodos los días.', admin_response: null, resolved_at: null,
+           ...overrides };
 }
 
 function pageOf(items: ResidentFeedback[], page = 1, pageSize = 10, total = items.length): ResidentFeedbackPage {
@@ -430,14 +432,29 @@ describe('resident feedback: detail', () => {
     assert.deepEqual(await fail(new TypeError('Failed to fetch')), { kind: 'error' });
   });
 
+  it('HU-005 3.2 / HU-017 1: the response and the resolution date once they exist; nothing while there are none', () => {
+    const pending = detail();
+    assert.equal(responseOf(pending), null);
+    assert.deepEqual(detailLines(pending).map((l) => l.label), ['Fecha de envío', 'Asunto', 'Categoría', 'Urgencia', 'Estado']);
+
+    const answered = detail({ admin_response: 'Revisaremos el portón mañana.\nGracias.' });
+    assert.equal(responseOf(answered), 'Revisaremos el portón mañana.\nGracias.'); // its line breaks kept
+    assert.equal(detailLines(answered).length, 5); // answered, not resolved: no resolution date
+
+    const resolved = detail({ status: 'RESOLVED', admin_response: 'Listo.', resolved_at: '2026-10-09T15:00:00Z' });
+    const lines = detailLines(resolved).map((l) => [l.label, spaces(l.value)]);
+    assert.deepEqual(lines.map(([label]) => label), ['Fecha de envío', 'Asunto', 'Categoría', 'Urgencia', 'Estado', 'Fecha de resolución']);
+    assert.match(lines[5][1], /^9 de octubre de 2026.* 10:00 a\. m\.$/); // UTC 15:00 shown in Bogotá time
+  });
+
   it('never shows internal data, even if an answer carried it', () => {
     const leaked = { ...detail(), admin_response: 'Respuesta X', resolution_note: 'Nota interna X', resolved_at: '2026-10-09T15:00:00Z',
                      resident_id: 7, version: 3, ip_address: '10.0.0.1', action_history: [] } as ResidentFeedbackDetail;
-    const shown = JSON.stringify(detailLines(leaked));
-    for (const secret of ['Respuesta X', 'Nota interna X', '2026-10-09', '9 de octubre', '10.0.0.1', 'resident', 'version']) {
+    const shown = JSON.stringify(detailLines(leaked)) + JSON.stringify(responseOf(leaked));
+    for (const secret of ['Nota interna X', 'resolution_note', '10.0.0.1', 'resident', 'version']) {
       assert.ok(!shown.includes(secret), secret);
     }
     const row = JSON.stringify(feedbackRow(leaked));
-    for (const secret of ['Respuesta X', 'Nota interna X', 'Hay ruido']) assert.ok(!row.includes(secret), secret); // no message in the list
+    for (const secret of ['Respuesta X', 'Nota interna X', 'Hay ruido', '9 de octubre']) assert.ok(!row.includes(secret), secret); // the list shows none of it
   });
 });

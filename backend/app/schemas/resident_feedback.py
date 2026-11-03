@@ -6,9 +6,10 @@ unknown query parameters are rejected with 422 (extra="forbid"). The body uses
 the rules of a new feedback prepared in HU-009 (schemas/feedback.py); the API
 codes of category and urgency are the only accepted values (the Spanish labels
 belong to the frontend). The responses carry exactly what services/
-resident_feedback.py returns: never the administrator's response or internal
-note, the resolution date, the version, the resident, the IP or the audit.
-category and urgency are null for the feedback stored before HU-009.
+resident_feedback.py returns: the detail adds the administrator's response and
+the resolution date (null until they exist); nothing carries the internal note,
+the version, the resident, the IP or the audit. category and urgency are null
+for the feedback stored before HU-009.
 """
 
 from datetime import UTC, datetime
@@ -119,8 +120,12 @@ class ResidentFeedbackRead(BaseModel):
     urgency: FeedbackUrgency | None
     status: FeedbackStatus
     created_at: datetime  # sending date, UTC
+    admin_response: str | None  # the administrator's response (HU-005); null until it exists
+    resolved_at: datetime | None  # resolution date, UTC; null until it is resolved
 
     @classmethod
     def from_detail(cls, detail: ResidentFeedbackDetail) -> Self:
         return cls(id=detail.id, subject=detail.subject, message=detail.message, category=detail.category,
-                   urgency=detail.urgency, status=detail.status, created_at=_utc(detail.created_at))
+                   urgency=detail.urgency, status=detail.status, created_at=_utc(detail.created_at),
+                   admin_response=detail.admin_response,
+                   resolved_at=None if detail.resolved_at is None else _utc(detail.resolved_at))

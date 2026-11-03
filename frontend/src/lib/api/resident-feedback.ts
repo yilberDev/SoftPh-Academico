@@ -32,6 +32,10 @@ export interface ResidentFeedbackPage {
 
 export interface ResidentFeedbackDetail extends ResidentFeedback {
   message: string;
+  /** The administrator's response (HU-005 3.2); null until it exists. The internal note is never sent. */
+  admin_response: string | null;
+  /** Resolution date, UTC instant; null until it is resolved. */
+  resolved_at: string | null;
 }
 
 /** The only fields the API accepts (anything else is rejected with 422). */

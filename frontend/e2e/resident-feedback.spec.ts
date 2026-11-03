@@ -23,7 +23,7 @@ const COMPLETE = {
 };
 const PEDRO = { subject: 'Agua en la torre E2E', message: 'No hay agua desde la mañana (Pedro E2E).', name: 'Pedro Ruiz' };
 const NOT_FOUND = 'Feedback no encontrado.';
-const RESPONSE_KEYS = ['category', 'created_at', 'id', 'message', 'status', 'subject', 'urgency'];
+const RESPONSE_KEYS = ['admin_response', 'category', 'created_at', 'id', 'message', 'resolved_at', 'status', 'subject', 'urgency'];
 
 interface Sent {
   id: number;
@@ -33,6 +33,8 @@ interface Sent {
   urgency: string | null;
   status: string;
   created_at: string;
+  admin_response: string | null;
+  resolved_at: string | null;
 }
 
 // --- Helpers ----------------------------------------------------------------------------------------------
@@ -107,10 +109,15 @@ function bogotaDate(iso: string): string {
   return new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso));
 }
 
-async function expectDetail(page: Page, sent: { subject: string; category: string; urgency: string; status: string; created_at: string }): Promise<void> {
+async function expectDetail(
+  page: Page,
+  sent: { subject: string; category: string; urgency: string; status: string; created_at: string; resolved_at?: string }
+): Promise<void> {
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Detalle del feedback');
   const region = page.getByRole('region', { name: 'Información del feedback' });
-  await expect(region.locator('dt')).toHaveText(['Fecha de envío', 'Asunto', 'Categoría', 'Urgencia', 'Estado']);
+  const labels = ['Fecha de envío', 'Asunto', 'Categoría', 'Urgencia', 'Estado'];
+  await expect(region.locator('dt')).toHaveText(sent.resolved_at ? [...labels, 'Fecha de resolución'] : labels);
+  if (sent.resolved_at) expect(normalized(await information(page, 'Fecha de resolución').textContent())).toContain(bogotaDate(sent.resolved_at));
   expect(normalized(await information(page, 'Fecha de envío').textContent())).toContain(bogotaDate(sent.created_at));
   await expect(information(page, 'Asunto')).toHaveText(sent.subject);
   await expect(information(page, 'Categoría')).toHaveText(sent.category);
@@ -492,27 +499,35 @@ test.describe('list and detail', () => {
     expect((await api.get('/resident/feedback?resident_id=1')).status()).toBe(422);
   });
 
-  test('resolved by the administration: the resident sees "Resuelto" without the response, the internal note or the resolution date', async ({ page, signIn }) => {
+  test('resolved by the administration: the resident sees "Resuelto", the response and the resolution date, never the internal note', async ({ page, signIn }) => {
     const resident = await signIn('resident');
     const sent = await sendThroughApi(resident, { subject: 'Portería E2E', category: 'REQUEST', urgency: 'MEDIUM' });
     const admin = await signIn('admin');
-    await answerAndResolve(admin, sent.id, 'RESPUESTA-ADMIN-E2E: hablamos con portería.', 'NOTA-INTERNA-E2E: llamada al vigilante.');
+    const response = 'RESPUESTA-ADMIN-E2E: hablamos con portería.\nEl vigilante revisará la puerta.';
+    await answerAndResolve(admin, sent.id, response, 'NOTA-INTERNA-E2E: llamada al vigilante.');
     const api = await signIn('resident');
+
+    // The API answer: the resident's contract, with the response and the resolution date (HU-005 3.2, HU-017 1).
+    const detail = await api.json<Sent>(await api.get(`/resident/feedback/${sent.id}`));
+    expect(Object.keys(detail).sort()).toEqual(RESPONSE_KEYS);
+    expect(detail.admin_response).toBe(response);
+    expect(detail.resolved_at).toMatch(/(Z|\+00:00)$/);
+    expect(JSON.stringify(detail)).not.toMatch(/NOTA-INTERNA-E2E|resolution_note|resident_id|version|ip_address/);
 
     await openList(page);
     await expect(cell(rows(page).first(), 'Estado')).toHaveText('Resuelto');
+    await expect(page.getByRole('main')).not.toContainText('RESPUESTA-ADMIN-E2E'); // the list shows no response
     await page.goto(`/resident/feedback/${sent.id}`);
-    await expectDetail(page, { subject: 'Portería E2E', category: 'Solicitud', urgency: 'Media', status: 'Resuelto', created_at: sent.created_at });
+    await expectDetail(page, { subject: 'Portería E2E', category: 'Solicitud', urgency: 'Media', status: 'Resuelto',
+                               created_at: sent.created_at, resolved_at: detail.resolved_at! });
     await expect(page.getByRole('main')).toContainText('Tu feedback ha sido marcado como resuelto.');
+    const answer = page.getByRole('region', { name: 'Respuesta de la administración' });
+    await expect(answer).toBeVisible();
+    expect(await answer.locator('[data-response-text]').innerText()).toBe(response); // its line break kept
     const html = await page.content();
-    for (const secret of ['RESPUESTA-ADMIN-E2E', 'NOTA-INTERNA-E2E', 'admin_response', 'resolution_note', 'resolved_at', 'Administradora Pruebas',
-                          'Respuesta del administrador', 'Nota interna']) {
+    for (const secret of ['NOTA-INTERNA-E2E', 'Nota interna', 'resolution_note', 'Administradora Pruebas']) {
       expect(html, secret).not.toContain(secret);
     }
-    // The API answer itself: the resident's contract only.
-    const detail = await api.get(`/resident/feedback/${sent.id}`);
-    expect(Object.keys(await detail.json()).sort()).toEqual(RESPONSE_KEYS);
-    expect(await detail.text()).not.toMatch(/RESPUESTA-ADMIN-E2E|NOTA-INTERNA-E2E|resident_id|version|ip_address/);
   });
 
   test('another resident\'s feedback, a missing one and an invalid id: the same "Feedback no encontrado.", by URL and by API', async ({ page, seed, signIn }) => {

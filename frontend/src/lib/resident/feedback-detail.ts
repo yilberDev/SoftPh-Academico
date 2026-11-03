@@ -6,10 +6,11 @@ import { STATUS_LABELS, classificationOf, formatDateTime, subjectText } from '..
  * HU-009: detail of one feedback of the signed-in resident (pure, tested with node --test).
  *
  * Everything shown comes from GET /resident/feedback/{id}: sending date,
- * subject, message, category, urgency and current status. The API never sends
- * the administrator's response, the internal note or the resolution date, and
- * nothing here asks for them elsewhere. created_at is a UTC instant, shown in
- * Bogotá time.
+ * subject, message, category, urgency and current status, plus the
+ * administrator's response and the resolution date once they exist (HU-005
+ * criterion 3.2, HU-017 criterion 1). The API never sends the internal note,
+ * and nothing here shows a field it does not name. Dates are UTC instants,
+ * shown in Bogotá time.
  */
 
 export const NOT_FOUND_MESSAGE = 'Feedback no encontrado.';
@@ -60,6 +61,12 @@ export function detailLines(feedback: ResidentFeedbackDetail): Line[] {
     { label: 'Asunto', value: subjectText(feedback.subject), muted: !feedback.subject },
     { label: 'Categoría', value: classification.category, muted: !classification.categoryRecorded },
     { label: 'Urgencia', value: classification.urgency, muted: !classification.urgencyRecorded },
-    { label: 'Estado', value: STATUS_LABELS[feedback.status], muted: false }
+    { label: 'Estado', value: STATUS_LABELS[feedback.status], muted: false },
+    ...(feedback.resolved_at ? [{ label: 'Fecha de resolución', value: formatDateTime(feedback.resolved_at), muted: false }] : [])
   ];
+}
+
+/** The administrator's response, or null while there is none (the section is then not shown). */
+export function responseOf(feedback: ResidentFeedbackDetail): string | null {
+  return feedback.admin_response || null;
 }

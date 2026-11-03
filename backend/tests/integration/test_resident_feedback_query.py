@@ -155,21 +155,26 @@ async def test_detail(db_session: AsyncSession, world: dict[str, int]) -> None:
     assert detail == ResidentFeedbackDetail(
         id=world["f1"], subject="Ruido", message="Hay ruido después de las 10 p. m.", category=FeedbackCategory.COMPLAINT,
         urgency=FeedbackUrgency.HIGH, status=FeedbackStatus.PENDING, created_at=datetime(2026, 10, 3, 15, 0),
+        admin_response=None, resolved_at=None,
     )
 
 
-async def test_a_resolved_feedback_shows_its_status_but_never_the_administrators_texts(
+async def test_a_resolved_feedback_shows_the_response_and_the_resolution_date_but_never_the_internal_note(
     db_session: AsyncSession, world: dict[str, int]
 ) -> None:
     detail = await get_resident_feedback(db_session, world["laura"], world["f2"])
     assert (detail.status, detail.subject, detail.message) == (FeedbackStatus.RESOLVED, None, "Más bancas en el parque.")
-    # Neither the internal note nor (in this stage) the response or the resolution date; nobody else's data.
-    page = await list_resident_feedback(db_session, world["laura"], ResidentFeedbackQuery(page_size=100))
-    dump = str(asdict(detail)) + str([asdict(item) for item in page.items])
+    # HU-005 3.2 / HU-017 1: the response and the resolution date reach the resident's detail.
+    assert (detail.admin_response, detail.resolved_at) == (RESPONSE, datetime(2026, 10, 5, 12, 0))
     admin_email = await db_session.scalar(select(User.email).where(User.id == world["admin"]))
-    for absent in (NOTE, RESPONSE, "resolution_note", "admin_response", "resolved_at", "2026, 10, 5, 12", "Laura",
-                   "laura@example.com", "Pedro", "No hay agua", admin_email, "resident_id", "version"):
-        assert absent not in dump, absent
+    for absent in (NOTE, "resolution_note", "Laura", "laura@example.com", "Pedro", "No hay agua", admin_email,
+                   "resident_id", "version"):
+        assert absent not in str(asdict(detail)), absent
+    # The list carries none of the administrator's fields.
+    page = await list_resident_feedback(db_session, world["laura"], ResidentFeedbackQuery(page_size=100))
+    listed_dump = str([asdict(item) for item in page.items])
+    for absent in (NOTE, RESPONSE, "resolution_note", "admin_response", "resolved_at", "2026, 10, 5, 12", admin_email):
+        assert absent not in listed_dump, absent
 
 
 # --- 27-29. Feedback stored before HU-009 --------------------------------------------------------------------
@@ -231,11 +236,12 @@ async def test_the_number_of_queries_does_not_grow_with_the_rows(
     await listed(db_session, world["laura"])  # 4 feedback
     assert len(statements) == 2  # one COUNT, one page
     assert all("resident_id" in statement for statement in statements)
+    assert not any("admin_response" in statement or "resolution_note" in statement for statement in statements)
     statements.clear()
     await listed(db_session, world["laura"], page=9)
     assert len(statements) == 1  # beyond the last page: only the COUNT
     statements.clear()
     await get_resident_feedback(db_session, world["laura"], world["f1"])
     assert len(statements) == 1
-    assert "resolution_note" not in statements[0] and "admin_response" not in statements[0]
+    assert "resolution_note" not in statements[0]  # the internal note is never read; the response is (HU-005 3.2)
     assert "users" not in statements[0]  # no join: nothing about people is read
