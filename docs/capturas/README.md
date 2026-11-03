@@ -23,3 +23,4 @@ Generadas el 2026-10-27 con Playwright (Chromium, 1280 px de ancho) sobre la pil
 | `17-feedback-listado-administrador.png` | Listado de feedback del administrador |
 | `18-feedback-respuesta-administrador.png` | Detalle del feedback con la respuesta guardada y el historial |
 | `19-notificaciones-residente.png` | Notificaciones del residente: pago manual, pago de demostración y respuesta |
+| `20-feedback-respuesta-residente.png` | El residente ve, en el detalle de su feedback, la respuesta del administrador y la fecha de resolución (nunca la nota interna). Generada el 2026-11-03, tras el commit `7191762` |
