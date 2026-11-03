@@ -1,0 +1,57 @@
+@startuml
+' Versión resumida del diagrama de componentes (componentes.puml), para una página carta vertical.
+' Solo los componentes principales y sus comunicaciones reales; detalle en ../correspondencia.md.
+skinparam dpi 200
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam componentStyle uml2
+skinparam linetype ortho
+top to bottom direction
+title Arquitectura de SoftPh: componentes principales
+
+actor "Usuario\n(administrador / residente)" as user
+node "Navegador web" as browser
+
+package "Frontend · Astro 7 (SSR) · frontend/src" {
+  [Control de acceso\nmiddleware.ts] as mw
+  [Páginas SSR\npages/] as pages
+  [Lógica de interfaz\nlib/<dominio>] as lib
+  [Cliente de la API\nlib/api] as client
+}
+
+package "Backend · FastAPI · backend/app" {
+  [Routers\napi/v1] as routers
+  [Autorización\napi/deps.py] as deps
+  [Esquemas\nschemas/] as schemas
+  [Servicios de negocio\nservices/] as services
+  [Núcleo transversal\ncore/] as core
+  [Modelos\nmodels/ + db/] as models
+  [Recibos PDF\nservices/receipts.py\n(reportlab)] as receipts
+  [Correo\nservices/mail.py] as mail
+}
+
+database "MySQL 8\nsoftph_academico" as db
+[Alembic\nbackend/alembic] as alembic
+node "Servidor SMTP\n(Mailpit en desarrollo y pruebas)" as smtp
+
+user --> browser
+browser --> mw : HTTP · cookie de sesión
+mw --> pages : acceso por rol
+pages --> lib
+pages --> client : datos SSR (GET)
+browser --> routers : HTTP/JSON /api/v1\n(mismo origen, proxy de Astro)\ncookie + X-CSRF-Token
+client --> routers : HTTP GET\nreenvía la cookie
+routers --> deps : sesión, rol y CSRF
+deps --> core
+routers --> schemas : validación
+routers --> services
+services --> core
+services --> models
+services --> receipts
+services --> mail
+models --> db : SQLAlchemy\n(mysql+asyncmy)
+alembic --> db : DDL
+alembic ..> models : metadatos
+mail --> smtp : SMTP
+@enduml

@@ -17,7 +17,7 @@ component "Navegador web" as navegador
 
 package "Frontend · frontend/src (Astro 7 SSR, @astrojs/node standalone, Tailwind CSS 4)" as fe {
   component "middleware.ts\n+ lib/auth/page-access.ts\n+ lib/auth/roles.ts" as middleware
-  component "Páginas SSR · pages/\n/login, /forgot-password, /reset-password,\n/activate-account, /admin/**, /resident/**" as pages
+  component "Páginas SSR · pages/\n/login, /forgot-password, /reset-password,\n/activate-account, /admin/…, /resident/…" as pages
   component "components/ y layouts/\n(AdminHeader, ResidentHeader,\nAccountStatement, StructureLevel…)" as ui
   component "Módulos de dominio · lib/\nauth · residents · structure · obligations\npayments · account-statement · reports\nfeedback · resident · admin · lists · landing" as libdom
   component "Cliente del navegador\nlib/api/client.ts y lib/api/*.ts" as apiclient
