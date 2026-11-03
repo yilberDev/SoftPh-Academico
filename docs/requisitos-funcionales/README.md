@@ -28,4 +28,4 @@ El documento académico original no se modifica. Cualquier diferencia de diseño
 
 _RF-011, RF-012, RF-014, RF-015 y RF-017 tienen transcripción literal de su ficha académica (título tal como aparece en el campo «Nombre»)._
 
-_Seguimiento (2026-10-22): sus historias tienen implementación técnica (HU-015 en el commit `faf73fd`; HU-011, HU-012 y HU-014 en `f5afd2b`; HU-017 en `c7d9c4d`), lo que no equivale a su aceptación académica. El estado por criterio, la validación E2E, las limitaciones y las decisiones pendientes están en la [matriz de trazabilidad](../matriz-trazabilidad.md#evaluación-por-criterio-2026-10-22-sobre-c7d9c4d)._
+_Seguimiento (2026-10-22): sus historias tienen implementación técnica (HU-015 en el commit `faf73fd`; HU-011, HU-012 y HU-014 en `f5afd2b`; HU-017 en `c7d9c4d`), lo que no equivale a su aceptación académica. Desde el commit `1269ddd` todas tienen pruebas E2E (actualizado el 2026-11-03). El estado por criterio, la validación E2E, las limitaciones y las decisiones pendientes están en la [matriz de trazabilidad](../matriz-trazabilidad.md#evaluación-por-criterio-2026-10-22-sobre-c7d9c4d)._

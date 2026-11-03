@@ -225,10 +225,11 @@ Al terminar, la base `softph_academico_test` quedó vacía y el clon sin cambios
 
 ## 10. Diferencias con el README del repositorio
 
-La guía corrige o precisa estos puntos del `README.md`, comprobados durante la verificación:
+La verificación del 2026-11-03 encontró cinco puntos en los que el `README.md` no coincidía con la ejecución real. Cuatro se corrigieron en el propio README (commit `docs: update traceability…`, punto 4 de esta revisión):
 
-1. **`npm run dev` no ocupa la terminal.** Con Astro 7.3.5 el servidor queda en segundo plano; el README no lo dice ni explica cómo detenerlo (`npx astro dev stop`).
-2. **La página inicial ya no muestra el estado de la API.** Desde el commit `23f592f` es la landing pública; el README sigue describiendo la página anterior.
-3. **Versión de MySQL.** El README pide 8.4 LTS; el proyecto funciona y se verificó con 8.0.46.
-4. **`create-admin` exige terminal interactiva** y sale con código 2 si la entrada no es una terminal; el README lo menciona solo en los códigos de salida.
-5. **Instalación del navegador de Playwright.** El README no incluye `npx playwright install chromium`, necesario la primera vez en un equipo nuevo.
+1. `npm run dev` deja el servidor en segundo plano y se detiene con `npx astro dev stop`: ahora lo indica.
+2. La página inicial es la presentación pública, no la página de estado de la API: ahora lo indica.
+3. La versión de MySQL: ahora indica que la objetivo es 8.4 LTS y que el proyecto se verificó con 8.0.46.
+4. La instalación incluye `npx playwright install chromium`.
+
+Sigue vigente una precisión que el README solo da de forma indirecta (en los códigos de salida): **`create-admin` exige una terminal interactiva** y sale con código 2 si la entrada no es una terminal (sección 6).

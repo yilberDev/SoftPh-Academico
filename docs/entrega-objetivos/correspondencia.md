@@ -1,6 +1,8 @@
 # Anexo C. Correspondencia entre los diagramas y el código
 
-Compara cada elemento de los diagramas de [arquitectura](arquitectura/) y del [modelo de datos](modelo-datos/) con el repositorio, sobre el commit `f543c74` (rama `main`).
+Compara cada elemento de los diagramas de [arquitectura](arquitectura/) y del [modelo de datos](modelo-datos/) con el repositorio (rama `main`; código de la aplicación del commit `7191762`).
+
+El diagrama de componentes tiene dos versiones: [componentes.puml](arquitectura/componentes.puml), con todos los módulos, y [componentes-resumen.puml](arquitectura/componentes-resumen.puml), con solo los componentes principales y sus comunicaciones, legible en una página carta. Ambas se contrastan con la tabla C.1: la resumida agrupa en un solo bloque varios de sus elementos (por ejemplo, «Cliente de la API» reúne el cliente del navegador y el cliente SSR, y el núcleo `core/` no detalla sus módulos).
 
 Verificado el 2026-11-03:
 
@@ -16,7 +18,7 @@ Verificado el 2026-11-03:
 | Navegador web | — | Sí | Cliente externo; usa la cookie `softph_session` (HttpOnly, `SameSite=Lax`, `Secure` configurable; `backend/app/core/sessions.py`). |
 | `middleware.ts` + `page-access.ts` + `roles.ts` | `frontend/src/middleware.ts`, `frontend/src/lib/auth/page-access.ts`, `frontend/src/lib/auth/roles.ts` | Sí | Consulta la sesión con `getSession()` (`lib/api/session.ts`); responde 403, redirige al login o 503. |
 | Páginas SSR | `frontend/src/pages/` (32 archivos `.astro`) | Sí | `astro.config.mjs`: `output: 'server'`, adaptador `@astrojs/node` standalone, `session: false`. |
-| `components/` y `layouts/` | `frontend/src/components/`, `frontend/src/layouts/Layout.astro` | **Parcial** | `components/ApiStatus.astro` y `lib/api/health.ts` ya no se usan desde que la landing reemplazó la página de estado (commit `23f592f`); el README todavía dice que la página inicial muestra el estado de la API. |
+| `components/` y `layouts/` | `frontend/src/components/`, `frontend/src/layouts/Layout.astro` | **Parcial** | `components/ApiStatus.astro` y `lib/api/health.ts` ya no se usan desde que la landing reemplazó la página de estado (commit `23f592f`). |
 | Módulos de dominio de `lib/` | `frontend/src/lib/{auth,residents,structure,obligations,payments,account-statement,reports,feedback,resident,admin,lists,landing}` | Sí | Lógica pura probada en `frontend/tests/`. |
 | Cliente del navegador | `frontend/src/lib/api/client.ts` y `lib/api/*.ts` | Sí | `fetch` a `/api/v1` con `credentials: 'same-origin'` y cabecera `X-CSRF-Token`. |
 | Cliente SSR | `frontend/src/lib/api/server.ts` y `lib/api/*-server.ts` | Sí | Solo `GET`, contra `API_INTERNAL_URL`, reenviando la cookie. |
@@ -62,7 +64,6 @@ Verificado el 2026-11-03:
 
 1. **Sin configuración de producción.** El proxy `/api/v1` solo existe en el servidor de desarrollo; el repositorio no define el proxy inverso, el servidor SMTP real ni la forma de desplegar. El diagrama de despliegue se limita, por eso, a desarrollo y pruebas.
 2. **Versión de MySQL.** Instalada 8.0.46; decidida 8.4 LTS.
-3. **Componentes sin uso.** `ApiStatus.astro` y `lib/api/health.ts` siguen en el repositorio aunque ninguna página los importa; el README describe aún la página inicial antigua.
+3. **Componentes sin uso.** `ApiStatus.astro` y `lib/api/health.ts` siguen en el repositorio aunque ninguna página los importa.
 4. **Columnas generadas fuera de los diagramas.** 11 columnas generadas (`*_marker`, `can_originate_late_fee`, `late_fee_source_link`) implementan unicidades parciales y la FK compuesta de la mora; cada diagrama las lista en una nota.
 5. **Referencias polimórficas.** `audit_logs` y `notifications` señalan su entidad sin clave foránea; no aparecen como relaciones.
-6. **PNG no generados todavía.** Las fuentes PlantUML están en este directorio; la exportación a PNG queda pendiente (ver el [README](README.md)).

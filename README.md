@@ -2,12 +2,14 @@
 
 Prototipo académico de gestión administrativa de propiedad horizontal para la Urbanización San Joaquín (Pereira).
 
+> **Guía de ejecución verificada:** [docs/entrega-objetivos/guia-ejecucion.md](docs/entrega-objetivos/guia-ejecucion.md) recoge, paso a paso, la instalación, la creación de las bases, las migraciones, el administrador, el arranque de cada servicio y las pruebas, con los resultados de su última verificación completa.
+
 | Capa | Tecnología |
 |---|---|
 | Frontend | Astro 7 (SSR, `@astrojs/node`) + Tailwind CSS 4 (`@tailwindcss/vite`) + TypeScript |
 | Backend | FastAPI (Python 3.13) + SQLAlchemy 2 async + `asyncmy` |
 | Migraciones | Alembic (única fuente de verdad del esquema) |
-| Base de datos | MySQL 8.4 LTS |
+| Base de datos | MySQL 8 (versión objetivo 8.4 LTS; verificado con 8.0.46) |
 | Correo local | Mailpit |
 
 Frontend y API se sirven desde **un único origen**: en desarrollo, Astro reenvía `/api/v1` a FastAPI con el proxy de Vite; en producción, un proxy inverso enruta `/api/v1` a FastAPI y el resto a Astro.
@@ -27,7 +29,7 @@ SoftPh-Academico/
 
 - Node.js 24 LTS y npm
 - Python 3.13
-- MySQL 8.4 LTS en local
+- MySQL 8 en local: la versión objetivo es 8.4 LTS y el proyecto se verificó completo con **MySQL 8.0.46**
 - Mailpit (SMTP en `127.0.0.1:1025`, interfaz en `http://localhost:8025`) para ver los correos de invitación
 
 Si el sistema no trae Python 3.13, se puede obtener solo el intérprete con [uv](https://docs.astral.sh/uv/) (`uv python install 3.13`) y seguir usando `venv` + `pip`.
@@ -40,6 +42,7 @@ Desde la raíz del repositorio:
 # Frontend
 cd frontend
 npm install
+npx playwright install chromium   # navegador de las pruebas E2E (una sola vez por equipo)
 cd ..
 
 # Backend (usa el intérprete de Python 3.13 disponible, p. ej. python3.13
@@ -133,7 +136,7 @@ Cada área solo admite su rol (con otro rol se muestra "Acceso no autorizado"), 
 
 ## Feedback de residentes (HU-005)
 
-En `http://localhost:4321/admin/feedback` (solo administrador) se consulta el feedback de los residentes, con su categoría y urgencia (HU-009): búsqueda por residente o asunto, filtro por estado (Pendiente o Resuelto), orden y paginación. En el detalle se ve el mensaje original y el residente, se guarda una respuesta (se envía por correo al residente) y se marca como resuelto con una nota interna de gestión (no se envía), con confirmación previa. El historial de acciones sale de la auditoría. Si dos administradores cambian el mismo feedback a la vez, solo un cambio se guarda y el otro ve un aviso para recargar.
+En `http://localhost:4321/admin/feedback` (solo administrador) se consulta el feedback de los residentes, con su categoría y urgencia (HU-009): búsqueda por residente o asunto, filtro por estado (Pendiente o Resuelto), orden y paginación. En el detalle se ve el mensaje original y el residente, se guarda una respuesta (se envía por correo al residente y este la ve en el detalle de su feedback) y se marca como resuelto con una nota interna de gestión (no se envía), con confirmación previa. El historial de acciones sale de la auditoría. Si dos administradores cambian el mismo feedback a la vez, solo un cambio se guarda y el otro ve un aviso para recargar.
 
 El feedback lo envían los residentes (HU-009); las pruebas también crean datos con la función de dominio `create_feedback`.
 
@@ -178,7 +181,7 @@ En `http://localhost:4321/resident/payments` (solo residente, "Mis pagos" en su 
 
 ## Feedback del residente (HU-009)
 
-En `http://localhost:4321/resident/feedback/new` (solo residente, "Enviar feedback" en su panel) el residente envía un feedback a la administración: asunto opcional (hasta 150 caracteres), mensaje obligatorio (hasta 2000), categoría (Queja, Sugerencia, Solicitud u Otros) y urgencia (Alta, Media o Baja). Queda registrado como Pendiente; "Cancelar" no envía nada y, si hay texto, pide confirmar. En `/resident/feedback` ("Mis feedback") consulta los que ha enviado, del más reciente al más antiguo, con su categoría, urgencia y estado (Pendiente o Resuelto), y en el detalle la fecha de envío y el mensaje. La respuesta y la resolución las registra el administrador (HU-005), que notifica al residente por correo.
+En `http://localhost:4321/resident/feedback/new` (solo residente, "Enviar feedback" en su panel) el residente envía un feedback a la administración: asunto opcional (hasta 150 caracteres), mensaje obligatorio (hasta 2000), categoría (Queja, Sugerencia, Solicitud u Otros) y urgencia (Alta, Media o Baja). Queda registrado como Pendiente; "Cancelar" no envía nada y, si hay texto, pide confirmar. En `/resident/feedback` ("Mis feedback") consulta los que ha enviado, del más reciente al más antiguo, con su categoría, urgencia y estado (Pendiente o Resuelto), y en el detalle la fecha de envío y el mensaje. La respuesta y la resolución las registra el administrador (HU-005), que notifica al residente por correo; el detalle muestra al residente la respuesta y la fecha de resolución cuando existen, nunca la nota interna de resolución.
 
 | Endpoint | Uso |
 |---|---|
@@ -334,7 +337,9 @@ cd frontend
 npm run dev
 ```
 
-Abre `http://localhost:4321`. La página inicial muestra el estado de la API y de la base de datos. Las peticiones del navegador a `/api/v1/*` se reenvían a FastAPI a través del mismo origen.
+`npm run dev` deja el servidor de desarrollo en segundo plano; se administra desde `frontend/` con `npx astro dev status`, `npx astro dev logs` y `npx astro dev stop`.
+
+Abre `http://localhost:4321`: la página inicial es la presentación pública de SoftPh y el acceso está en `/login`. Las peticiones del navegador a `/api/v1/*` se reenvían a FastAPI a través del mismo origen.
 
 ## Pruebas
 
