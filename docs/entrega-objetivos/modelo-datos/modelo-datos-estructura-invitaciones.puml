@@ -1,0 +1,104 @@
+@startuml
+skinparam dpi 300
+skinparam linetype ortho
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 9
+skinparam class {
+  BackgroundColor White
+  BorderColor #333333
+  ArrowColor #333333
+}
+hide circle
+hide methods
+top to bottom direction
+title Modelo lógico de datos: Estructura residencial e invitaciones\nMySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
+entity "blocks" as blocks {
+  *id : bigint <<PK>>
+  --
+  *number : int unsigned
+  *version : int unsigned
+  *created_at : datetime(6)
+  *updated_at : datetime(6)
+  deleted_at : datetime(6)
+}
+entity "towers" as towers {
+  *id : bigint <<PK>>
+  --
+  *block_id : bigint <<FK>>
+  *number : int unsigned
+  *version : int unsigned
+  *created_at : datetime(6)
+  *updated_at : datetime(6)
+  deleted_at : datetime(6)
+}
+entity "units" as units {
+  *id : bigint <<PK>>
+  --
+  *tower_id : bigint <<FK>>
+  *number : int unsigned
+  *version : int unsigned
+  *created_at : datetime(6)
+  *updated_at : datetime(6)
+  deleted_at : datetime(6)
+}
+entity "resident_invitations" as resident_invitations {
+  *id : bigint <<PK>>
+  --
+  *token_hash : char(64) <<UK>>
+  *user_id : bigint <<FK>>
+  *unit_id : bigint <<FK>>
+  *invited_by_user_id : bigint <<FK>>
+  *validity_days : tinyint unsigned
+  *status : varchar(20)
+  *delivery_status : varchar(20)
+  *send_attempts : smallint unsigned
+  *created_at : datetime(6)
+  *expires_at : datetime(6)
+  used_at : datetime(6)
+  last_sent_at : datetime(6)
+}
+entity "resident_units" as resident_units {
+  *id : bigint <<PK>>
+  --
+  *user_id : bigint <<FK>>
+  *unit_id : bigint <<FK>>
+  *invitation_id : bigint <<FK,UK>>
+  *started_at : datetime(6)
+  ended_at : datetime(6)
+}
+entity "users" as users #EEEEEE {
+  *id : bigint <<PK>>
+  --
+  .. (ver diagrama de su área) ..
+}
+users ||--o{ resident_invitations : "invited_by_user_id"
+units ||--o{ resident_invitations : "unit_id"
+users ||--o{ resident_invitations : "user_id"
+resident_invitations ||--o| resident_units : "invitation_id"
+units ||--o{ resident_units : "unit_id"
+users ||--o{ resident_units : "user_id"
+blocks ||--o{ towers : "block_id"
+towers ||--o{ units : "tower_id"
+note as externas
+  También referenciadas desde otras áreas:
+  units ←
+    - charges.unit_id
+    - payments.unit_id
+end note
+note as generadas
+  Columnas generadas omitidas (unicidad parcial
+  y enlace de la mora):
+  - blocks.active_number_marker
+  - towers.active_number_marker
+  - units.active_number_marker
+  - resident_invitations.pending_unit_marker
+  - resident_invitations.pending_user_marker
+  - resident_units.active_unit_marker
+  - resident_units.active_user_marker
+end note
+legend bottom left
+  * = NOT NULL · <<PK>> clave primaria · <<FK>> clave foránea · <<UK>> única
+  Cardinalidad (pata de gallo): || uno · |o cero o uno · o{ cero o muchos · o| cero o uno
+endlegend
+@enduml

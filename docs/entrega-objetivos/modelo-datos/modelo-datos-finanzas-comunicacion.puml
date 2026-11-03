@@ -1,0 +1,136 @@
+@startuml
+skinparam dpi 300
+skinparam linetype ortho
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 9
+skinparam class {
+  BackgroundColor White
+  BorderColor #333333
+  ArrowColor #333333
+}
+hide circle
+hide methods
+top to bottom direction
+title Modelo lógico de datos: Finanzas y comunicación\nMySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
+entity "charges" as charges {
+  *id : bigint <<PK>>
+  --
+  *unit_id : bigint <<FK>>
+  *concept : varchar(20)
+  description : varchar(200)
+  *amount : decimal(12,2)
+  *due_date : date
+  billing_period : date
+  source_charge_id : bigint <<FK,UK>>
+  *created_by_user_id : bigint <<FK>>
+  *created_at : datetime(6)
+}
+entity "payments" as payments {
+  *id : bigint <<PK>>
+  --
+  *resident_id : bigint <<FK>>
+  *unit_id : bigint <<FK>>
+  *registered_by_user_id : bigint <<FK>>
+  *amount : decimal(12,2)
+  *method : varchar(20)
+  *concept : varchar(20)
+  concept_description : varchar(200)
+  *source : varchar(20)
+  transaction_reference : varchar(100)
+  notes : varchar(500)
+  *payment_date : date
+  *registered_at : datetime(6)
+  *resident_name_snapshot : varchar(150)
+  *unit_label_snapshot : varchar(40)
+  *receipt_email_status : varchar(20)
+  receipt_sent_at : datetime(6)
+  *created_at : datetime(6)
+}
+entity "payment_allocations" as payment_allocations {
+  *id : bigint <<PK>>
+  --
+  *payment_id : bigint <<FK>>
+  *charge_id : bigint <<FK>>
+  *amount : decimal(12,2)
+  *created_at : datetime(6)
+}
+entity "demo_payment_transactions" as demo_payment_transactions {
+  *id : bigint <<PK>>
+  --
+  *resident_id : bigint <<FK>>
+  *charge_id : bigint <<FK>>
+  *amount : decimal(12,2)
+  *reference : varchar(100) <<UK>>
+  *status : varchar(20)
+  *created_at : datetime(6)
+  *expires_at : datetime(6)
+  finished_at : datetime(6)
+  payment_id : bigint <<FK,UK>>
+  test_instrument : varchar(40)
+}
+entity "feedback" as feedback {
+  *id : bigint <<PK>>
+  --
+  *resident_id : bigint <<FK>>
+  subject : varchar(150)
+  *message : varchar(2000)
+  category : varchar(20)
+  urgency : varchar(20)
+  *status : varchar(20)
+  admin_response : varchar(2000)
+  resolution_note : varchar(2000)
+  *version : int unsigned
+  *created_at : datetime(6)
+  *updated_at : datetime(6)
+  resolved_at : datetime(6)
+}
+entity "notifications" as notifications {
+  *id : bigint <<PK>>
+  --
+  *resident_id : bigint <<FK>>
+  *event_type : varchar(40)
+  *entity_type : varchar(40)
+  *entity_id : bigint
+  *event_key : varchar(120) <<UK>>
+  *title : varchar(150)
+  *message : varchar(500)
+  *email_status : varchar(20)
+  email_error : varchar(64)
+  *created_at : datetime(6)
+  sent_at : datetime(6)
+}
+entity "units" as units #EEEEEE {
+  *id : bigint <<PK>>
+  --
+  .. (ver diagrama de su área) ..
+}
+entity "users" as users #EEEEEE {
+  *id : bigint <<PK>>
+  --
+  .. (ver diagrama de su área) ..
+}
+users ||--o{ charges : "created_by_user_id"
+charges |o--o| charges : "source_charge_id (mora → origen)"
+units ||--o{ charges : "unit_id"
+charges ||--o{ demo_payment_transactions : "charge_id"
+payments |o--o| demo_payment_transactions : "payment_id"
+users ||--o{ demo_payment_transactions : "resident_id"
+users ||--o{ feedback : "resident_id"
+users ||--o{ notifications : "resident_id"
+charges ||--o{ payment_allocations : "charge_id"
+payments ||--o{ payment_allocations : "payment_id"
+users ||--o{ payments : "registered_by_user_id"
+users ||--o{ payments : "resident_id"
+units ||--o{ payments : "unit_id"
+note as generadas
+  Columnas generadas omitidas (unicidad parcial
+  y enlace de la mora):
+  - charges.can_originate_late_fee
+  - charges.late_fee_source_link
+end note
+legend bottom left
+  * = NOT NULL · <<PK>> clave primaria · <<FK>> clave foránea · <<UK>> única
+  Cardinalidad (pata de gallo): || uno · |o cero o uno · o{ cero o muchos · o| cero o uno
+endlegend
+@enduml

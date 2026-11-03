@@ -1,0 +1,24 @@
+# Capas de SoftPh: carpetas y responsabilidades
+
+Tomado del repositorio en el commit `f543c74`. Las rutas son relativas a la raíz del repositorio.
+
+| Capa | Carpetas y archivos reales | Responsabilidad |
+|---|---|---|
+| Presentación: páginas SSR | `frontend/src/pages/` (32 páginas `.astro`): `login.astro`, `forgot-password.astro`, `reset-password.astro`, `activate-account.astro`, `forbidden.astro`, `index.astro` (landing pública), `admin/**` y `resident/**` | Renderizar en el servidor (Astro 7, `@astrojs/node` standalone) cada pantalla de cada rol |
+| Presentación: componentes y estilos | `frontend/src/components/` (`AdminHeader.astro`, `ResidentHeader.astro`, `AccountStatement.astro`, `StructureLevel.astro`, `LogoutButton.astro`, `landing/*`), `frontend/src/layouts/Layout.astro`, `frontend/src/styles/` | Piezas de interfaz reutilizables y estilos (Tailwind CSS 4) |
+| Control de acceso de páginas | `frontend/src/middleware.ts`, `frontend/src/lib/auth/page-access.ts`, `frontend/src/lib/auth/roles.ts` | Decidir por rol qué páginas se muestran: redirigir al login, responder «Acceso no autorizado» (403) o 503 si la API no responde. Solo mejora la navegación: la API autoriza cada petición |
+| Lógica de interfaz por dominio | `frontend/src/lib/`: `auth/`, `residents/`, `structure/`, `obligations/`, `payments/`, `account-statement/`, `reports/`, `feedback/`, `resident/`, `admin/`, `lists/`, `landing/` | Formularios, validaciones de interfaz, estados de carga y formateo (funciones puras probadas con `node --test` en `frontend/tests/`) |
+| Acceso a la API desde el frontend | `frontend/src/lib/api/client.ts` y `lib/api/*.ts` (navegador); `lib/api/server.ts` y `lib/api/*-server.ts` (SSR); `lib/api/errors.ts` | Navegador: `fetch` a `/api/v1` del mismo origen con `X-CSRF-Token`. SSR: solo `GET` a `API_INTERNAL_URL`, reenviando la cookie del usuario |
+| Proxy de desarrollo | `frontend/astro.config.mjs` (`vite.server.proxy` de `/api/v1`) | Mismo origen en desarrollo: el navegador solo habla con Astro. No hay configuración de producción en el repositorio |
+| API: aplicación | `backend/app/main.py`, `backend/app/core/errors.py` | Crear la aplicación FastAPI, registrar los manejadores de error y montar los routers bajo `/api/v1`; `demo_payments` solo con `DEMO_PAYMENTS_ENABLED` |
+| API: routers | `backend/app/api/v1/` (`router.py` y 16 módulos: `auth`, `password_reset`, `invitations`, `activation`, `structure`, `residents`, `account_statements`, `payments`, `reports`, `feedback`, `charges`, `resident_payments`, `resident_feedback`, `resident_notifications`, `demo_payments`, `health`) | Endpoints HTTP/JSON: entrada, validación con esquemas y respuesta |
+| API: autorización | `backend/app/api/deps.py` | `verify_origin` (Origin/Referer), `get_current_auth` (401), `require_roles` (403) y `require_csrf` |
+| Contratos | `backend/app/schemas/` (18 módulos Pydantic) | Validar las entradas y dar forma a las respuestas |
+| Lógica de negocio | `backend/app/services/` (28 módulos) | Reglas de cada historia: sesiones, estructura, invitaciones, pagos y aplicación FIFO, obligaciones, estado de cuenta, reportes, feedback, notificaciones, pago de demostración, auditoría |
+| Documentos y correo | `backend/app/services/receipts.py` (reportlab), `backend/app/services/mail.py` (`smtplib`), `invitation_email.py`, `password_reset_email.py`, `feedback_email.py` | Generar el recibo y el comprobante PDF; enviar correos por SMTP |
+| Núcleo transversal | `backend/app/core/`: `config.py`, `sessions.py`, `csrf.py`, `passwords.py`, `exceptions.py`, `errors.py`, `validation.py`, `emails.py`, `money.py`, `clock.py`, `unit_labels.py` | Configuración desde `.env`; token de sesión (SHA-256) y CSRF (HMAC); Argon2id; errores uniformes; normalización de correos; dinero; fecha de Bogotá; identificadores `B1-TO1-APTO-101` |
+| Persistencia | `backend/app/models/` (10 módulos, 16 tablas), `backend/app/db/session.py`, `backend/app/db/base.py` | Modelos SQLAlchemy 2 asíncronos y sesión con `mysql+asyncmy` |
+| Esquema de base de datos | `backend/alembic/env.py`, `backend/alembic/versions/` (16 revisiones, head `d33ea6140186`) | Única fuente del esquema; `upgrade`, `current` y `check` |
+| Administración del servidor | `backend/app/cli.py` | `python -m app.cli create-admin`: crear el primer administrador (no hay registro público) |
+| Base de datos | MySQL 8: `softph_academico` (desarrollo) y `softph_academico_test` (pruebas); `database/scripts/create-local-databases.sh` | Almacenamiento; el script crea las bases y el usuario, sin tablas |
+| Pruebas | `backend/tests/unit/`, `backend/tests/integration/`, `backend/tests/e2e/` (semilla y servidor E2E), `frontend/tests/`, `frontend/e2e/` | Unitarias, integración sobre `*_test`, lógica del frontend y recorridos E2E con Playwright |

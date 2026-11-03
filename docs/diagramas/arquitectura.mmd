@@ -1,0 +1,56 @@
+---
+title: "Arquitectura de SoftPh (componentes y mecanismos reales del repositorio)"
+---
+%% Fuente: frontend/astro.config.mjs, frontend/src/middleware.ts, frontend/src/lib/api/{client,server}.ts,
+%% backend/app/main.py, backend/app/api/deps.py, backend/app/api/v1/router.py, backend/app/db/session.py,
+%% backend/app/core/{config,sessions,passwords}.py, backend/app/services/{mail,receipts}.py,
+%% backend/alembic/env.py, backend/app/cli.py. Ver docs/diagramas/correspondencia.md.
+flowchart LR
+    nav["Navegador<br/>(administrador / residente)"]
+
+    subgraph FE["frontend/ · Astro 7 SSR (@astrojs/node standalone) + Tailwind CSS 4"]
+        direction TB
+        mw["src/middleware.ts<br/>+ lib/auth/page-access.ts, roles.ts<br/>(acceso a páginas por rol)"]
+        pages["src/pages/<br/>/login, /admin/**, /resident/**,<br/>/activate-account, /forgot-password, /reset-password"]
+        ssr["lib/api/server.ts + *-server.ts<br/>(lecturas SSR, solo GET)"]
+        cli_js["lib/api/client.ts y lib/api/*.ts<br/>(fetch del navegador a /api/v1)"]
+        proxy["Proxy /api/v1 de Vite<br/>(astro.config.mjs, servidor de desarrollo)"]
+    end
+
+    subgraph BE["backend/app · FastAPI (Python 3.13), prefijo /api/v1"]
+        direction TB
+        main["main.py<br/>create_app, manejadores de error,<br/>demo_payments solo con DEMO_PAYMENTS_ENABLED"]
+        routers["api/v1/router.py → 16 routers en 15 módulos<br/>auth, password_reset, invitations, activation, structure,<br/>residents, account_statements (admin + residente), payments, reports, feedback,<br/>charges, resident_payments, resident_feedback,<br/>resident_notifications, health (+ demo_payments)"]
+        deps["api/deps.py<br/>verify_origin · get_current_auth (401)<br/>require_roles (403) · require_csrf"]
+        core["core/<br/>sessions.py (token SHA-256, CSRF HMAC)<br/>passwords.py (Argon2id) · config.py"]
+        services["services/<br/>auth, users, structure, invitations, activation, residents,<br/>payments, allocation, charges, account_statement,<br/>financial_reports, feedback, notifications, demo_payments …"]
+        models["models/ + db/session.py<br/>SQLAlchemy 2 async (AsyncSession)"]
+        receipts["services/receipts.py<br/>PDF con reportlab"]
+        mail["services/mail.py<br/>SmtpMailSender (smtplib)"]
+        cli["cli.py<br/>python -m app.cli create-admin"]
+    end
+
+    db[("MySQL 8 · InnoDB<br/>softph_academico<br/>(pruebas: softph_academico_test)")]
+    alembic["backend/alembic<br/>env.py + 16 revisiones<br/>head d33ea6140186"]
+    smtp["Servidor SMTP<br/>Mailpit 127.0.0.1:1025 en desarrollo y pruebas"]
+
+    nav -- "HTTP: páginas HTML (SSR)<br/>cookie softph_session (HttpOnly, SameSite=Lax)" --> mw
+    mw --> pages
+    mw -- "getSession()" --> ssr
+    pages --> ssr
+    nav -- "fetch HTTP/JSON same-origin<br/>cookie de sesión + X-CSRF-Token + Origin" --> cli_js
+    cli_js --> proxy
+    proxy -- "HTTP/JSON (API_INTERNAL_URL)" --> main
+    ssr -- "HTTP GET/JSON a API_INTERNAL_URL<br/>reenvía la cookie del usuario" --> main
+    main --> routers
+    routers -- "Depends()" --> deps
+    deps --> core
+    routers --> services
+    services --> models
+    models -- "SQLAlchemy async<br/>driver asyncmy (mysql+asyncmy)" --> db
+    services --> receipts
+    receipts -- "PDF adjunto (pago manual)<br/>o descarga (pago de demostración)" --> services
+    services --> mail
+    mail -- "SMTP (sin TLS ni autenticación en la configuración)" --> smtp
+    cli --> services
+    alembic -- "DDL vía SQLAlchemy async engine<br/>(upgrade / check)" --> db

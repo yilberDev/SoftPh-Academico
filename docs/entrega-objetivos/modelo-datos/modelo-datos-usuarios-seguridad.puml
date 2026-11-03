@@ -1,0 +1,95 @@
+@startuml
+skinparam dpi 300
+skinparam linetype ortho
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 9
+skinparam class {
+  BackgroundColor White
+  BorderColor #333333
+  ArrowColor #333333
+}
+hide circle
+hide methods
+top to bottom direction
+title Modelo lógico de datos: Usuarios y seguridad\nMySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
+entity "users" as users {
+  *id : bigint <<PK>>
+  --
+  *email : varchar(254) <<UK>>
+  password_hash : varchar(255)
+  *full_name : varchar(150)
+  document_number : varchar(20) <<UK>>
+  phone : varchar(20)
+  *role : varchar(20)
+  *status : varchar(20)
+  *created_at : datetime(6)
+  *updated_at : datetime(6)
+  deleted_at : datetime(6)
+}
+entity "sessions" as sessions {
+  *id : bigint <<PK>>
+  --
+  *user_id : bigint <<FK>>
+  *token_hash : char(64) <<UK>>
+  *created_at : datetime(6)
+  *last_seen_at : datetime(6)
+  *expires_at : datetime(6)
+  revoked_at : datetime(6)
+}
+entity "login_throttles" as login_throttles {
+  *identifier_hash : char(64) <<PK>>
+  --
+  *failed_attempts : int
+  *window_started_at : datetime(6)
+  locked_until : datetime(6)
+  *updated_at : datetime(6)
+}
+entity "password_reset_tokens" as password_reset_tokens {
+  *id : bigint <<PK>>
+  --
+  *user_id : bigint <<FK>>
+  *token_hash : char(64) <<UK>>
+  *created_at : datetime(6)
+  *expires_at : datetime(6)
+  used_at : datetime(6)
+  revoked_at : datetime(6)
+}
+entity "audit_logs" as audit_logs {
+  *id : bigint <<PK>>
+  --
+  actor_user_id : bigint <<FK>>
+  *action : varchar(64)
+  entity_type : varchar(64)
+  entity_id : bigint
+  context : json
+  ip_address : varchar(45)
+  *created_at : datetime(6)
+}
+users |o--o{ audit_logs : "actor_user_id"
+users ||--o{ password_reset_tokens : "user_id"
+users ||--o{ sessions : "user_id"
+note as externas
+  También referenciadas desde otras áreas:
+  users ←
+    - charges.created_by_user_id
+    - demo_payment_transactions.resident_id
+    - feedback.resident_id
+    - notifications.resident_id
+    - payments.registered_by_user_id
+    - payments.resident_id
+    - resident_invitations.invited_by_user_id
+    - resident_invitations.user_id
+    - resident_units.user_id
+end note
+note as generadas
+  Columnas generadas omitidas (unicidad parcial
+  y enlace de la mora):
+  - users.active_administrator_marker
+  - password_reset_tokens.pending_user_marker
+end note
+legend bottom left
+  * = NOT NULL · <<PK>> clave primaria · <<FK>> clave foránea · <<UK>> única
+  Cardinalidad (pata de gallo): || uno · |o cero o uno · o{ cero o muchos · o| cero o uno
+endlegend
+@enduml

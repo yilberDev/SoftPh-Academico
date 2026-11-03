@@ -1,0 +1,61 @@
+@startuml
+' Diagrama de despliegue UML del entorno de desarrollo y pruebas de SoftPh.
+' Puertos y protocolos tomados de: .env.example (API_INTERNAL_URL, APP_ORIGIN, SMTP_*, DB_*),
+' README.md (uvicorn --host 127.0.0.1 --port 8000; Astro en 4321), frontend/playwright.config.ts
+' (8100 y 4400), backend/tests/e2e/serve.py y /etc/systemd/system/mailpit.service.
+' El repositorio no contiene configuración de producción (proxy inverso, contenedores ni SMTP real).
+skinparam dpi 300
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 9
+top to bottom direction
+
+title Despliegue de SoftPh: entorno de desarrollo y pruebas (un solo equipo, 127.0.0.1)
+
+node "Equipo de desarrollo · Linux (verificado en Linux Mint 22.3)" as host {
+
+  node "«device»\nNavegador web" as browser {
+    artifact "Interfaz SoftPh\nhttp://localhost:4321" as ui
+    artifact "Interfaz web de Mailpit\nhttp://localhost:8025" as mailui
+  }
+
+  node "«execution environment»\nServidor Astro · Node.js 24 LTS" as astro {
+    artifact "astro dev (Vite)\nfrontend/src · desarrollo :4321\npruebas E2E :4400" as astroapp
+  }
+
+  node "«execution environment»\nuvicorn · Python 3.13" as uvicorn {
+    artifact "FastAPI app.main:app\ndesarrollo 127.0.0.1:8000\npruebas E2E 127.0.0.1:8100\n(tests.e2e.serve)" as api
+    artifact "Alembic\nbackend/alembic" as alembic
+    artifact "CLI create-admin\npython -m app.cli" as cli
+  }
+
+  database "MySQL 8 · 127.0.0.1:3306\n(instalado: 8.0.46; decidido: 8.4 LTS)" as mysql {
+    artifact "softph_academico\n(desarrollo)" as devdb
+    artifact "softph_academico_test\n(pytest y Playwright)" as testdb
+  }
+
+  node "«execution environment»\nMailpit v1.31.0 · servicio systemd" as mailpit {
+    artifact "SMTP 127.0.0.1:1025" as smtp
+    artifact "HTTP 127.0.0.1:8025\n(interfaz y API)" as mailhttp
+  }
+
+  node "«execution environment»\nEjecutores de pruebas" as runners {
+    artifact "pytest\nbackend/tests" as pytest
+    artifact "Playwright 1.63 · Chromium\nfrontend/e2e" as playwright
+    artifact "node --test\nfrontend/tests" as nodetest
+  }
+}
+
+ui --> astroapp : "HTTP :4321\nHTML SSR + fetch /api/v1\ncookie softph_session · X-CSRF-Token"
+astroapp --> api : "HTTP :8000 (API_INTERNAL_URL)\nproxy /api/v1 y GET SSR"
+api --> devdb : "TCP :3306\nmysql+asyncmy (SQLAlchemy)\ninstancia :8000"
+api --> testdb : "TCP :3306\ninstancia E2E :8100"
+alembic --> devdb : "TCP :3306 · DDL"
+cli --> devdb : "TCP :3306"
+api --> smtp : "SMTP :1025\nsin TLS ni autenticación"
+mailui --> mailhttp : "HTTP :8025"
+pytest --> testdb : "TCP :3306\nesquema con alembic upgrade head"
+playwright --> astroapp : "HTTP :4400\n(pila propia)"
+playwright ..> testdb : "semilla y limpieza\n(tests/e2e/seed.py)"
+playwright ..> mailhttp : "API :8025\n(lectura de correos)"
+@enduml

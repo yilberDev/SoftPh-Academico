@@ -1,0 +1,94 @@
+@startuml
+' Diagrama de componentes UML de SoftPh. Todos los nombres son carpetas o módulos reales del
+' repositorio (commit f543c74). Correspondencia detallada: ../correspondencia.md (Anexo C).
+skinparam dpi 300
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 9
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+skinparam linetype ortho
+top to bottom direction
+
+title Arquitectura de SoftPh: diagrama de componentes
+
+actor "Usuario\n(ADMINISTRADOR / RESIDENTE)" as usuario
+component "Navegador web" as navegador
+
+package "Frontend · frontend/src (Astro 7 SSR, @astrojs/node standalone, Tailwind CSS 4)" as fe {
+  component "middleware.ts\n+ lib/auth/page-access.ts\n+ lib/auth/roles.ts" as middleware
+  component "Páginas SSR · pages/\n/login, /forgot-password, /reset-password,\n/activate-account, /admin/**, /resident/**" as pages
+  component "components/ y layouts/\n(AdminHeader, ResidentHeader,\nAccountStatement, StructureLevel…)" as ui
+  component "Módulos de dominio · lib/\nauth · residents · structure · obligations\npayments · account-statement · reports\nfeedback · resident · admin · lists · landing" as libdom
+  component "Cliente del navegador\nlib/api/client.ts y lib/api/*.ts" as apiclient
+  component "Cliente SSR (solo GET)\nlib/api/server.ts y lib/api/*-server.ts" as apiserver
+  component "Proxy /api/v1 de Vite\nastro.config.mjs (solo desarrollo)" as proxy
+}
+
+package "Backend · backend/app (FastAPI, Python 3.13)" as be {
+  component "main.py\ncreate_app · manejadores de error (core/errors.py)\ninclude_demo_payments (DEMO_PAYMENTS_ENABLED)" as main
+  component "Routers · api/v1/\nauth · password_reset · invitations · activation\nstructure · residents · account_statements\npayments · reports · feedback · charges\nresident_payments · resident_feedback\nresident_notifications · demo_payments · health" as routers
+  component "Dependencias · api/deps.py\nverify_origin · get_current_auth (401)\nrequire_roles (403) · require_csrf" as deps
+  component "Esquemas Pydantic · schemas/" as schemas
+  component "Servicios · services/ (28 módulos)\nauth · users · structure · invitations · activation\nresidents · payments · allocation · charges\naccount_statement · financial_reports · feedback\nnotifications · demo_payments · password_reset · audit" as services
+  component "services/receipts.py\nrecibo y comprobante PDF" as receipts
+  component "services/mail.py\nSmtpMailSender (smtplib)" as mail
+  component "Modelos SQLAlchemy · models/\n+ db/session.py (AsyncSession)\n+ db/base.py" as models
+  package "Núcleo · core/" as core {
+    component "sessions.py\ntoken SHA-256 · CSRF HMAC" as csess
+    component "csrf.py\nOrigin / Referer" as ccsrf
+    component "passwords.py\nArgon2id" as cpass
+    component "config.py\nSettings (.env)" as cconf
+    component "exceptions.py · errors.py\nvalidation.py" as cexc
+  }
+  component "cli.py\npython -m app.cli create-admin" as cli
+}
+
+package "Migraciones · backend/alembic" as alembicpkg {
+  component "env.py + versions/\n16 revisiones, head d33ea6140186" as alembic
+}
+
+component "reportlab 5.0.1\n(biblioteca de PDF)" as reportlab
+database "MySQL 8\nsoftph_academico\nsoftph_academico_test" as mysql
+component "Servidor SMTP\n(Mailpit en desarrollo y pruebas)" as smtp
+
+interface "HTTP: páginas HTML" as iHtml
+interface "HTTP/JSON /api/v1" as iApi
+interface "SQL (mysql+asyncmy)" as iSql
+interface "SMTP" as iSmtp
+
+usuario --> navegador
+navegador --> iHtml : "HTTP · cookie softph_session\n(HttpOnly, SameSite=Lax)"
+iHtml - middleware
+middleware --> pages : "acceso por rol"
+middleware --> apiserver : "getSession()"
+pages --> ui
+pages --> libdom
+pages --> apiserver : "datos SSR"
+navegador ..> apiclient : "scripts de página"
+apiclient --> proxy : "fetch /api/v1 · JSON\nX-CSRF-Token + Origin"
+proxy --> iApi : "HTTP (API_INTERNAL_URL)"
+apiserver --> iApi : "HTTP GET · reenvía la cookie"
+
+iApi - main
+main --> routers
+routers --> deps : "Depends()"
+deps --> csess
+deps --> ccsrf
+routers --> schemas : "validación"
+routers --> services
+services --> models
+services --> receipts
+services --> mail
+services --> cpass
+services --> cexc
+receipts --> reportlab
+models --> iSql : "SQLAlchemy 2 async"
+iSql - mysql
+mail --> iSmtp : "SMTP (sin TLS ni autenticación)"
+iSmtp - smtp
+cli --> services
+alembic --> iSql : "DDL (upgrade / check)"
+alembic ..> models : "target_metadata"
+main ..> cconf
+@enduml

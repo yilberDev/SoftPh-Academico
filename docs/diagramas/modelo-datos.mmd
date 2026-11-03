@@ -1,0 +1,209 @@
+---
+title: "Modelo lógico de datos de SoftPh · MySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)"
+---
+%% Generado desde information_schema de softph_academico_test (revisión d33ea6140186, comprobada con alembic check).
+%% Notación: PK clave primaria, FK clave foránea, UK única; "NULL" = admite nulos. Cardinalidad: ||-- uno, o|-- cero o uno, o{ cero o muchos.
+erDiagram
+    audit_logs {
+        bigint id PK
+        bigint actor_user_id FK "NULL"
+        varchar action
+        varchar entity_type  "NULL"
+        bigint entity_id  "NULL"
+        json context  "NULL"
+        varchar ip_address  "NULL"
+        datetime created_at
+    }
+    blocks {
+        bigint id PK
+        int_unsigned number
+        int_unsigned version
+        datetime created_at
+        datetime updated_at
+        datetime deleted_at  "NULL"
+    }
+    charges {
+        bigint id PK
+        bigint unit_id FK
+        varchar concept
+        varchar description  "NULL"
+        decimal amount
+        date due_date
+        date billing_period  "NULL"
+        bigint source_charge_id FK,UK "NULL"
+        bigint created_by_user_id FK
+        datetime created_at
+    }
+    demo_payment_transactions {
+        bigint id PK
+        bigint resident_id FK
+        bigint charge_id FK
+        decimal amount
+        varchar reference UK
+        varchar status
+        datetime created_at
+        datetime expires_at
+        datetime finished_at  "NULL"
+        bigint payment_id FK,UK "NULL"
+        varchar test_instrument  "NULL"
+    }
+    feedback {
+        bigint id PK
+        bigint resident_id FK
+        varchar subject  "NULL"
+        varchar message
+        varchar category  "NULL"
+        varchar urgency  "NULL"
+        varchar status
+        varchar admin_response  "NULL"
+        varchar resolution_note  "NULL"
+        int_unsigned version
+        datetime created_at
+        datetime updated_at
+        datetime resolved_at  "NULL"
+    }
+    login_throttles {
+        char identifier_hash PK
+        int failed_attempts
+        datetime window_started_at
+        datetime locked_until  "NULL"
+        datetime updated_at
+    }
+    notifications {
+        bigint id PK
+        bigint resident_id FK
+        varchar event_type
+        varchar entity_type
+        bigint entity_id
+        varchar event_key UK
+        varchar title
+        varchar message
+        varchar email_status
+        varchar email_error  "NULL"
+        datetime created_at
+        datetime sent_at  "NULL"
+    }
+    password_reset_tokens {
+        bigint id PK
+        bigint user_id FK
+        char token_hash UK
+        datetime created_at
+        datetime expires_at
+        datetime used_at  "NULL"
+        datetime revoked_at  "NULL"
+    }
+    payment_allocations {
+        bigint id PK
+        bigint payment_id FK
+        bigint charge_id FK
+        decimal amount
+        datetime created_at
+    }
+    payments {
+        bigint id PK
+        bigint resident_id FK
+        bigint unit_id FK
+        bigint registered_by_user_id FK
+        decimal amount
+        varchar method
+        varchar concept
+        varchar concept_description  "NULL"
+        varchar source
+        varchar transaction_reference  "NULL"
+        varchar notes  "NULL"
+        date payment_date
+        datetime registered_at
+        varchar resident_name_snapshot
+        varchar unit_label_snapshot
+        varchar receipt_email_status
+        datetime receipt_sent_at  "NULL"
+        datetime created_at
+    }
+    resident_invitations {
+        bigint id PK
+        char token_hash UK
+        bigint user_id FK
+        bigint unit_id FK
+        bigint invited_by_user_id FK
+        tinyint_unsigned validity_days
+        varchar status
+        varchar delivery_status
+        smallint_unsigned send_attempts
+        datetime created_at
+        datetime expires_at
+        datetime used_at  "NULL"
+        datetime last_sent_at  "NULL"
+    }
+    resident_units {
+        bigint id PK
+        bigint user_id FK
+        bigint unit_id FK
+        bigint invitation_id FK,UK
+        datetime started_at
+        datetime ended_at  "NULL"
+    }
+    sessions {
+        bigint id PK
+        bigint user_id FK
+        char token_hash UK
+        datetime created_at
+        datetime last_seen_at
+        datetime expires_at
+        datetime revoked_at  "NULL"
+    }
+    towers {
+        bigint id PK
+        bigint block_id FK
+        int_unsigned number
+        int_unsigned version
+        datetime created_at
+        datetime updated_at
+        datetime deleted_at  "NULL"
+    }
+    units {
+        bigint id PK
+        bigint tower_id FK
+        int_unsigned number
+        int_unsigned version
+        datetime created_at
+        datetime updated_at
+        datetime deleted_at  "NULL"
+    }
+    users {
+        bigint id PK
+        varchar email UK
+        varchar password_hash  "NULL"
+        varchar full_name
+        varchar document_number UK "NULL"
+        varchar phone  "NULL"
+        varchar role
+        varchar status
+        datetime created_at
+        datetime updated_at
+        datetime deleted_at  "NULL"
+    }
+    users o|--o{ audit_logs : "actor_user_id"
+    users ||--o{ charges : "created_by_user_id"
+    charges o|--o| charges : "source_charge_id"
+    units ||--o{ charges : "unit_id"
+    charges ||--o{ demo_payment_transactions : "charge_id"
+    payments o|--o| demo_payment_transactions : "payment_id"
+    users ||--o{ demo_payment_transactions : "resident_id"
+    users ||--o{ feedback : "resident_id"
+    users ||--o{ notifications : "resident_id"
+    users ||--o{ password_reset_tokens : "user_id"
+    charges ||--o{ payment_allocations : "charge_id"
+    payments ||--o{ payment_allocations : "payment_id"
+    users ||--o{ payments : "registered_by_user_id"
+    users ||--o{ payments : "resident_id"
+    units ||--o{ payments : "unit_id"
+    users ||--o{ resident_invitations : "invited_by_user_id"
+    units ||--o{ resident_invitations : "unit_id"
+    users ||--o{ resident_invitations : "user_id"
+    resident_invitations ||--o| resident_units : "invitation_id"
+    units ||--o{ resident_units : "unit_id"
+    users ||--o{ resident_units : "user_id"
+    users ||--o{ sessions : "user_id"
+    blocks ||--o{ towers : "block_id"
+    towers ||--o{ units : "tower_id"
+    %% Generated columns omitted (partial unique rules): blocks.active_number_marker, charges.can_originate_late_fee, charges.late_fee_source_link, password_reset_tokens.pending_user_marker, resident_invitations.pending_unit_marker, resident_invitations.pending_user_marker, resident_units.active_unit_marker, resident_units.active_user_marker, towers.active_number_marker, units.active_number_marker, users.active_administrator_marker
