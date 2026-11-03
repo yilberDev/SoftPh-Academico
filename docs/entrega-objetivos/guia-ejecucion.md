@@ -2,7 +2,7 @@
 
 Instalación, configuración, ejecución y pruebas en un equipo de desarrollo. Todos los comandos se ejecutan desde la raíz del repositorio salvo que se indique otra carpeta.
 
-> **Verificación (2026-11-03).** Esta guía se siguió de principio a fin sobre un clon limpio del commit `f543c74`, en Linux Mint 22.3. La sección [9](#9-resultados-de-la-verificación) resume qué se ejecutó y con qué resultado. El único paso no ejecutado es la creación de las bases (paso 4), porque requiere `sudo`.
+> **Verificación (2026-11-03).** Esta guía se siguió de principio a fin sobre un clon limpio del commit `f543c74`, en Linux Mint 22.3, y todas las suites se volvieron a ejecutar sobre el commit `433e1f0`. La sección [9](#9-resultados-de-la-verificación) resume qué se ejecutó y con qué resultado. El único paso no ejecutado es la creación de las bases (paso 4), porque requiere `sudo`.
 
 ## 1. Requisitos
 
@@ -197,6 +197,25 @@ Playwright levanta su propia pila y no reutiliza la de desarrollo: la API en `12
 - El informe HTML queda en `frontend/playwright-report/` (ignorado por Git).
 
 ## 9. Resultados de la verificación
+
+### 9.1 Validación completa del 2026-11-03 sobre el commit `433e1f0`
+
+Ejecutada en el repositorio (rama `main`, commit `433e1f0`), en secuencia y nunca dos suites a la vez, entre las 16:25 y las 16:41 (hora de Colombia), con MySQL 8.0.46, Mailpit 1.31.0 y la base `softph_academico_test`. El esquema siguió en `d33ea6140186` con 16 migraciones.
+
+| Suite | Comando | Resultado |
+|---|---|---|
+| Backend (1.ª ejecución) | `cd backend && .venv/bin/pytest` | **2647 aprobadas, 1 fallida**, 0 omitidas (3 min 38 s). Falló `tests/integration/test_structure_concurrency.py::test_renumber_block_while_a_tower_is_being_created`: la etiqueta devuelta fue `B4-TO1` en lugar de `B1-TO1` |
+| Backend (diagnóstico) | La prueba fallida sola, 10 veces; y su archivo completo | 10 de 10 aprobadas; el archivo, 14 de 14. Es una prueba de concurrencia que depende de tiempos (la torre se lee después de que la renumeración del bloque ya se confirmó). El código de estructura y la prueba no cambian desde el commit `106557d` |
+| Backend (2.ª ejecución) | `cd backend && .venv/bin/pytest` | **2648 aprobadas**, 0 fallidas, 0 omitidas (3 min 43 s) |
+| Frontend | `cd frontend && npm test` | **504 aprobadas**, 0 fallidas, 0 omitidas |
+| Tipos | `npx tsc --noEmit -p tsconfig.json` | Sin errores |
+| Astro | `npm run check` | 172 archivos: 0 errores, 0 advertencias, 0 sugerencias |
+| Compilación | `npm run build` | Completada |
+| E2E | `npm run test:e2e` | **135 casos: 133 aprobados, 2 omitidos, 0 fallidos** (6,2 min). Omitidos: las capturas de `admin-dashboard.spec.ts:139` y `resident-dashboard.spec.ts:127` (sin `SHOTS_DIR`). Los casos con Mailpit (`invitation-activation.spec.ts:118`, `password-reset.spec.ts:73` y `manual-payment-journey.spec.ts:106`) se ejecutaron y aprobaron |
+
+Al terminar, la base `softph_academico_test` quedó vacía por la limpieza del propio proyecto.
+
+### 9.2 Verificación de la guía desde un clon limpio (2026-11-03, commit `f543c74`)
 
 Ejecutado el 2026-11-03 sobre un `git clone` limpio del commit `f543c74`, en Linux Mint 22.3, con MySQL 8.0.46 y Mailpit 1.31.0. Las suites corrieron en secuencia, nunca dos a la vez.
 
