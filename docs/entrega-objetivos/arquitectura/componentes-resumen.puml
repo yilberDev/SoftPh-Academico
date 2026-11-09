@@ -1,57 +1,71 @@
 @startuml
 ' Versión resumida del diagrama de componentes (componentes.puml), para una página carta vertical.
-' Solo los componentes principales y sus comunicaciones reales; detalle en ../correspondencia.md.
-skinparam dpi 200
+' Se lee de arriba abajo: cuatro capas y, a un lado, los componentes transversales.
+' Las flechas solo van hacia abajo o hacia los componentes transversales.
+' Solo los componentes principales y sus comunicaciones reales; detalle en ../correspondencia.md
+' y archivo y líneas de cada flecha en ../verificacion-arquitectura.md.
+skinparam dpi 300
 skinparam shadowing false
 skinparam defaultFontName Helvetica
-skinparam defaultFontSize 11
-skinparam componentStyle uml2
-skinparam linetype ortho
+skinparam defaultFontSize 10
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam nodesep 30
+skinparam ranksep 18
 top to bottom direction
-title Arquitectura de SoftPh: componentes principales
+title Arquitectura de SoftPh: componentes principales por capas
 
-actor "Usuario\n(administrador / residente)" as user
-node "Navegador web" as browser
+node "Navegador web\n(administrador o residente)" as browser
 
-package "Frontend · Astro 7 (SSR) · frontend/src" {
-  [Control de acceso\nmiddleware.ts] as mw
-  [Páginas SSR\npages/] as pages
-  [Lógica de interfaz\nlib/<dominio>] as lib
-  [Cliente de la API\nlib/api] as client
+package "Capa de presentación" as pres {
+  [Control de acceso · middleware.ts] as mw
+  [Páginas SSR (Astro) · pages/] as pages
+  [Lógica de interfaz · lib/<dominio>] as lib
+  [Cliente de la API · lib/api] as client
 }
 
-package "Backend · FastAPI · backend/app" {
-  [Routers\napi/v1] as routers
-  [Autorización\napi/deps.py] as deps
-  [Esquemas\nschemas/] as schemas
-  [Servicios de negocio\nservices/] as services
-  [Núcleo transversal\ncore/] as core
-  [Modelos\nmodels/ + db/] as models
-  [Recibos PDF\nservices/receipts.py\n(reportlab)] as receipts
-  [Correo\nservices/mail.py] as mail
+package "Capa de API" as apil {
+  [Routers FastAPI · api/v1] as routers
+  [Esquemas Pydantic · schemas/] as schemas
 }
 
-database "MySQL 8\nsoftph_academico" as db
-[Alembic\nbackend/alembic] as alembic
-node "Servidor SMTP\n(Mailpit en desarrollo y pruebas)" as smtp
+package "Capa de lógica de negocio" as biz {
+  [Servicios · services/] as services
+  [Recibos PDF · services/receipts.py\n(reportlab)] as receipts
+  [Correo · services/mail.py] as mail
+}
 
-user --> browser
-browser --> mw : HTTP · cookie de sesión
+package "Capa de persistencia" as pers {
+  [Modelos SQLAlchemy · models/ + db/] as models
+  [Alembic · backend/alembic] as alembic
+  database "MySQL 8\nsoftph_academico" as db
+}
+
+package "Componentes transversales" as trans {
+  [Autorización · api/deps.py] as deps
+  [Núcleo · core/] as core
+}
+
+node "Servidor SMTP (Mailpit)" as smtp
+
+browser --> mw : HTTP :4321 · cookie softph_session
 mw --> pages : acceso por rol
-pages --> lib
-pages --> client : datos SSR (GET)
-browser --> routers : HTTP/JSON /api/v1\n(mismo origen, proxy de Astro)\ncookie + X-CSRF-Token
-client --> routers : HTTP GET\nreenvía la cookie
-routers --> deps : sesión, rol y CSRF
-deps --> core
-routers --> schemas : validación
-routers --> services
-services --> core
-services --> models
-services --> receipts
-services --> mail
-models --> db : SQLAlchemy\n(mysql+asyncmy)
-alembic --> db : DDL
-alembic ..> models : metadatos
-mail --> smtp : SMTP
+pages --> lib : import TypeScript
+pages --> client : import TypeScript
+client --> routers : HTTP/JSON /api/v1 (cookie + X-CSRF-Token)
+routers --> schemas : validación Pydantic
+routers --> services : llamada Python (async)
+routers -left-> deps : Depends()
+deps --> core : llamada Python
+services --> receipts : llamada Python
+services --> mail : llamada Python
+services -left-> core : llamada Python
+services --> models : AsyncSession (ORM)
+models --> db : TCP :3306 · mysql+asyncmy
+alembic --> db : TCP :3306 · DDL
+mail --> smtp : SMTP :1025
+' Enlaces ocultos: solo fijan el orden vertical de las capas (no son comunicaciones).
+schemas -[hidden]-> services
+receipts -[hidden]-> alembic
+mail -[hidden]-> models
 @enduml

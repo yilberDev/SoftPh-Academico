@@ -1,0 +1,165 @@
+@startuml
+' Parte de modelo-datos-completo.puml, generada por división (mismas columnas y relaciones,
+' leídas de information_schema). Líneas curvas para que cada etiqueta quede junto a su relación.
+skinparam dpi 300
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 9
+skinparam class {
+  BackgroundColor White
+  BorderColor #333333
+  ArrowColor #333333
+}
+hide circle
+hide methods
+top to bottom direction
+skinparam nodesep 12
+skinparam ranksep 30
+title Modelo lógico de datos de SoftPh · Parte 1: usuarios, seguridad, estructura residencial e invitaciones\nMySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
+entity "users" as users {
+  *id : bigint <<PK>>
+  --
+  *email : varchar(254) <<UK>>
+  password_hash : varchar(255)
+  *full_name : varchar(150)
+  document_number : varchar(20) <<UK>>
+  phone : varchar(20)
+  *role : varchar(20)
+  *status : varchar(20)
+  *created_at : datetime(6)
+  *updated_at : datetime(6)
+  deleted_at : datetime(6)
+}
+entity "sessions" as sessions {
+  *id : bigint <<PK>>
+  --
+  *user_id : bigint <<FK>>
+  *token_hash : char(64) <<UK>>
+  *created_at : datetime(6)
+  *last_seen_at : datetime(6)
+  *expires_at : datetime(6)
+  revoked_at : datetime(6)
+}
+entity "login_throttles" as login_throttles {
+  *identifier_hash : char(64) <<PK>>
+  --
+  *failed_attempts : int
+  *window_started_at : datetime(6)
+  locked_until : datetime(6)
+  *updated_at : datetime(6)
+}
+entity "password_reset_tokens" as password_reset_tokens {
+  *id : bigint <<PK>>
+  --
+  *user_id : bigint <<FK>>
+  *token_hash : char(64) <<UK>>
+  *created_at : datetime(6)
+  *expires_at : datetime(6)
+  used_at : datetime(6)
+  revoked_at : datetime(6)
+}
+entity "audit_logs" as audit_logs {
+  *id : bigint <<PK>>
+  --
+  actor_user_id : bigint <<FK>>
+  *action : varchar(64)
+  entity_type : varchar(64)
+  entity_id : bigint
+  context : json
+  ip_address : varchar(45)
+  *created_at : datetime(6)
+}
+entity "blocks" as blocks {
+  *id : bigint <<PK>>
+  --
+  *number : int unsigned
+  *version : int unsigned
+  *created_at : datetime(6)
+  *updated_at : datetime(6)
+  deleted_at : datetime(6)
+}
+entity "towers" as towers {
+  *id : bigint <<PK>>
+  --
+  *block_id : bigint <<FK>>
+  *number : int unsigned
+  *version : int unsigned
+  *created_at : datetime(6)
+  *updated_at : datetime(6)
+  deleted_at : datetime(6)
+}
+entity "units" as units {
+  *id : bigint <<PK>>
+  --
+  *tower_id : bigint <<FK>>
+  *number : int unsigned
+  *version : int unsigned
+  *created_at : datetime(6)
+  *updated_at : datetime(6)
+  deleted_at : datetime(6)
+}
+entity "resident_invitations" as resident_invitations {
+  *id : bigint <<PK>>
+  --
+  *token_hash : char(64) <<UK>>
+  *user_id : bigint <<FK>>
+  *unit_id : bigint <<FK>>
+  *invited_by_user_id : bigint <<FK>>
+  *validity_days : tinyint unsigned
+  *status : varchar(20)
+  *delivery_status : varchar(20)
+  *send_attempts : smallint unsigned
+  *created_at : datetime(6)
+  *expires_at : datetime(6)
+  used_at : datetime(6)
+  last_sent_at : datetime(6)
+}
+entity "resident_units" as resident_units {
+  *id : bigint <<PK>>
+  --
+  *user_id : bigint <<FK>>
+  *unit_id : bigint <<FK>>
+  *invitation_id : bigint <<FK,UK>>
+  *started_at : datetime(6)
+  ended_at : datetime(6)
+}
+users |o--o{ audit_logs : "actor_user_id"
+users ||--o{ password_reset_tokens : "user_id"
+users ||--o{ resident_invitations : "invited_by_user_id"
+units ||--o{ resident_invitations : "unit_id"
+users ||--o{ resident_invitations : "user_id"
+resident_invitations ||--o| resident_units : "invitation_id"
+units ||--o{ resident_units : "unit_id"
+users ||--o{ resident_units : "user_id"
+users ||--o{ sessions : "user_id"
+blocks ||--o{ towers : "block_id"
+towers ||--o{ units : "tower_id"
+note as generadas
+  Columnas generadas omitidas (unicidad parcial
+  y enlace de la mora):
+  - users.active_administrator_marker
+  - password_reset_tokens.pending_user_marker
+  - blocks.active_number_marker
+  - towers.active_number_marker
+  - units.active_number_marker
+  - resident_invitations.pending_unit_marker
+  - resident_invitations.pending_user_marker
+  - resident_units.active_unit_marker
+  - resident_units.active_user_marker
+end note
+note as externas
+  Referenciadas desde la parte 2:
+  - charges.unit_id → units
+  - payments.unit_id → units
+  - charges.created_by_user_id → users
+  - demo_payment_transactions.resident_id → users
+  - feedback.resident_id → users
+  - notifications.resident_id → users
+  - payments.registered_by_user_id → users
+  - payments.resident_id → users
+end note
+legend bottom left
+  * = NOT NULL · <<PK>> clave primaria · <<FK>> clave foránea · <<UK>> única
+  Cardinalidad (pata de gallo): || uno · |o cero o uno · o{ cero o muchos · o| cero o uno
+endlegend
+@enduml

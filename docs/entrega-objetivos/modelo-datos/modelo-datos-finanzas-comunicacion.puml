@@ -1,6 +1,5 @@
 @startuml
 skinparam dpi 300
-skinparam linetype ortho
 skinparam shadowing false
 skinparam defaultFontName Helvetica
 skinparam defaultFontSize 9

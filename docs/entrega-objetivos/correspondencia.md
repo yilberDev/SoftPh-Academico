@@ -2,7 +2,7 @@
 
 Compara cada elemento de los diagramas de [arquitectura](arquitectura/) y del [modelo de datos](modelo-datos/) con el repositorio (rama `main`; código de la aplicación del commit `7191762`).
 
-El diagrama de componentes tiene dos versiones: [componentes.puml](arquitectura/componentes.puml), con todos los módulos, y [componentes-resumen.puml](arquitectura/componentes-resumen.puml), con solo los componentes principales y sus comunicaciones, legible en una página carta. Ambas se contrastan con la tabla C.1: la resumida agrupa en un solo bloque varios de sus elementos (por ejemplo, «Cliente de la API» reúne el cliente del navegador y el cliente SSR, y el núcleo `core/` no detalla sus módulos).
+El diagrama de componentes tiene dos versiones: [componentes.puml](arquitectura/componentes.puml), con todos los módulos, y [componentes-resumen.puml](arquitectura/componentes-resumen.puml), con solo los componentes principales y sus comunicaciones, legible en una página carta. Ambas organizan los componentes en cuatro capas, de arriba abajo: presentación, API, lógica de negocio y persistencia. A un lado quedan los componentes transversales: la autorización (`api/deps.py`) y el núcleo (`core/`). Ambas se contrastan con la tabla C.1. La resumida agrupa en un solo bloque varios elementos: por ejemplo, «Cliente de la API» reúne el cliente del navegador y el cliente SSR, y el núcleo `core/` no detalla sus módulos. El archivo y las líneas de cada comunicación de la versión resumida están en `verificacion-arquitectura.md`.
 
 Verificado el 2026-11-03:
 

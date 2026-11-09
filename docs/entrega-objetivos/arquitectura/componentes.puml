@@ -1,94 +1,93 @@
 @startuml
-' Diagrama de componentes UML de SoftPh. Todos los nombres son carpetas o módulos reales del
-' repositorio (commit f543c74). Correspondencia detallada: ../correspondencia.md (Anexo C).
+' Diagrama de componentes UML detallado de SoftPh (anexo). Todos los nombres son carpetas o
+' módulos reales del repositorio (versión v1.1-academico). Se lee de arriba abajo: cuatro capas y,
+' a un lado, los componentes transversales; las flechas solo van hacia abajo o hacia ellos.
+' Correspondencia: ../correspondencia.md (Anexo C); archivo y líneas: ../verificacion-arquitectura.md.
 skinparam dpi 300
 skinparam shadowing false
 skinparam defaultFontName Helvetica
 skinparam defaultFontSize 9
-skinparam componentStyle uml2
+skinparam componentStyle rectangle
 skinparam packageStyle rectangle
-skinparam linetype ortho
+skinparam nodesep 22
+skinparam ranksep 16
 top to bottom direction
 
-title Arquitectura de SoftPh: diagrama de componentes
+title Arquitectura de SoftPh: diagrama de componentes detallado
 
-actor "Usuario\n(ADMINISTRADOR / RESIDENTE)" as usuario
-component "Navegador web" as navegador
+node "Navegador web\n(ADMINISTRADOR o RESIDENTE)" as navegador
 
-package "Frontend · frontend/src (Astro 7 SSR, @astrojs/node standalone, Tailwind CSS 4)" as fe {
-  component "middleware.ts\n+ lib/auth/page-access.ts\n+ lib/auth/roles.ts" as middleware
+package "Capa de presentación" as pres {
+  component "Control de acceso\nmiddleware.ts + lib/auth/page-access.ts\n+ lib/auth/roles.ts" as middleware
   component "Páginas SSR · pages/\n/login, /forgot-password, /reset-password,\n/activate-account, /admin/…, /resident/…" as pages
   component "components/ y layouts/\n(AdminHeader, ResidentHeader,\nAccountStatement, StructureLevel…)" as ui
-  component "Módulos de dominio · lib/\nauth · residents · structure · obligations\npayments · account-statement · reports\nfeedback · resident · admin · lists · landing" as libdom
-  component "Cliente del navegador\nlib/api/client.ts y lib/api/*.ts" as apiclient
+  component "Lógica de interfaz · lib/\nauth · residents · structure · obligations\npayments · account-statement · reports\nfeedback · resident · admin · lists · landing" as libdom
   component "Cliente SSR (solo GET)\nlib/api/server.ts y lib/api/*-server.ts" as apiserver
+  component "Cliente del navegador\nlib/api/client.ts y lib/api/*.ts" as apiclient
   component "Proxy /api/v1 de Vite\nastro.config.mjs (solo desarrollo)" as proxy
 }
 
-package "Backend · backend/app (FastAPI, Python 3.13)" as be {
-  component "main.py\ncreate_app · manejadores de error (core/errors.py)\ninclude_demo_payments (DEMO_PAYMENTS_ENABLED)" as main
+package "Capa de API" as apil {
+  component "main.py\ncreate_app · include_router bajo /api/v1\ninclude_demo_payments (DEMO_PAYMENTS_ENABLED)" as main
+  component "cli.py\npython -m app.cli create-admin\n(entrada por terminal)" as cli
   component "Routers · api/v1/\nauth · password_reset · invitations · activation\nstructure · residents · account_statements\npayments · reports · feedback · charges\nresident_payments · resident_feedback\nresident_notifications · demo_payments · health" as routers
-  component "Dependencias · api/deps.py\nverify_origin · get_current_auth (401)\nrequire_roles (403) · require_csrf" as deps
-  component "Esquemas Pydantic · schemas/" as schemas
+  component "Esquemas Pydantic · schemas/\n(18 módulos)" as schemas
+}
+
+package "Capa de lógica de negocio" as biz {
   component "Servicios · services/ (28 módulos)\nauth · users · structure · invitations · activation\nresidents · payments · allocation · charges\naccount_statement · financial_reports · feedback\nnotifications · demo_payments · password_reset · audit" as services
   component "services/receipts.py\nrecibo y comprobante PDF" as receipts
   component "services/mail.py\nSmtpMailSender (smtplib)" as mail
+}
+
+package "Capa de persistencia" as pers {
   component "Modelos SQLAlchemy · models/\n+ db/session.py (AsyncSession)\n+ db/base.py" as models
+  component "Alembic · backend/alembic\nenv.py (target_metadata = Base.metadata)\nversions/: 16 revisiones, head d33ea6140186" as alembic
+  database "MySQL 8\nsoftph_academico\nsoftph_academico_test" as mysql
+}
+
+package "Componentes transversales" as trans {
+  component "Autorización · api/deps.py\nverify_origin · get_current_auth (401)\nrequire_roles (403) · require_csrf" as deps
   package "Núcleo · core/" as core {
+    component "config.py · Settings (.env)\n(la leen todas las capas)" as cconf
     component "sessions.py\ntoken SHA-256 · CSRF HMAC" as csess
     component "csrf.py\nOrigin / Referer" as ccsrf
     component "passwords.py\nArgon2id" as cpass
-    component "config.py\nSettings (.env)" as cconf
     component "exceptions.py · errors.py\nvalidation.py" as cexc
   }
-  component "cli.py\npython -m app.cli create-admin" as cli
-}
-
-package "Migraciones · backend/alembic" as alembicpkg {
-  component "env.py + versions/\n16 revisiones, head d33ea6140186" as alembic
 }
 
 component "reportlab 5.0.1\n(biblioteca de PDF)" as reportlab
-database "MySQL 8\nsoftph_academico\nsoftph_academico_test" as mysql
-component "Servidor SMTP\n(Mailpit en desarrollo y pruebas)" as smtp
+node "Servidor SMTP\n(Mailpit en desarrollo y pruebas)" as smtp
 
-interface "HTTP: páginas HTML" as iHtml
-interface "HTTP/JSON /api/v1" as iApi
-interface "SQL (mysql+asyncmy)" as iSql
-interface "SMTP" as iSmtp
-
-usuario --> navegador
-navegador --> iHtml : "HTTP · cookie softph_session\n(HttpOnly, SameSite=Lax)"
-iHtml - middleware
+navegador --> middleware : "HTTP :4321 · páginas HTML\ncookie softph_session (HttpOnly, SameSite=Lax)"
+navegador ..> apiclient : "ejecuta los scripts de página"
 middleware --> pages : "acceso por rol"
 middleware --> apiserver : "getSession()"
-pages --> ui
-pages --> libdom
+pages --> ui : "import"
+pages --> libdom : "import"
 pages --> apiserver : "datos SSR"
-navegador ..> apiclient : "scripts de página"
 apiclient --> proxy : "fetch /api/v1 · JSON\nX-CSRF-Token + Origin"
-proxy --> iApi : "HTTP (API_INTERNAL_URL)"
-apiserver --> iApi : "HTTP GET · reenvía la cookie"
-
-iApi - main
-main --> routers
-routers --> deps : "Depends()"
-deps --> csess
-deps --> ccsrf
+proxy --> main : "HTTP :8000\n(API_INTERNAL_URL)"
+apiserver --> main : "HTTP GET :8000\nreenvía la cookie"
+main --> routers : "include_router"
 routers --> schemas : "validación"
-routers --> services
-services --> models
-services --> receipts
-services --> mail
-services --> cpass
-services --> cexc
-receipts --> reportlab
-models --> iSql : "SQLAlchemy 2 async"
-iSql - mysql
-mail --> iSmtp : "SMTP (sin TLS ni autenticación)"
-iSmtp - smtp
-cli --> services
-alembic --> iSql : "DDL (upgrade / check)"
-alembic ..> models : "target_metadata"
-main ..> cconf
+routers -left-> deps : "Depends()"
+routers --> services : "llamada Python (async)"
+cli --> services : "llamada Python"
+deps --> csess : "sesión"
+deps --> ccsrf : "origen"
+services --> receipts : "llamada Python"
+services --> mail : "llamada Python"
+services -left-> cpass : "Argon2id"
+services -left-> cexc : "errores"
+receipts --> reportlab : "API de reportlab"
+mail --> smtp : "SMTP :1025\n(sin TLS ni autenticación)"
+services --> models : "AsyncSession (ORM)"
+models --> mysql : "TCP :3306\nSQLAlchemy 2 async (mysql+asyncmy)"
+alembic --> mysql : "TCP :3306 · DDL\n(upgrade / check)"
+' Enlaces ocultos: solo fijan el orden vertical de las capas (no son comunicaciones).
+schemas -[hidden]-> services
+receipts -[hidden]-> alembic
+main -[hidden]-> cli
 @enduml
