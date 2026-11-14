@@ -1,0 +1,60 @@
+@startuml
+' modelo-datos-estructura-invitaciones-parte1: generado por scripts/generar_areas.py a partir de modelo-datos-completo.puml
+' (columnas, tipos, nulos, claves y relaciones leídos de information_schema; no se editan a mano).
+skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 16
+skinparam class {
+  BackgroundColor White
+  BorderColor Black
+  ArrowColor Black
+}
+hide circle
+hide methods
+left to right direction
+skinparam nodesep 12
+skinparam ranksep 15
+title Modelo lógico de datos: estructura residencial e invitaciones (1 de 2): estructura\nMySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
+entity "blocks" as blocks {
+  *id : bigint <<PK>>
+  --
+  *number : int unsigned
+  *version : int unsigned
+  *created_at : datetime(6)
+  *updated_at : datetime(6)
+  deleted_at : datetime(6)
+}
+entity "towers" as towers {
+  *id : bigint <<PK>>
+  --
+  *block_id : bigint <<FK>>
+  *number : int unsigned
+  *version : int unsigned
+  *created_at : datetime(6)
+  *updated_at : datetime(6)
+  deleted_at : datetime(6)
+}
+entity "units" as units {
+  *id : bigint <<PK>>
+  --
+  *tower_id : bigint <<FK>>
+  *number : int unsigned
+  *version : int unsigned
+  *created_at : datetime(6)
+  *updated_at : datetime(6)
+  deleted_at : datetime(6)
+}
+blocks ||--o{ towers : "block_id"
+towers ||--o{ units : "tower_id"
+legend bottom left
+  * = NOT NULL · <<PK>> clave primaria · <<FK>> clave foránea · <<UK>> única
+  Pata de gallo: || uno · |o cero o uno · o{ cero o muchos · o| cero o uno
+  Referencias desde otras partes o figuras: charges.unit_id → units · payments.unit_id → units
+      resident_invitations.unit_id → units · resident_units.unit_id → units
+  Columnas generadas omitidas: blocks.active_number_marker · towers.active_number_marker
+      units.active_number_marker
+endlegend
+@enduml

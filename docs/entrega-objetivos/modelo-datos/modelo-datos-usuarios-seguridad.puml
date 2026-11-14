@@ -1,19 +1,23 @@
 @startuml
+' modelo-datos-usuarios-seguridad: generado por scripts/generar_areas.py a partir de modelo-datos-completo.puml
+' (columnas, tipos, nulos, claves y relaciones leídos de information_schema; no se editan a mano).
 skinparam dpi 300
 skinparam monochrome true
 skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Helvetica
-skinparam defaultFontSize 9
+skinparam defaultFontSize 16
 skinparam class {
   BackgroundColor White
-  BorderColor #333333
-  ArrowColor #333333
+  BorderColor Black
+  ArrowColor Black
 }
 hide circle
 hide methods
 top to bottom direction
-title Modelo lógico de datos: Usuarios y seguridad\nMySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
+skinparam nodesep 12
+skinparam ranksep 15
+title Modelo lógico de datos: usuarios y seguridad\nMySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
 entity "users" as users {
   *id : bigint <<PK>>
   --
@@ -71,26 +75,24 @@ users |o--o{ audit_logs : "actor_user_id"
 users ||--o{ password_reset_tokens : "user_id"
 users ||--o{ sessions : "user_id"
 note as externas
-  También referenciadas desde otras áreas:
-  users ←
-    - charges.created_by_user_id
-    - demo_payment_transactions.resident_id
-    - feedback.resident_id
-    - notifications.resident_id
-    - payments.registered_by_user_id
-    - payments.resident_id
-    - resident_invitations.invited_by_user_id
-    - resident_invitations.user_id
-    - resident_units.user_id
+  Referencias desde otras partes o figuras:
+  - charges.created_by_user_id → users
+  - demo_payment_transactions.resident_id → users
+  - feedback.resident_id → users
+  - notifications.resident_id → users
+  - payments.registered_by_user_id → users
+  - payments.resident_id → users
+  - resident_invitations.invited_by_user_id → users
+  - resident_invitations.user_id → users
+  - resident_units.user_id → users
 end note
 note as generadas
-  Columnas generadas omitidas (unicidad parcial
-  y enlace de la mora):
+  Columnas generadas omitidas:
   - users.active_administrator_marker
   - password_reset_tokens.pending_user_marker
 end note
 legend bottom left
   * = NOT NULL · <<PK>> clave primaria · <<FK>> clave foránea · <<UK>> única
-  Cardinalidad (pata de gallo): || uno · |o cero o uno · o{ cero o muchos · o| cero o uno
+  Pata de gallo: || uno · |o cero o uno · o{ cero o muchos · o| cero o uno
 endlegend
 @enduml

@@ -15,9 +15,9 @@ Artefactos generados a partir del código de la rama `main`. Ninguno modifica la
 | [actividades/actividades-residente-parte1.puml](actividades/actividades-residente-parte1.puml) y [parte2](actividades/actividades-residente-parte2.puml) | Figura 8 (DA-02), en dos partes | Actividades del residente: 1) activación, acceso y navegación; 2) pago de demostración, feedback y consultas |
 | [arquitectura/componentes-resumen.puml](arquitectura/componentes-resumen.puml) | Figura 9 | Diagrama de componentes resumido: capas de presentación, API, lógica de negocio y persistencia, de arriba abajo, y componentes transversales a un lado; nombres y etiquetas cortos |
 | [arquitectura/despliegue.puml](arquitectura/despliegue.puml) | Figura 10 | Diagrama de despliegue UML: un nodo «device» (el equipo de desarrollo) con seis «executionEnvironment», cada uno con su nombre y su puerto; sin cruces y con protocolo y puerto en cada relación (los detalles, en la sección 9.1 del informe) |
-| [modelo-datos/modelo-datos-usuarios-seguridad.puml](modelo-datos/modelo-datos-usuarios-seguridad.puml) | Figura 11 | Modelo lógico, área de usuarios y seguridad (todas las columnas) |
-| [modelo-datos/modelo-datos-estructura-invitaciones.puml](modelo-datos/modelo-datos-estructura-invitaciones.puml) | Figura 12 | Modelo lógico, área de estructura residencial e invitaciones (todas las columnas) |
-| [modelo-datos/modelo-datos-finanzas-comunicacion.puml](modelo-datos/modelo-datos-finanzas-comunicacion.puml) | Figura 13 | Modelo lógico, área de finanzas y comunicación (todas las columnas) |
+| [modelo-datos/modelo-datos-usuarios-seguridad.puml](modelo-datos/modelo-datos-usuarios-seguridad.puml) | Figura 11 | Modelo lógico, área de usuarios y seguridad: `users`, `sessions`, `login_throttles`, `password_reset_tokens` y `audit_logs`, con todas las columnas y sus tipos |
+| [modelo-datos/modelo-datos-estructura-invitaciones-parte1.puml](modelo-datos/modelo-datos-estructura-invitaciones-parte1.puml) y [parte2](modelo-datos/modelo-datos-estructura-invitaciones-parte2.puml) | Figura 12, en dos partes | Área de estructura residencial e invitaciones: 1) `blocks`, `towers` y `units`; 2) `resident_invitations` y `resident_units` (con `units` y `users` en gris). Todas las columnas y sus tipos |
+| [modelo-datos/modelo-datos-finanzas-comunicacion-parte1.puml](modelo-datos/modelo-datos-finanzas-comunicacion-parte1.puml) y [parte2](modelo-datos/modelo-datos-finanzas-comunicacion-parte2.puml) | Figura 13, en dos partes | Área de finanzas y comunicación: 1) `charges` y `payments` (con `units` y `users` en gris); 2) `payment_allocations`, `demo_payment_transactions`, `feedback` y `notifications` (con `charges`, `payments` y `users` en gris). Todas las columnas y sus tipos |
 | [arquitectura/componentes-parte1.puml](arquitectura/componentes-parte1.puml) y [parte2](arquitectura/componentes-parte2.puml) | Figura B.1 (Anexo B), ahora en dos partes | Componentes detallados: 1) capa de presentación; 2) API, lógica de negocio, persistencia y transversales. Textos abreviados para leerse a ≥ 9 pt en una hoja horizontal |
 | [modelo-datos/modelo-datos-completo-parte1.puml](modelo-datos/modelo-datos-completo-parte1.puml) y [parte2](modelo-datos/modelo-datos-completo-parte2.puml) | Figuras B.2 y B.3 (Anexo B) | Las 16 tablas y las 24 relaciones en dos partes, solo con las columnas clave (PK, FK, UK), legibles a ≥ 9 pt en una hoja horizontal |
 | [arquitectura/componentes.puml](arquitectura/componentes.puml) | Referencia (antes, Figura B.1) | Componentes detallados en una sola imagen, con todos los módulos; no se lee en una página |
@@ -39,7 +39,7 @@ Artefactos generados a partir del código de la rama `main`. Ninguno modifica la
 
 - **Casos de uso (Figuras 2 a 6).** Nombres y actores de las fichas oficiales (`docs/casos-uso/`); los mismos cinco módulos que los diagramas D01 a D05 del documento académico. Los `<<include>>` de CU-002 y CU-007 hacia CU-018 vienen de D01; las demás relaciones se apoyan en la ficha y en el código, citado en el comentario de cada `.puml`: `<<extend>>` de CU-016 a CU-007, de CU-015 a CU-006, de CU-011 a CU-012 y de CU-017 a CU-010 (solo un pago de demostración aprobado notifica), e `<<include>>` de CU-004 y de CU-005 a CU-017 (todo pago manual y toda respuesta o resolución de un feedback notifican; HU-017, criterio 1).
 - **Actividades (Figuras 7 y 8).** Cada figura se divide en dos partes para leerse a 8 pt o más en una página vertical: la parte 1 termina en «operar en el módulo (parte 2)» y la parte 2 empieza ahí y vuelve a la parte 1. Flujos tomados de `frontend/src/middleware.ts`, `lib/auth/page-access.ts`, `lib/auth/roles.ts`, `lib/auth/login-form.ts` y las páginas de `/admin` y `/resident`, más los servicios del backend que deciden cada resultado (citados en el comentario de cada `.puml`). Cada decisión tiene sus guardas `[sí]` y `[no]`.
-- **Modelos de datos.** Se generaron leyendo `information_schema` de `softph_academico_test`, en la revisión de Alembic `d33ea6140186`, comprobada con `alembic check`. Columnas, tipos, nulos, claves y relaciones salen de la base, no se escribieron a mano; solo la agrupación por áreas es una decisión editorial. Las dos partes del Anexo B las genera `scripts/dividir_modelo_datos.py` a partir de `modelo-datos-completo.puml`: cada tabla muestra solo sus columnas clave, sin su tipo, y su encabezado indica cuántas columnas tiene (`users (11)`, sin las columnas generadas). Las 24 relaciones se copian con su cardinalidad (11 en la parte 1 y 13 en la parte 2). En la parte 2, `users` y `units` aparecen en gris, solo con su clave primaria. La mora (`charges.source_charge_id`) se dibuja hacia un recuadro gris «charges (la misma tabla)»: PlantUML 1.2020 dibuja la relación de una tabla consigo misma como un bucle diminuto con las marcas de cardinalidad superpuestas.
+- **Modelos de datos.** Se generaron leyendo `information_schema` de `softph_academico_test`, en la revisión de Alembic `d33ea6140186`, comprobada con `alembic check`. Columnas, tipos, nulos, claves y relaciones salen de la base, no se escribieron a mano; solo la agrupación por áreas es una decisión editorial. Las dos partes del Anexo B las genera `scripts/dividir_modelo_datos.py` a partir de `modelo-datos-completo.puml`: cada tabla muestra solo sus columnas clave, sin su tipo, y su encabezado indica cuántas columnas tiene (`users (11)`, sin las columnas generadas). Las 24 relaciones se copian con su cardinalidad (11 en la parte 1 y 13 en la parte 2). En la parte 2, `users` y `units` aparecen en gris, solo con su clave primaria. La mora (`charges.source_charge_id`) se dibuja hacia un recuadro gris «charges (la misma tabla)»: PlantUML 1.2020 dibuja la relación de una tabla consigo misma como un bucle diminuto con las marcas de cardinalidad superpuestas. Las Figuras 11 a 13 las genera `scripts/generar_areas.py` a partir del mismo `modelo-datos-completo.puml`, con todas las columnas y sus tipos: cada relación se dibuja en la figura de la tabla que tiene la clave foránea (las 24, una vez cada una), y la tabla referenciada, si es de otra parte o figura, se repite en gris solo con su clave primaria. Cada figura indica las columnas de otras partes o figuras que apuntan a sus tablas («Referencias») y las columnas generadas que el modelo omite.
 
 ## Generar los PNG y los SVG
 
@@ -48,7 +48,8 @@ Con PlantUML (verificado con la versión 1.2020.02 del paquete de Ubuntu/Linux M
 ```bash
 sudo apt install plantuml
 cd docs/entrega-objetivos
-python3 -I scripts/dividir_modelo_datos.py modelo-datos          # solo si cambia modelo-datos-completo.puml
+python3 -I scripts/dividir_modelo_datos.py modelo-datos          # Anexo B; solo si cambia modelo-datos-completo.puml
+python3 -I scripts/generar_areas.py modelo-datos                  # Figuras 11 a 13; ídem
 DIAGRAMAS="arquitectura/*.puml modelo-datos/*.puml actividades/*.puml casos-uso/*.puml"
 plantuml -DPLANTUML_LIMIT_SIZE=16384 -tsvg $DIAGRAMAS
 plantuml -DPLANTUML_LIMIT_SIZE=16384 -tpng $DIAGRAMAS
@@ -75,9 +76,11 @@ python3 -I scripts/verificar_diagramas.py */*.svg                  # letra efect
 | `actividades-residente-parte2` | 8 (2/2) | 3978 × 3931 | 7,8 pt | **8,9 pt** | 0 |
 | `componentes-resumen` | 9 | 1943 × 3486 | 5,9 pt | **8,5 pt** | 0 |
 | `despliegue` | 10 | 2578 × 2000 | **9,0 pt** | 8,0 pt | 0 |
-| `modelo-datos-usuarios-seguridad` | 11 | 2523 × 1493 | 7,2 pt | 5,2 pt | 0 |
-| `modelo-datos-estructura-invitaciones` | 12 | 1970 × 3340 | 3,5 pt | 5,0 pt | 0 |
-| `modelo-datos-finanzas-comunicacion` | 13 | 3385 × 2325 | 5,0 pt | 3,9 pt | 1 |
+| `modelo-datos-usuarios-seguridad` | 11 | 3973 × 2131 | **8,2 pt** | 5,9 pt | 0 |
+| `modelo-datos-estructura-invitaciones-parte1` | 12 (1/2) | 2540 × 1313 | **12,8 pt** | 9,2 pt | 0 |
+| `modelo-datos-estructura-invitaciones-parte2` | 12 (2/2) | 2943 × 2014 | **10,2 pt** | 8,0 pt | 0 |
+| `modelo-datos-finanzas-comunicacion-parte1` | 13 (1/2) | 3581 × 2379 | **8,6 pt** | 6,6 pt | 1 |
+| `modelo-datos-finanzas-comunicacion-parte2` | 13 (2/2) | 2540 × 1461 | **9,6 pt** | 6,9 pt | 0 |
 | `componentes-parte1` | B.1 (1/2) | 1984 × 1700 | **9,1 pt** | 8,9 pt | 0 |
 | `componentes-parte2` | B.1 (2/2) | 2540 × 1660 | **9,3 pt** | 6,9 pt | 0 |
 | `modelo-datos-completo-parte1` | B.2 | 2693 × 1665 | **9,0 pt** | 6,5 pt | 0 |
@@ -85,10 +88,10 @@ python3 -I scripts/verificar_diagramas.py */*.svg                  # letra efect
 | `componentes` | referencia | 3787 × 4382 | 2,6 pt | 3,5 pt | 0 |
 | `modelo-datos-completo` | referencia | 6204 × 4028 | 2,9 pt | 2,1 pt | 11 |
 
-En negrita, la orientación prevista para cada figura. Las Figuras 11 a 13 no se rehicieron (solo pasaron a blanco y negro).
+En negrita, la orientación prevista para cada figura.
 
 - **Letra mínima:** tamaño real de la letra más pequeña del diagrama al ajustarlo al área útil de una página carta con márgenes de 2,5 cm (horizontal: 22,9 × 14,5 cm; vertical: 16,6 × 20,9 cm, descontando el título y la fuente de la figura). La versión anterior de esta tabla tomaba el tamaño de letra de PlantUML como si fueran puntos; PlantUML mide en píxeles a 96 ppp (12 px = 9 pt), así que aquellas cifras eran un tercio más altas que la letra impresa.
-- **El cruce de la parte 2 del modelo** es inevitable: `users` y `units` se relacionan las dos con `charges` y con `payments`. Ese par de tablas, en la misma fila, siempre produce un cruce; evitarlo exigiría repetir una tabla en el dibujo.
+- **El cruce de la Figura B.3 y de la parte 1 de la Figura 13** es inevitable: `users` y `units` se relacionan las dos con `charges` y con `payments`. Ese par de tablas, en la misma fila, siempre produce un cruce; evitarlo exigiría repetir una tabla en el dibujo.
 - **Tamaño de letra de PlantUML:** varía entre diagramas (de 12 a 28 px) porque la separación entre filas de PlantUML es fija: una letra mayor gana espacio frente a esa separación. Lo que importa es la letra impresa, que es la que mide la tabla.
 
 En PlantUML, `**` dentro de un texto se interpreta como negrita y desaparece de la imagen; por eso las rutas se escriben como `/admin/…` y no `/admin/**`.

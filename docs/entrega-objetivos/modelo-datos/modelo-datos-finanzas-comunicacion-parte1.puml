@@ -1,0 +1,78 @@
+@startuml
+' modelo-datos-finanzas-comunicacion-parte1: generado por scripts/generar_areas.py a partir de modelo-datos-completo.puml
+' (columnas, tipos, nulos, claves y relaciones leídos de information_schema; no se editan a mano).
+skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 16
+skinparam class {
+  BackgroundColor White
+  BorderColor Black
+  ArrowColor Black
+}
+hide circle
+hide methods
+top to bottom direction
+skinparam nodesep 12
+skinparam ranksep 15
+title Modelo lógico de datos: finanzas y comunicación (1 de 2): obligaciones y pagos\nMySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
+entity "charges" as charges {
+  *id : bigint <<PK>>
+  --
+  *unit_id : bigint <<FK>>
+  *concept : varchar(20)
+  description : varchar(200)
+  *amount : decimal(12,2)
+  *due_date : date
+  billing_period : date
+  source_charge_id : bigint <<FK,UK>>
+  *created_by_user_id : bigint <<FK>>
+  *created_at : datetime(6)
+}
+entity "payments" as payments {
+  *id : bigint <<PK>>
+  --
+  *resident_id : bigint <<FK>>
+  *unit_id : bigint <<FK>>
+  *registered_by_user_id : bigint <<FK>>
+  *amount : decimal(12,2)
+  *method : varchar(20)
+  *concept : varchar(20)
+  concept_description : varchar(200)
+  *source : varchar(20)
+  transaction_reference : varchar(100)
+  notes : varchar(500)
+  *payment_date : date
+  *registered_at : datetime(6)
+  *resident_name_snapshot : varchar(150)
+  *unit_label_snapshot : varchar(40)
+  *receipt_email_status : varchar(20)
+  receipt_sent_at : datetime(6)
+  *created_at : datetime(6)
+}
+entity "units" as units #DDDDDD {
+  *id : bigint <<PK>>
+}
+entity "users" as users #DDDDDD {
+  *id : bigint <<PK>>
+}
+users ||--o{ charges : "created_by_user_id"
+entity "charges (la misma tabla)" as charges_origen #DDDDDD {
+  *id : bigint <<PK>>
+}
+charges |o-o| charges_origen : "source_charge_id\n(mora → origen)"
+units ||--o{ charges : "unit_id"
+users ||--o{ payments : "registered_by_user_id"
+users ||--o{ payments : "resident_id"
+units ||--o{ payments : "unit_id"
+legend bottom left
+  * = NOT NULL · <<PK>> clave primaria · <<FK>> clave foránea · <<UK>> única
+  Pata de gallo: || uno · |o cero o uno · o{ cero o muchos · o| cero o uno
+  En gris: tablas de otra parte o figura, solo con su clave primaria.
+  Referencias desde otras partes o figuras: demo_payment_transactions.charge_id → charges · demo_payment_transactions.payment_id → payments
+      payment_allocations.charge_id → charges · payment_allocations.payment_id → payments
+  Columnas generadas omitidas: charges.can_originate_late_fee · charges.late_fee_source_link
+endlegend
+@enduml

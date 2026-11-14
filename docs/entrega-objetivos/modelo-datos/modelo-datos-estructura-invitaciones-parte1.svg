@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" contentScriptType="application/ecmascript" contentStyleType="text/css" height="1315.625px" preserveAspectRatio="none" style="width:2543px;height:1315px;" version="1.1" viewBox="0 0 2543 1315" width="2543.75px" zoomAndPan="magnify"><defs/><g><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="1893.75" x="335.9375" y="53.4501">Modelo lógico de datos: estructura residencial e invitaciones (1 de 2): estructura</text><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="1400" x="582.8125" y="121.5502">MySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)</text><!--MD5=[d1aca5112466275106e9a5da8befcbb3]
+class blocks--><rect fill="#FFFFFF" height="557.951" id="blocks" style="stroke: #000000; stroke-width: 4.6875;" width="659.375" x="18.75" y="194.0128"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="153.125" x="271.875" y="263.0879">blocks</text><line style="stroke: #000000; stroke-width: 4.6875;" x1="21.875" x2="675" y1="293.3629" y2="293.3629"/><ellipse cx="53.125" cy="327.7379" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="343.75" x="81.25" y="359.313">id : bigint «PK»</text><line style="stroke: #000000; stroke-width: 3.125;" x1="21.875" x2="675" y1="386.463" y2="386.463"/><ellipse cx="53.125" cy="420.838" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="525" x="81.25" y="452.4132">number : int unsigned</text><ellipse cx="53.125" cy="488.9382" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="509.375" x="81.25" y="520.5133">version : int unsigned</text><ellipse cx="53.125" cy="557.0383" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="559.375" x="81.25" y="588.6134">created_at : datetime(6)</text><ellipse cx="53.125" cy="625.1385" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="578.125" x="81.25" y="656.7136">updated_at : datetime(6)</text><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="556.25" x="81.25" y="724.8137">deleted_at : datetime(6)</text><!--MD5=[3e95c335141271ec93513cd7337af0c2]
+class towers--><rect fill="#FFFFFF" height="626.0511" id="towers" style="stroke: #000000; stroke-width: 4.6875;" width="659.375" x="928.125" y="161.2003"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="165.625" x="1175" y="230.2754">towers</text><line style="stroke: #000000; stroke-width: 4.6875;" x1="931.25" x2="1584.375" y1="260.5504" y2="260.5504"/><ellipse cx="962.5" cy="294.9254" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="343.75" x="990.625" y="326.5005">id : bigint «PK»</text><line style="stroke: #000000; stroke-width: 3.125;" x1="931.25" x2="1584.375" y1="353.6505" y2="353.6505"/><ellipse cx="962.5" cy="388.0255" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="487.5" x="990.625" y="419.6007">block_id : bigint «FK»</text><ellipse cx="962.5" cy="456.1257" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="525" x="990.625" y="487.7008">number : int unsigned</text><ellipse cx="962.5" cy="524.2258" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="509.375" x="990.625" y="555.8009">version : int unsigned</text><ellipse cx="962.5" cy="592.326" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="559.375" x="990.625" y="623.9011">created_at : datetime(6)</text><ellipse cx="962.5" cy="660.4261" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="578.125" x="990.625" y="692.0012">updated_at : datetime(6)</text><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="556.25" x="990.625" y="760.1013">deleted_at : datetime(6)</text><!--MD5=[21826c6479ab17c72d0ef1b392c5e221]
+class units--><rect fill="#FFFFFF" height="626.0511" id="units" style="stroke: #000000; stroke-width: 4.6875;" width="659.375" x="1850" y="161.2003"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="118.75" x="2120.3125" y="230.2754">units</text><line style="stroke: #000000; stroke-width: 4.6875;" x1="1853.125" x2="2506.25" y1="260.5504" y2="260.5504"/><ellipse cx="1884.375" cy="294.9254" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="343.75" x="1912.5" y="326.5005">id : bigint «PK»</text><line style="stroke: #000000; stroke-width: 3.125;" x1="1853.125" x2="2506.25" y1="353.6505" y2="353.6505"/><ellipse cx="1884.375" cy="388.0255" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="500" x="1912.5" y="419.6007">tower_id : bigint «FK»</text><ellipse cx="1884.375" cy="456.1257" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="525" x="1912.5" y="487.7008">number : int unsigned</text><ellipse cx="1884.375" cy="524.2258" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="509.375" x="1912.5" y="555.8009">version : int unsigned</text><ellipse cx="1884.375" cy="592.326" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="559.375" x="1912.5" y="623.9011">created_at : datetime(6)</text><ellipse cx="1884.375" cy="660.4261" fill="#000000" rx="9.375" ry="9.375" style="stroke: #000000; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="578.125" x="1912.5" y="692.0012">updated_at : datetime(6)</text><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="556.25" x="1912.5" y="760.1013">deleted_at : datetime(6)</text><!--MD5=[81f639dc24dbe88689d1f998cc4f8ca5]
+link blocks to towers--><path d="M704.625,473.7003 C769.25,473.7003 836.7188,473.7003 901.375,473.7003 " fill="none" id="blocks-towers" style="stroke: #000000; stroke-width: 3.125;"/><line style="stroke: #000000; stroke-width: 3.125;" x1="901.9688" x2="926.9688" y1="473.7003" y2="454.9503"/><line style="stroke: #000000; stroke-width: 3.125;" x1="901.9688" x2="926.9688" y1="473.7003" y2="492.4503"/><line style="stroke: #000000; stroke-width: 3.125;" x1="901.9688" x2="926.9688" y1="473.7003" y2="473.7003"/><ellipse cx="883.2188" cy="473.7003" fill="none" rx="12.5" ry="12.5" style="stroke: #000000; stroke-width: 3.125;"/><line style="stroke: #000000; stroke-width: 3.125;" x1="691.375" x2="691.375" y1="486.2003" y2="461.2003"/><line style="stroke: #000000; stroke-width: 3.125;" x1="700.75" x2="700.75" y1="486.2003" y2="461.2003"/><line style="stroke: #000000; stroke-width: 3.125;" x1="703.875" x2="678.875" y1="473.7003" y2="473.7003"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="193.75" x="706.25" y="458.4004">block_id</text><!--MD5=[dc471dbf5bd8904467802e4121f3685b]
+link towers to units--><path d="M1612.625,473.7003 C1681.6563,473.7003 1754.0937,473.7003 1823.1875,473.7003 " fill="none" id="towers-units" style="stroke: #000000; stroke-width: 3.125;"/><line style="stroke: #000000; stroke-width: 3.125;" x1="1823.4688" x2="1848.4688" y1="473.7003" y2="454.9503"/><line style="stroke: #000000; stroke-width: 3.125;" x1="1823.4688" x2="1848.4688" y1="473.7003" y2="492.4503"/><line style="stroke: #000000; stroke-width: 3.125;" x1="1823.4688" x2="1848.4688" y1="473.7003" y2="473.7003"/><ellipse cx="1804.7188" cy="473.7003" fill="none" rx="12.5" ry="12.5" style="stroke: #000000; stroke-width: 3.125;"/><line style="stroke: #000000; stroke-width: 3.125;" x1="1600.125" x2="1600.125" y1="486.2003" y2="461.2003"/><line style="stroke: #000000; stroke-width: 3.125;" x1="1609.5" x2="1609.5" y1="486.2003" y2="461.2003"/><line style="stroke: #000000; stroke-width: 3.125;" x1="1612.625" x2="1587.625" y1="473.7003" y2="473.7003"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="206.25" x="1615.625" y="458.4004">tower_id</text><rect fill="#DDDDDD" height="439.8508" rx="15.625" ry="15.625" style="stroke: #000000; stroke-width: 3.125;" width="2259.375" x="25" y="842.4503"/><ellipse cx="60.9375" cy="902.7379" fill="#000000" rx="7.8125" ry="7.8125" style="stroke: #000000; stroke-width: 0.0;"/><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="1740.625" x="90.625" y="911.5254">= NOT NULL · &lt;&lt;PK&gt;&gt; clave primaria · &lt;&lt;FK&gt;&gt; clave foránea · &lt;&lt;UK&gt;&gt; única</text><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="1678.125" x="43.75" y="979.6255">Pata de gallo: || uno · |o cero o uno · o{ cero o muchos · o| cero o uno</text><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="2162.5" x="43.75" y="1047.7257">Referencias desde otras partes o figuras: charges.unit_id → units · payments.unit_id → units</text><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="1553.125" x="93.75" y="1115.8258">resident_invitations.unit_id → units · resident_units.unit_id → units</text><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="2221.875" x="43.75" y="1183.9259">Columnas generadas omitidas: blocks.active_number_marker · towers.active_number_marker</text><text fill="#000000" font-family="Helvetica" font-size="50" lengthAdjust="spacingAndGlyphs" textLength="678.125" x="93.75" y="1252.0261">units.active_number_marker</text><!--MD5=[1d5accd4221598c74c2c800f957c9194]
+@startuml
+skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 16
+skinparam class {
+  BackgroundColor White
+  BorderColor Black
+  ArrowColor Black
+}
+hide circle
+hide methods
+left to right direction
+skinparam nodesep 12
+skinparam ranksep 15
+title Modelo lógico de datos: estructura residencial e invitaciones (1 de 2): estructura\nMySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
+entity "blocks" as blocks {
+  *id : bigint <<PK>>
+  - -
+  *number : int unsigned
+  *version : int unsigned
+  *created_at : datetime(6)
+  *updated_at : datetime(6)
+  deleted_at : datetime(6)
+}
+entity "towers" as towers {
+  *id : bigint <<PK>>
+  - -
+  *block_id : bigint <<FK>>
+  *number : int unsigned
+  *version : int unsigned
+  *created_at : datetime(6)
+  *updated_at : datetime(6)
+  deleted_at : datetime(6)
+}
+entity "units" as units {
+  *id : bigint <<PK>>
+  - -
+  *tower_id : bigint <<FK>>
+  *number : int unsigned
+  *version : int unsigned
+  *created_at : datetime(6)
+  *updated_at : datetime(6)
+  deleted_at : datetime(6)
+}
+blocks ||- -o{ towers : "block_id"
+towers ||- -o{ units : "tower_id"
+legend bottom left
+  * = NOT NULL · <<PK>> clave primaria · <<FK>> clave foránea · <<UK>> única
+  Pata de gallo: || uno · |o cero o uno · o{ cero o muchos · o| cero o uno
+  Referencias desde otras partes o figuras: charges.unit_id → units · payments.unit_id → units
+      resident_invitations.unit_id → units · resident_units.unit_id → units
+  Columnas generadas omitidas: blocks.active_number_marker · towers.active_number_marker
+      units.active_number_marker
+endlegend
+@enduml
+
+PlantUML version 1.2020.02(Sun Mar 01 05:22:07 COT 2020)
+(GPL source distribution)
+Java Runtime: OpenJDK Runtime Environment
+JVM: OpenJDK 64-Bit Server VM
+Java Version: 21.0.13.0.3+1-1-24.04.1-Ubuntu
+Operating System: Linux
+Default Encoding: UTF-8
+Language: es
+Country: CO
+--></g></svg>

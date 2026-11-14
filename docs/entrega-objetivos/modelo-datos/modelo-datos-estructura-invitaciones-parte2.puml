@@ -1,0 +1,65 @@
+@startuml
+' modelo-datos-estructura-invitaciones-parte2: generado por scripts/generar_areas.py a partir de modelo-datos-completo.puml
+' (columnas, tipos, nulos, claves y relaciones leídos de information_schema; no se editan a mano).
+skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 16
+skinparam class {
+  BackgroundColor White
+  BorderColor Black
+  ArrowColor Black
+}
+hide circle
+hide methods
+left to right direction
+skinparam nodesep 12
+skinparam ranksep 15
+title Modelo lógico de datos: estructura residencial e invitaciones (2 de 2): invitaciones y residencias\nMySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
+entity "resident_invitations" as resident_invitations {
+  *id : bigint <<PK>>
+  --
+  *token_hash : char(64) <<UK>>
+  *user_id : bigint <<FK>>
+  *unit_id : bigint <<FK>>
+  *invited_by_user_id : bigint <<FK>>
+  *validity_days : tinyint unsigned
+  *status : varchar(20)
+  *delivery_status : varchar(20)
+  *send_attempts : smallint unsigned
+  *created_at : datetime(6)
+  *expires_at : datetime(6)
+  used_at : datetime(6)
+  last_sent_at : datetime(6)
+}
+entity "resident_units" as resident_units {
+  *id : bigint <<PK>>
+  --
+  *user_id : bigint <<FK>>
+  *unit_id : bigint <<FK>>
+  *invitation_id : bigint <<FK,UK>>
+  *started_at : datetime(6)
+  ended_at : datetime(6)
+}
+entity "units" as units #DDDDDD {
+  *id : bigint <<PK>>
+}
+entity "users" as users #DDDDDD {
+  *id : bigint <<PK>>
+}
+users ||--o{ resident_invitations : "invited_by_user_id"
+units ||--o{ resident_invitations : "unit_id"
+users ||--o{ resident_invitations : "user_id"
+resident_invitations ||--o| resident_units : "invitation_id"
+units ||--o{ resident_units : "unit_id"
+users ||--o{ resident_units : "user_id"
+legend bottom left
+  * = NOT NULL · <<PK>> clave primaria · <<FK>> clave foránea · <<UK>> única
+  Pata de gallo: || uno · |o cero o uno · o{ cero o muchos · o| cero o uno
+  En gris: tablas de otra parte o figura, solo con su clave primaria.
+  Columnas generadas omitidas: resident_invitations.pending_unit_marker · resident_invitations.pending_user_marker
+      resident_units.active_unit_marker · resident_units.active_user_marker
+endlegend
+@enduml
