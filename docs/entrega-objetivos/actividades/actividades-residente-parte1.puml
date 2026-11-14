@@ -13,13 +13,13 @@ skinparam monochrome true
 skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Helvetica
-skinparam defaultFontSize 28
+skinparam defaultFontSize 24
 
-title Flujo de actividades del residente (DA-02), parte 1 de 2: activación, acceso y navegación
+' Título (no se dibuja; lo pone el pie de figura del informe): Flujo de actividades del residente (DA-02), parte 1 de 2: activación, acceso y navegación
 
 start
 if (¿Cuenta activada?) then ([no])
-  :Abrir el enlace de la invitación\ny fijar documento, teléfono\ny contraseña (HU-019);
+  :Abrir el enlace de la invitación y fijar\ndocumento, teléfono y contraseña (HU-019);
 else ([sí])
 endif
 :Abrir una página de /resident\n(el middleware SSR consulta la sesión);
@@ -30,20 +30,20 @@ else ([sí])
 endif
 if (¿Sesión vigente?\n(8 h, 30 min sin actividad)) then ([no])
   repeat
-    :Escribir en /login correo y contraseña,\ny enviarlos (si la olvidó: pedir un enlace\ny fijar una nueva, HU-016);
+    :Escribir en /login correo y contraseña, y enviarlos\n(si la olvidó: pedir un enlace y fijar una nueva, HU-016);
   backward:Mostrar el error del campo,\nla alerta genérica (401)\no el bloqueo temporal (429);
   repeat while (¿Datos completos, credenciales\nválidas y correo sin bloqueo?) is ([no]) not ([sí])
   :Crear la sesión (cookie HttpOnly);
 else ([sí])
 endif
 if (¿Rol RESIDENTE?) then ([no])
-  :Mostrar «Acceso no\nautorizado» (403);
+  :Mostrar «Acceso no autorizado» (403);
   stop
 else ([sí])
 endif
 repeat
-  :Elegir en el panel: estado de cuenta,\nmis pagos, pago de demostración,\nmis feedback o notificaciones,\ny operar en él (parte 2);
+  :Elegir en el panel: estado de cuenta, mis pagos,\npago de demostración, mis feedback o notificaciones,\ny operar en él (parte 2);
 repeat while (¿Continuar?) is ([sí]) not ([no])
-:Cerrar sesión (se revoca\nen el servidor);
+:Cerrar sesión (se revoca en el servidor);
 stop
 @enduml

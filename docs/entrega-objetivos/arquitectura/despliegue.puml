@@ -3,9 +3,11 @@
 ' Un único dispositivo (el equipo de desarrollo) contiene seis entornos de ejecución; cada uno lleva
 ' solo el nombre del componente y su puerto, y cada relación su protocolo y puerto. Los detalles
 ' (artefactos, rutas, variables, comandos) están en la sección 9.1 del informe.
-' Disposición fija, sin cruces: navegador arriba; Astro y FastAPI en el medio; MySQL y Mailpit abajo
-' (Mailpit un nivel más abajo, para que las dos líneas que llegan a él no crucen las de MySQL); los
-' ejecutores de pruebas a la derecha. Los enlaces ocultos solo fijan esa disposición.
+' Disposición fija, sin cruces y sin etiquetas atravesadas: navegador arriba; Astro y FastAPI en el
+' medio; MySQL y Mailpit abajo (Mailpit un nivel más abajo, para que las líneas que llegan a él no
+' crucen las de MySQL); los ejecutores de pruebas a un lado, a la izquierda de MySQL, para que su
+' línea a Astro llegue desde abajo y la del navegador desde arriba (antes se juntaban sus etiquetas
+' «HTTP :4400» y «HTTP :4321»). El enlace oculto solo fija esa disposición.
 ' Puertos tomados de .env.example, README.md, frontend/playwright.config.ts (4400 y 8100),
 ' backend/tests/e2e/serve.py y /etc/systemd/system/mailpit.service. Sin configuración de producción.
 skinparam dpi 300
@@ -18,7 +20,7 @@ skinparam nodesep 30
 skinparam ranksep 30
 top to bottom direction
 
-title Despliegue de SoftPh: entorno de desarrollo y pruebas (un solo equipo, 127.0.0.1)
+' Título (no se dibuja; lo pone el pie de figura del informe): Despliegue de SoftPh: entorno de desarrollo y pruebas (un solo equipo, 127.0.0.1)
 
 node "Equipo de desarrollo" <<device>> as host {
   node "Navegador web" <<executionEnvironment>> as browser
@@ -31,14 +33,13 @@ node "Equipo de desarrollo" <<device>> as host {
 
 browser -down-> astro : "HTTP :4321"
 astro -right-> uvicorn : "HTTP :8000"
-runners -left-> astro : "HTTP :4400"
-runners -down-> mysql : "TCP :3306"
+runners -up-> astro : "HTTP :4400"
+runners -left-> mysql : "TCP :3306"
 runners -down-> mailpit : "HTTP :8025"
 uvicorn -down-> mysql : "TCP :3306"
 uvicorn -down-> mailpit : "SMTP :1025"
 ' Etiqueta en el extremo del navegador: en el centro de la curva quedaba sobre el borde del «device»
 ' (PlantUML calcula el tamaño del nodo sin contar las etiquetas de las relaciones).
 browser "HTTP :8025" -down-> mailpit
-uvicorn -[hidden]right-> runners
 mysql -[hidden]down-> mailpit
 @enduml

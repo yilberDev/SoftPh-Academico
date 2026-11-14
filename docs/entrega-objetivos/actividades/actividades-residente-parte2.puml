@@ -18,7 +18,7 @@ skinparam shadowing false
 skinparam defaultFontName Helvetica
 skinparam defaultFontSize 24
 
-title Flujo de actividades del residente (DA-02), parte 2 de 2: operaciones de los módulos\n(empieza al elegir un módulo en la parte 1 y vuelve a ella al terminar)
+' Título (no se dibuja; lo pone el pie de figura del informe): Flujo de actividades del residente (DA-02), parte 2 de 2: operaciones de los módulos\n(empieza al elegir un módulo en la parte 1 y vuelve a ella al terminar)
 
 start
 if (¿Pagar una obligación?) then ([sí])

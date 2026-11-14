@@ -74,9 +74,10 @@ hide methods
 {direction}
 skinparam nodesep {nodesep}
 skinparam ranksep {ranksep}
-title {title}\\nMySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
+' Título (no se dibuja; lo pone el pie de figura del informe): {title}
 """
 LEGEND = [
+    "MySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)",
     "* = NOT NULL · <<PK>> clave primaria · <<FK>> clave foránea · <<UK>> única",
     "Pata de gallo: || uno · |o cero o uno · o{ cero o muchos · o| cero o uno",
     "En gris: tablas de otra parte o figura, solo con su clave primaria.",
@@ -130,7 +131,7 @@ for name, figure in FIGURES.items():
     drawn += [r[0] for r in used]
     # «Referencias» and «Columnas generadas» go into the legend (text under the drawing) or, for
     # «notas», into free notes: whichever gives the larger print size for that figure.
-    legend = LEGEND if stubs or any(a == b for _, a, b, _ in used) else LEGEND[:2]
+    legend = LEGEND if stubs or any(a == b for _, a, b, _ in used) else LEGEND[:3]
     legend = list(legend)
     incoming = sorted(f"{b}.{label.split(' ')[0]} → {a}" for _, a, b, label in relations
                       if a in own and b not in own and a != b)

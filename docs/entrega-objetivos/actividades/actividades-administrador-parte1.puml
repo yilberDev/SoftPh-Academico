@@ -17,7 +17,7 @@ skinparam shadowing false
 skinparam defaultFontName Helvetica
 skinparam defaultFontSize 20
 
-title Flujo de actividades del administrador (DA-01), parte 1 de 2: acceso y navegación
+' Título (no se dibuja; lo pone el pie de figura del informe): Flujo de actividades del administrador (DA-01), parte 1 de 2: acceso y navegación
 
 start
 :Abrir una página de /admin\n(el middleware SSR consulta la sesión);

@@ -17,7 +17,7 @@ hide methods
 left to right direction
 skinparam nodesep 12
 skinparam ranksep 15
-title Modelo lógico de datos: estructura residencial e invitaciones (1 de 2): estructura\nMySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
+' Título (no se dibuja; lo pone el pie de figura del informe): Modelo lógico de datos: estructura residencial e invitaciones (1 de 2): estructura
 entity "blocks" as blocks {
   *id : bigint <<PK>>
   --
@@ -50,6 +50,7 @@ entity "units" as units {
 blocks ||--o{ towers : "block_id"
 towers ||--o{ units : "tower_id"
 legend bottom left
+  MySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
   * = NOT NULL · <<PK>> clave primaria · <<FK>> clave foránea · <<UK>> única
   Pata de gallo: || uno · |o cero o uno · o{ cero o muchos · o| cero o uno
   Referencias desde otras partes o figuras: charges.unit_id → units · payments.unit_id → units

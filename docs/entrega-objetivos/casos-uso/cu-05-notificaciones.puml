@@ -23,7 +23,7 @@ skinparam packageTitleAlignment right
 skinparam nodesep 30
 skinparam ranksep 70
 left to right direction
-title Casos de uso: notificaciones
+' Título (no se dibuja; lo pone el pie de figura del informe): Casos de uso: notificaciones
 
 actor "Administrador" as admin
 actor "Residente" as resident
@@ -41,7 +41,9 @@ resident -- CU017
 ' Primera columna: CU-004 (que incluye a CU-017, flecha corta y vertical) y CU-017; segunda columna:
 ' los casos que CU-017 extiende. CU-010 lo realiza el Residente (Figura 4); aquí solo se muestra
 ' por su relación con CU-017, como en el diagrama D05, que solo asocia al Residente con CU-017.
-CU004 .> CU017 : <<include>>
+' La etiqueta lleva 18 espacios no separables a la derecha: Graphviz la centra sobre la línea
+' vertical, y el relleno deja el texto a la izquierda de la línea, sin que esta lo atraviese.
+CU004 .> CU017 : "<<include>>                  "
 CU017 <.. CU005 : <<include>>
 CU017 ..> CU010 : <<extend>>
 @enduml

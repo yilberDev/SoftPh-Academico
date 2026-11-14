@@ -16,7 +16,7 @@ skinparam nodesep 30
 skinparam ranksep 10
 top to bottom direction
 
-title Componentes de SoftPh (1 de 2): capa de presentación (frontend/src, Astro 7 SSR)
+' Título (no se dibuja; lo pone el pie de figura del informe): Componentes de SoftPh (1 de 2): capa de presentación (frontend/src, Astro 7 SSR)
 
 node "Navegador web\n(ADMINISTRADOR o RESIDENTE)" as navegador
 

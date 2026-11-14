@@ -19,7 +19,7 @@ skinparam nodesep 25
 skinparam ranksep 10
 top to bottom direction
 
-title Componentes de SoftPh (2 de 2): API, lógica de negocio, persistencia y transversales (backend/app)
+' Título (no se dibuja; lo pone el pie de figura del informe): Componentes de SoftPh (2 de 2): API, lógica de negocio, persistencia y transversales (backend/app)
 
 component "Capa de presentación\n(parte 1)" as front
 

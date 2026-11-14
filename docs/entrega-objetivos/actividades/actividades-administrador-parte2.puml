@@ -17,7 +17,7 @@ skinparam shadowing false
 skinparam defaultFontName Helvetica
 skinparam defaultFontSize 20
 
-title Flujo de actividades del administrador (DA-01), parte 2 de 2: operación en un módulo
+' Título (no se dibuja; lo pone el pie de figura del informe): Flujo de actividades del administrador (DA-01), parte 2 de 2: operación en un módulo
 
 start
 :Abrir el módulo elegido (parte 1);

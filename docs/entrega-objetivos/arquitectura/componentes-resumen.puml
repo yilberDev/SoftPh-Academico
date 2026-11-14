@@ -17,35 +17,35 @@ skinparam packageStyle rectangle
 skinparam nodesep 20
 skinparam ranksep 10
 top to bottom direction
-title Arquitectura de SoftPh: componentes principales por capas
+' Título (no se dibuja; lo pone el pie de figura del informe): Arquitectura de SoftPh: componentes principales por capas
 
 node "Navegador web" as browser
 
-package "Capa de presentación" as pres {
+package "Presentación" as pres {
   [Control de acceso · middleware.ts] as mw
   [Páginas SSR · pages/] as pages
   [Lógica de interfaz · lib/] as lib
   [Cliente de la API · lib/api/] as client
 }
 
-package "Capa de API" as apil {
+package "API" as apil {
   [Routers · api/v1/] as routers
   [Esquemas · schemas/] as schemas
 }
 
-package "Capa de lógica de negocio" as biz {
+package "Lógica de negocio" as biz {
   [Servicios · services/] as services
   [Recibos PDF · receipts.py] as receipts
   [Correo · mail.py] as mail
 }
 
-package "Capa de persistencia" as pers {
+package "Persistencia" as pers {
   [Modelos · models/ + db/] as models
   [Alembic · alembic/] as alembic
   database "MySQL 8" as db
 }
 
-package "Componentes transversales" as trans {
+package "Transversales" as trans {
   [Autorización · api/deps.py] as deps
   [Núcleo · core/] as core
 }

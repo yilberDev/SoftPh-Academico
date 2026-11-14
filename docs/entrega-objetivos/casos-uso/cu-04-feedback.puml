@@ -15,7 +15,7 @@ skinparam packageTitleAlignment right
 skinparam nodesep 30
 skinparam ranksep 70
 left to right direction
-title Casos de uso: gestión de feedback
+' Título (no se dibuja; lo pone el pie de figura del informe): Casos de uso: gestión de feedback
 
 actor "Administrador" as admin
 actor "Residente" as resident

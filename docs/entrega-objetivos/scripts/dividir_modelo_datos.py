@@ -9,7 +9,7 @@ Cada parte se lee en una hoja carta horizontal (22,9 × 14,5 cm útiles) con let
 - las 24 relaciones se copian con su cardinalidad (11 en la parte 1 y 13 en la parte 2); solo se
   rotulan con su columna FK cuando hay dos relaciones entre las mismas tablas, y la relación de la
   mora consigo misma (la columna FK ya aparece en la tabla). La mora se dibuja hacia un recuadro
-  gris «charges (la misma tabla)», porque PlantUML 1.2020 dibuja la relación de una tabla consigo
+  gris «charges: origen de la mora», porque PlantUML 1.2020 dibuja la relación de una tabla consigo
   misma como un bucle diminuto con las marcas de cardinalidad superpuestas;
 - la disposición se fija por parte (orden de las tablas, relaciones en la misma fila y enlaces
   ocultos que solo colocan elementos): es una decisión editorial, no cambia ninguna relación.
@@ -48,7 +48,7 @@ hide methods
 top to bottom direction
 skinparam nodesep {nodesep}
 skinparam ranksep 10
-title {title}
+' Título (no se dibuja; lo pone el pie de figura del informe): {title}
 """
 
 LEGEND = [
@@ -61,6 +61,7 @@ LEGEND = [
     "dos relaciones entre las mismas tablas.",
     "|| uno · |o cero o uno · o{ cero o muchos",
 ]
+NBSP = "\u00a0"
 GAP = '"      "'  # blank label: separates two tables of the same row so their cardinality marks do not touch
 
 PARTS = {
@@ -132,11 +133,14 @@ for n, (key, part) in enumerate(PARTS.items(), start=1):
             # The late fee and its origin. PlantUML 1.2020 draws a relation of a table with itself as a
             # tiny loop whose cardinality marks overlap, so its other end is a grey box of the same
             # table, declared right after it and drawn in the same row (horizontal relation).
-            out.append(f'entity "{t} (la misma tabla)" as {t}_origen #DDDDDD {{\n  *id <<PK>>\n}}\n')
+            out.append(f'entity "{t}: origen\\nde la mora" as {t}_origen #DDDDDD {{\n  *id <<PK>>\n}}\n')
     for a, left, right, b, label in used:
         dashes = part["length"].get((a, b), "--")
         if a == b:
-            out.append(f'{a} {left}-{right} {a}_origen : "' + label.replace(" (", "\\n(") + '"\n')
+            # Only the column, with three no-break spaces on each side: the label then keeps clear of
+            # the border of the table and of the marks of the relations that reach its right side.
+            column = label.split(" (")[0]
+            out.append(f'{a} {left}-{right} {a}_origen : "{NBSP * 3}{column}{NBSP * 3}"\n')
             continue
         if pairs[(a, b)] > 1:
             text = f' : "{label}"'

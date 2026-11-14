@@ -16,7 +16,7 @@ skinparam packageTitleAlignment right
 skinparam nodesep 30
 skinparam ranksep 70
 left to right direction
-title Casos de uso: gestión de residentes y unidades
+' Título (no se dibuja; lo pone el pie de figura del informe): Casos de uso: gestión de residentes y unidades
 
 actor "Administrador" as admin
 actor "Residente" as resident
@@ -35,5 +35,7 @@ admin -- CU006
 admin -- CU015
 resident -- CU019
 ' Flecha corta (.>): CU-015 queda en la misma columna que CU-006, justo debajo.
-CU015 .> CU006 : <<extend>>
+' La etiqueta lleva 18 espacios no separables a la derecha: Graphviz la centra sobre la línea
+' vertical, y el relleno deja el texto a la izquierda de la línea, sin que esta lo atraviese.
+CU015 .> CU006 : "<<extend>>                  "
 @enduml

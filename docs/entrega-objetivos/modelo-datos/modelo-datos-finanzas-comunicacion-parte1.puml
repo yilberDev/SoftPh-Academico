@@ -17,7 +17,7 @@ hide methods
 top to bottom direction
 skinparam nodesep 12
 skinparam ranksep 15
-title Modelo lógico de datos: finanzas y comunicación (1 de 2): obligaciones y pagos\nMySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
+' Título (no se dibuja; lo pone el pie de figura del informe): Modelo lógico de datos: finanzas y comunicación (1 de 2): obligaciones y pagos
 entity "charges" as charges {
   *id : bigint <<PK>>
   --
@@ -68,6 +68,7 @@ users ||--o{ payments : "registered_by_user_id"
 users ||--o{ payments : "resident_id"
 units ||--o{ payments : "unit_id"
 legend bottom left
+  MySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
   * = NOT NULL · <<PK>> clave primaria · <<FK>> clave foránea · <<UK>> única
   Pata de gallo: || uno · |o cero o uno · o{ cero o muchos · o| cero o uno
   En gris: tablas de otra parte o figura, solo con su clave primaria.

@@ -17,7 +17,7 @@ hide methods
 top to bottom direction
 skinparam nodesep 12
 skinparam ranksep 15
-title Modelo lógico de datos: usuarios y seguridad\nMySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
+' Título (no se dibuja; lo pone el pie de figura del informe): Modelo lógico de datos: usuarios y seguridad
 entity "users" as users {
   *id : bigint <<PK>>
   --
@@ -92,6 +92,7 @@ note as generadas
   - password_reset_tokens.pending_user_marker
 end note
 legend bottom left
+  MySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
   * = NOT NULL · <<PK>> clave primaria · <<FK>> clave foránea · <<UK>> única
   Pata de gallo: || uno · |o cero o uno · o{ cero o muchos · o| cero o uno
 endlegend

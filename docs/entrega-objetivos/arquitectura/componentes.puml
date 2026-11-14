@@ -15,7 +15,7 @@ skinparam nodesep 22
 skinparam ranksep 16
 top to bottom direction
 
-title Arquitectura de SoftPh: diagrama de componentes detallado
+' Título (no se dibuja; lo pone el pie de figura del informe): Arquitectura de SoftPh: diagrama de componentes detallado
 
 node "Navegador web\n(ADMINISTRADOR o RESIDENTE)" as navegador
 

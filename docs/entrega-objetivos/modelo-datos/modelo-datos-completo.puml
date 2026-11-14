@@ -13,7 +13,7 @@ skinparam class {
 hide circle
 hide methods
 top to bottom direction
-title Modelo lógico de datos de SoftPh (16 tablas)\nMySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
+' Título (no se dibuja; lo pone el pie de figura del informe): Modelo lógico de datos de SoftPh (16 tablas)\nMySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)
 entity "users" as users {
   *id : bigint <<PK>>
   --

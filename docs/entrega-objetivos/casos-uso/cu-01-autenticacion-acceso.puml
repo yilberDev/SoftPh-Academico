@@ -16,7 +16,7 @@ skinparam packageTitleAlignment right
 skinparam nodesep 30
 skinparam ranksep 70
 left to right direction
-title Casos de uso: autenticación y control de acceso
+' Título (no se dibuja; lo pone el pie de figura del informe): Casos de uso: autenticación y control de acceso
 
 actor "Administrador" as admin
 actor "Residente" as resident
@@ -36,5 +36,7 @@ resident -- CU016
 CU002 ..> CU018 : <<include>>
 CU007 ..> CU018 : <<include>>
 ' Flecha corta (.>): CU-016 queda en la misma columna que CU-007, justo debajo.
-CU016 .> CU007 : <<extend>>
+' La etiqueta lleva 18 espacios no separables a la derecha: Graphviz la centra sobre la línea
+' vertical, y el relleno deja el texto a la izquierda de la línea, sin que esta lo atraviese.
+CU016 .> CU007 : "<<extend>>                  "
 @enduml

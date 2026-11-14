@@ -18,7 +18,7 @@ hide methods
 top to bottom direction
 skinparam nodesep 10
 skinparam ranksep 10
-title Modelo lógico de datos de SoftPh · Parte 1 de 2: usuarios, seguridad, estructura e invitaciones (solo columnas clave)
+' Título (no se dibuja; lo pone el pie de figura del informe): Modelo lógico de datos de SoftPh · Parte 1 de 2: usuarios, seguridad, estructura e invitaciones (solo columnas clave)
 entity "login_throttles (5)" as login_throttles {
   *identifier_hash <<PK>>
 }

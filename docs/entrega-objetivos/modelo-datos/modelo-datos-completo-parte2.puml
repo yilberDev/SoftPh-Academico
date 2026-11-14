@@ -18,7 +18,7 @@ hide methods
 top to bottom direction
 skinparam nodesep 6
 skinparam ranksep 10
-title Modelo lógico de datos de SoftPh · Parte 2 de 2: finanzas y comunicación (solo columnas clave)
+' Título (no se dibuja; lo pone el pie de figura del informe): Modelo lógico de datos de SoftPh · Parte 2 de 2: finanzas y comunicación (solo columnas clave)
 entity "units (parte 1)" as units #DDDDDD {
   *id <<PK>>
 }
@@ -29,7 +29,7 @@ entity "charges (10)" as charges {
   source_charge_id <<FK,UK>>
   *created_by_user_id <<FK>>
 }
-entity "charges (la misma tabla)" as charges_origen #DDDDDD {
+entity "charges: origen\nde la mora" as charges_origen #DDDDDD {
   *id <<PK>>
 }
 entity "payment_allocations (5)" as payment_allocations {
@@ -68,7 +68,7 @@ entity "notifications (12)" as notifications {
   *event_key <<UK>>
 }
 users ||--o{ charges
-charges |o-o| charges_origen : "source_charge_id\n(mora → origen)"
+charges |o-o| charges_origen : "   source_charge_id   "
 units ||--o{ charges
 charges ||--o{ demo_payment_transactions
 payments |o--o| demo_payment_transactions
