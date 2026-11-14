@@ -1,0 +1,40 @@
+@startuml
+' Casos de uso del módulo «Autenticación y control de acceso» (Figura 2; diagrama D01 del documento).
+' Nombres: fichas oficiales en docs/casos-uso/. Relaciones:
+'   CU-002 y CU-007 <<include>> CU-018: diagrama D01 y fichas de CU-002, CU-007 y CU-018.
+'   CU-016 <<extend>> CU-007: ficha de CU-007 (relaciona CU-016); en el código, la página de inicio
+'   de sesión ofrece «¿Olvidaste tu contraseña?» (frontend/src/pages/login.astro, FORGOT_PASSWORD_PATH).
+skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam linetype polyline
+skinparam packageStyle rectangle
+skinparam packageTitleAlignment right
+skinparam nodesep 30
+skinparam ranksep 70
+left to right direction
+title Casos de uso: autenticación y control de acceso
+
+actor "Administrador" as admin
+actor "Residente" as resident
+
+rectangle "SoftPh – Autenticación y control de acceso" {
+  usecase "CU-001\nRegistrar administrador" as CU001
+  usecase "CU-002\nIniciar sesión como\nadministrador" as CU002
+  usecase "CU-007\nIniciar sesión como\nresidente" as CU007
+  usecase "CU-016\nRestablecer contraseña" as CU016
+  usecase "CU-018\nControlar acceso\nsegún rol" as CU018
+}
+
+admin -- CU001
+admin -- CU002
+resident -- CU007
+resident -- CU016
+CU002 ..> CU018 : <<include>>
+CU007 ..> CU018 : <<include>>
+' Flecha corta (.>): CU-016 queda en la misma columna que CU-007, justo debajo.
+CU016 .> CU007 : <<extend>>
+@enduml

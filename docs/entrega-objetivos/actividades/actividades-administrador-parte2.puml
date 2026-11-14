@@ -1,0 +1,55 @@
+@startuml
+' Diagrama de actividades UML del administrador, parte 2 de 2 (Figura 7, DA-01): la operación en un
+' módulo del panel, con sus validaciones y su resultado. La parte 1 cubre el acceso y la navegación.
+' Flujo tomado del código de la versión v1.1-academico:
+'   pages/admin/**            consultas GET con búsqueda, filtros, orden y paginación en el servidor;
+'                             diálogo de confirmación antes de eliminar o de cambios que afectan a otros
+'   lib/api/client.ts         escrituras con Origin y X-CSRF-Token
+'   backend/app/core/errors   422 con el campo y el motivo; 409 por versión, saldo o disponibilidad
+'   backend/app/services/*    una transacción por operación, con su registro en audit_logs; el correo
+'                             (invitación, recibo PDF, respuesta de feedback) se envía después de guardar
+'                             y su fallo queda registrado sin deshacer la operación
+' Cada decisión tiene sus dos guardas [sí] / [no] (if anidados, no elseif).
+skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 20
+
+title Flujo de actividades del administrador (DA-01), parte 2 de 2: operación en un módulo
+
+start
+:Abrir el módulo elegido (parte 1);
+if (¿La acción modifica datos?) then ([no])
+  :Buscar, filtrar, ordenar y paginar\nen el servidor (GET);
+  :Mostrar la lista o el detalle,\no el mensaje sin registros;
+else ([sí])
+  repeat
+    :Completar o corregir el formulario;
+    if (¿Elimina o afecta a otros datos?) then ([sí])
+      :Pedir confirmación;
+    else ([no])
+    endif
+    :Enviar con Origin y X-CSRF-Token;
+  backward:Mostrar los errores\njunto a cada campo (422);
+  repeat while (¿Datos válidos?) is ([no]) not ([sí])
+  if (¿Sin conflicto de versión,\nsaldo o disponibilidad?) then ([no])
+    :Mostrar el conflicto (409)\ny recargar los datos;
+  else ([sí])
+    :Guardar en una transacción\ny registrar la auditoría;
+    if (¿La operación envía correo?\n(invitación, recibo, respuesta)) then ([sí])
+      :Enviar el correo después de guardar;
+      if (¿Envío correcto?) then ([no])
+        :Registrar el fallo del envío\n(la operación se conserva);
+      else ([sí])
+        :Registrar el envío;
+      endif
+    else ([no])
+    endif
+    :Mostrar la confirmación\ny los datos actualizados;
+  endif
+endif
+:Volver al panel (parte 1);
+stop
+@enduml

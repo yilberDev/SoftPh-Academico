@@ -1,0 +1,45 @@
+@startuml
+' Diagrama de componentes detallado de SoftPh, parte 1 de 2 (Anexo B): la capa de presentación.
+' Los mismos componentes y comunicaciones del frontend que componentes.puml (versión v1.1-academico),
+' con textos más cortos para leerse en una hoja carta horizontal con letra de al menos 9 pt.
+' La parte 2 contiene la API, la lógica de negocio, la persistencia y los componentes transversales.
+' Correspondencia: ../correspondencia.md (Anexo C); archivo y líneas: ../verificacion-arquitectura.md.
+skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 12
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam nodesep 30
+skinparam ranksep 10
+top to bottom direction
+
+title Componentes de SoftPh (1 de 2): capa de presentación (frontend/src, Astro 7 SSR)
+
+node "Navegador web\n(ADMINISTRADOR o RESIDENTE)" as navegador
+
+package "Capa de presentación · frontend/src" as pres {
+  component "Control de acceso\nmiddleware.ts · lib/auth/" as middleware
+  component "Cliente del navegador\nlib/api/client.ts y *.ts" as apiclient
+  component "Páginas SSR · pages/\n/login, /admin/…, /resident/…" as pages
+  component "Proxy /api/v1 de Vite\n(solo desarrollo)" as proxy
+  component "components/ y layouts/" as ui
+  component "Lógica de interfaz\nlib/ por dominio" as libdom
+  component "Cliente SSR (solo GET)\nlib/api/*-server.ts" as apiserver
+}
+
+component "API · backend/app/main.py\n(parte 2)" as main
+
+navegador -down-> middleware : "HTTP :4321\ncookie de sesión"
+navegador -down-> apiclient : "scripts de página"
+middleware -down-> pages : "acceso por rol"
+middleware -down-> apiserver : "getSession()"
+pages -down-> ui : "import"
+pages -down-> libdom : "import"
+pages -down-> apiserver : "datos SSR"
+apiclient -down-> proxy : "fetch /api/v1\nCSRF + Origin"
+proxy -down-> main : "HTTP :8000"
+apiserver -down-> main : "HTTP GET :8000"
+@enduml

@@ -3,42 +3,46 @@
 ' Se lee de arriba abajo: cuatro capas y, a un lado, los componentes transversales.
 ' Las flechas solo van hacia abajo o hacia los componentes transversales.
 ' Solo los componentes principales y sus comunicaciones reales; detalle en ../correspondencia.md
-' y archivo y líneas de cada flecha en ../verificacion-arquitectura.md.
+' y archivo y líneas de cada flecha en ../verificacion-arquitectura.md. Nombres y etiquetas cortos
+' (protocolo y puerto, o el tipo de llamada) para leerse a 8 pt o más en una página carta vertical;
+' los protocolos completos están en la sección 9.1 del informe.
 skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Helvetica
-skinparam defaultFontSize 10
+skinparam defaultFontSize 16
 skinparam componentStyle rectangle
 skinparam packageStyle rectangle
-skinparam nodesep 30
-skinparam ranksep 18
+skinparam nodesep 20
+skinparam ranksep 10
 top to bottom direction
 title Arquitectura de SoftPh: componentes principales por capas
 
-node "Navegador web\n(administrador o residente)" as browser
+node "Navegador web" as browser
 
 package "Capa de presentación" as pres {
   [Control de acceso · middleware.ts] as mw
-  [Páginas SSR (Astro) · pages/] as pages
-  [Lógica de interfaz · lib/<dominio>] as lib
-  [Cliente de la API · lib/api] as client
+  [Páginas SSR · pages/] as pages
+  [Lógica de interfaz · lib/] as lib
+  [Cliente de la API · lib/api/] as client
 }
 
 package "Capa de API" as apil {
-  [Routers FastAPI · api/v1] as routers
-  [Esquemas Pydantic · schemas/] as schemas
+  [Routers · api/v1/] as routers
+  [Esquemas · schemas/] as schemas
 }
 
 package "Capa de lógica de negocio" as biz {
   [Servicios · services/] as services
-  [Recibos PDF · services/receipts.py\n(reportlab)] as receipts
-  [Correo · services/mail.py] as mail
+  [Recibos PDF · receipts.py] as receipts
+  [Correo · mail.py] as mail
 }
 
 package "Capa de persistencia" as pers {
-  [Modelos SQLAlchemy · models/ + db/] as models
-  [Alembic · backend/alembic] as alembic
-  database "MySQL 8\nsoftph_academico" as db
+  [Modelos · models/ + db/] as models
+  [Alembic · alembic/] as alembic
+  database "MySQL 8" as db
 }
 
 package "Componentes transversales" as trans {
@@ -46,23 +50,23 @@ package "Componentes transversales" as trans {
   [Núcleo · core/] as core
 }
 
-node "Servidor SMTP (Mailpit)" as smtp
+node "SMTP (Mailpit)" as smtp
 
-browser --> mw : HTTP :4321 · cookie softph_session
+browser --> mw : HTTP :4321
 mw --> pages : acceso por rol
-pages --> lib : import TypeScript
-pages --> client : import TypeScript
-client --> routers : HTTP/JSON /api/v1 (cookie + X-CSRF-Token)
-routers --> schemas : validación Pydantic
-routers --> services : llamada Python (async)
+pages --> lib : import
+pages --> client : import
+client --> routers : HTTP /api/v1
+routers --> schemas : validación
+routers --> services : llamada
 routers -left-> deps : Depends()
-deps --> core : llamada Python
-services --> receipts : llamada Python
-services --> mail : llamada Python
-services -left-> core : llamada Python
-services --> models : AsyncSession (ORM)
-models --> db : TCP :3306 · mysql+asyncmy
-alembic --> db : TCP :3306 · DDL
+deps --> core : llamada
+services --> receipts : llamada
+services --> mail : llamada
+services -left-> core : llamada
+services --> models : ORM
+models --> db : TCP :3306
+alembic --> db : TCP :3306
 mail --> smtp : SMTP :1025
 ' Enlaces ocultos: solo fijan el orden vertical de las capas (no son comunicaciones).
 schemas -[hidden]-> services

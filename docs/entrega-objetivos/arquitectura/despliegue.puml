@@ -1,64 +1,44 @@
 @startuml
-' Diagrama de despliegue UML del entorno de desarrollo y pruebas de SoftPh.
-' Un único dispositivo (el equipo de desarrollo) contiene todos los entornos de ejecución.
-' Puertos y protocolos tomados de: .env.example (API_INTERNAL_URL, APP_ORIGIN, SMTP_*, DB_*),
-' README.md (uvicorn --host 127.0.0.1 --port 8000; Astro en 4321), frontend/playwright.config.ts
-' (8100 y 4400), backend/tests/e2e/serve.py y /etc/systemd/system/mailpit.service.
-' El repositorio no contiene configuración de producción (proxy inverso, contenedores ni SMTP real).
+' Diagrama de despliegue UML del entorno de desarrollo y pruebas de SoftPh (Figura 10 del informe).
+' Un único dispositivo (el equipo de desarrollo) contiene seis entornos de ejecución; cada uno lleva
+' solo el nombre del componente y su puerto, y cada relación su protocolo y puerto. Los detalles
+' (artefactos, rutas, variables, comandos) están en la sección 9.1 del informe.
+' Disposición fija, sin cruces: navegador arriba; Astro y FastAPI en el medio; MySQL y Mailpit abajo
+' (Mailpit un nivel más abajo, para que las dos líneas que llegan a él no crucen las de MySQL); los
+' ejecutores de pruebas a la derecha. Los enlaces ocultos solo fijan esa disposición.
+' Puertos tomados de .env.example, README.md, frontend/playwright.config.ts (4400 y 8100),
+' backend/tests/e2e/serve.py y /etc/systemd/system/mailpit.service. Sin configuración de producción.
 skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Helvetica
-skinparam defaultFontSize 9
-skinparam nodesep 40
-skinparam ranksep 55
+skinparam defaultFontSize 14
+skinparam nodesep 30
+skinparam ranksep 30
 top to bottom direction
 
 title Despliegue de SoftPh: entorno de desarrollo y pruebas (un solo equipo, 127.0.0.1)
 
-node "Equipo de desarrollo (Linux)\nverificado en Linux Mint 22.3" <<device>> as host {
-
-  node "Navegador web" <<executionEnvironment>> as browser {
-    artifact "Interfaz SoftPh\nhttp://localhost:4321" as ui
-    artifact "Interfaz web de Mailpit\nhttp://localhost:8025" as mailui
-  }
-
-  node "Ejecutores de pruebas" <<executionEnvironment>> as runners {
-    artifact "pytest\nbackend/tests" as pytest
-    artifact "Playwright 1.63 · Chromium\nfrontend/e2e" as playwright
-    artifact "node --test\nfrontend/tests" as nodetest
-  }
-
-  node "Node.js 24 LTS · servidor Astro" <<executionEnvironment>> as astro {
-    artifact "astro dev (Vite)\nfrontend/src\ndesarrollo :4321 · pruebas E2E :4400" as astroapp
-  }
-
-  node "uvicorn · Python 3.13 (FastAPI)" <<executionEnvironment>> as uvicorn {
-    artifact "FastAPI app.main:app\ndesarrollo 127.0.0.1:8000\npruebas E2E 127.0.0.1:8100\n(tests.e2e.serve)" as api
-    artifact "Alembic\nbackend/alembic" as alembic
-    artifact "CLI create-admin\npython -m app.cli" as cli
-  }
-
-  node "MySQL 8 · 127.0.0.1:3306\n(instalado: 8.0.46; decidido: 8.4 LTS)" <<executionEnvironment>> as mysql {
-    database "softph_academico\n(desarrollo)" as devdb
-    database "softph_academico_test\n(pytest y Playwright)" as testdb
-  }
-
-  node "Mailpit v1.31.0 · servicio systemd" <<executionEnvironment>> as mailpit {
-    artifact "SMTP 127.0.0.1:1025" as smtp
-    artifact "HTTP 127.0.0.1:8025\n(interfaz y API)" as mailhttp
-  }
+node "Equipo de desarrollo" <<device>> as host {
+  node "Navegador web" <<executionEnvironment>> as browser
+  node "Astro SSR · Node.js\n:4321 (E2E :4400)" <<executionEnvironment>> as astro
+  node "FastAPI · uvicorn\n:8000 (E2E :8100)" <<executionEnvironment>> as uvicorn
+  node "Pruebas\n(Playwright, pytest)" <<executionEnvironment>> as runners
+  node "MySQL 8\n:3306" <<executionEnvironment>> as mysql
+  node "Mailpit\nSMTP :1025 · HTTP :8025" <<executionEnvironment>> as mailpit
 }
 
-ui --> astroapp : "HTTP :4321\nHTML SSR + fetch /api/v1\ncookie softph_session\nX-CSRF-Token"
-playwright --> astroapp : "HTTP :4400\n(pila propia)"
-astroapp --> api : "HTTP :8000\n(API_INTERNAL_URL)\nproxy /api/v1 y GET SSR"
-api -right-> smtp : "SMTP :1025\nsin TLS ni\nautenticación"
-mailui --> mailhttp : "HTTP :8025"
-playwright ..> mailhttp : "HTTP :8025\nlectura de correos"
-api --> devdb : "TCP :3306\nmysql+asyncmy"
-api --> testdb : "TCP :3306\ninstancia E2E :8100"
-alembic --> devdb : "TCP :3306\nDDL"
-cli --> devdb : "TCP :3306"
-pytest --> testdb : "TCP :3306"
-playwright ..> testdb : "TCP :3306\nsemilla y limpieza"
+browser -down-> astro : "HTTP :4321"
+astro -right-> uvicorn : "HTTP :8000"
+runners -left-> astro : "HTTP :4400"
+runners -down-> mysql : "TCP :3306"
+runners -down-> mailpit : "HTTP :8025"
+uvicorn -down-> mysql : "TCP :3306"
+uvicorn -down-> mailpit : "SMTP :1025"
+' Etiqueta en el extremo del navegador: en el centro de la curva quedaba sobre el borde del «device»
+' (PlantUML calcula el tamaño del nodo sin contar las etiquetas de las relaciones).
+browser "HTTP :8025" -down-> mailpit
+uvicorn -[hidden]right-> runners
+mysql -[hidden]down-> mailpit
 @enduml

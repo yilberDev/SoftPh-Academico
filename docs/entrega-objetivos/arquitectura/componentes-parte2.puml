@@ -1,0 +1,60 @@
+@startuml
+' Diagrama de componentes detallado de SoftPh, parte 2 de 2 (Anexo B): API, lógica de negocio,
+' persistencia y componentes transversales. Los mismos componentes y comunicaciones del backend que
+' componentes.puml (versión v1.1-academico), con textos más cortos para leerse en una hoja carta
+' horizontal con letra de al menos 9 pt. La parte 1 contiene la capa de presentación.
+' La capa de cada componente se indica con un estereotipo («API», «lógica de negocio», «persistencia»,
+' «transversal»), no con paquetes: los recuadros de los paquetes duplicaban el tamaño del dibujo.
+' Sin estereotipo: los elementos externos al backend (la parte 1, reportlab y el servidor SMTP).
+' Correspondencia: ../correspondencia.md (Anexo C); archivo y líneas: ../verificacion-arquitectura.md.
+skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 12
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam nodesep 25
+skinparam ranksep 10
+top to bottom direction
+
+title Componentes de SoftPh (2 de 2): API, lógica de negocio, persistencia y transversales (backend/app)
+
+component "Capa de presentación\n(parte 1)" as front
+
+component "main.py · create_app\nrouters bajo /api/v1" <<API>> as main
+component "cli.py\ncreate-admin" <<API>> as cli
+component "Routers · api/v1/\n(16 módulos)" <<API>> as routers
+component "Esquemas · schemas/\n(18 módulos)" <<API>> as schemas
+
+component "Autorización · api/deps.py\nsesión 401 · rol 403 · CSRF" <<transversal>> as deps
+component "Núcleo · core/\nconfig · sessions · csrf\npasswords · errores" <<transversal>> as core
+
+component "Servicios · services/\n(28 módulos)" <<lógica de negocio>> as services
+component "receipts.py\n(PDF)" <<lógica de negocio>> as receipts
+component "mail.py\n(SMTP)" <<lógica de negocio>> as mail
+
+component "models/ + db/\n(SQLAlchemy async)" <<persistencia>> as models
+component "Alembic\n16 revisiones" <<persistencia>> as alembic
+database "MySQL 8" <<persistencia>> as mysql
+
+component "reportlab" as reportlab
+node "Servidor SMTP\n(Mailpit)" as smtp
+
+front -right-> main : "HTTP :8000"
+main -down-> routers : "include_router"
+routers -right-> schemas : "validación"
+routers -left-> deps : "Depends()"
+deps -down-> core
+routers -down-> services : "llamada async"
+cli -down-> services
+services -left-> core
+services -down-> receipts
+services -down-> mail
+services -down-> models : "AsyncSession"
+receipts -down-> reportlab
+mail -down-> smtp : "SMTP :1025"
+models -left-> mysql : "TCP :3306"
+alembic -up-> mysql : "TCP :3306 · DDL"
+@enduml

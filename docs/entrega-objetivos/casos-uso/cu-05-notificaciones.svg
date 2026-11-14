@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" contentScriptType="application/ecmascript" contentStyleType="text/css" height="859.375px" preserveAspectRatio="none" style="width:2028px;height:859px;" version="1.1" viewBox="0 0 2028 859" width="2028.125px" zoomAndPan="magnify"><defs/><g><text fill="#000000" font-family="Helvetica" font-size="40.625" lengthAdjust="spacingAndGlyphs" textLength="518.75" x="790.625" y="43.4282">Casos de uso: notificaciones</text><!--MD5=[d747fd234f7c34cb5beeb710becb508e]
+cluster SoftPh - Notificaciones--><rect fill="#FFFFFF" height="675" style="stroke: #000000; stroke-width: 4.6875;" width="1534.375" x="459.375" y="152.2063"/><text fill="#000000" font-family="Helvetica" font-size="40.625" font-weight="bold" lengthAdjust="spacingAndGlyphs" textLength="462.5" x="1521.875" y="201.8845">SoftPh - Notificaciones</text><ellipse cx="787.595" cy="345.6464" fill="#F8F8F8" rx="278.22" ry="79.3776" style="stroke: #383838; stroke-width: 4.6875;"/><text fill="#000000" font-family="Helvetica" font-size="40.625" lengthAdjust="spacingAndGlyphs" textLength="134.375" x="720.4075" y="322.2589">CU-004</text><text fill="#000000" font-family="Helvetica" font-size="40.625" lengthAdjust="spacingAndGlyphs" textLength="425" x="575.095" y="377.5902">Registrar pago manual</text><ellipse cx="1706.558" cy="361.6103" fill="#F8F8F8" rx="237.808" ry="79.7165" style="stroke: #383838; stroke-width: 4.6875;"/><text fill="#000000" font-family="Helvetica" font-size="40.625" lengthAdjust="spacingAndGlyphs" textLength="134.375" x="1639.3705" y="338.774">CU-005</text><text fill="#000000" font-family="Helvetica" font-size="40.625" lengthAdjust="spacingAndGlyphs" textLength="359.375" x="1526.8705" y="394.1053">Gestionar feedback</text><ellipse cx="787.824" cy="677.6455" fill="#F8F8F8" rx="250.324" ry="98.8767" style="stroke: #383838; stroke-width: 4.6875;"/><text fill="#000000" font-family="Helvetica" font-size="40.625" lengthAdjust="spacingAndGlyphs" textLength="134.375" x="720.6365" y="636.0876">CU-017</text><text fill="#000000" font-family="Helvetica" font-size="40.625" lengthAdjust="spacingAndGlyphs" textLength="446.875" x="564.3865" y="691.4189">Gestionar notificaciones</text><text fill="#000000" font-family="Helvetica" font-size="40.625" lengthAdjust="spacingAndGlyphs" textLength="215.625" x="680.0115" y="746.7502">al residente</text><ellipse cx="1705.9298" cy="664.6025" fill="#F8F8F8" rx="162.1798" ry="110.8337" style="stroke: #383838; stroke-width: 4.6875;"/><text fill="#000000" font-family="Helvetica" font-size="40.625" lengthAdjust="spacingAndGlyphs" textLength="134.375" x="1638.7423" y="617.8715">CU-010</text><text fill="#000000" font-family="Helvetica" font-size="40.625" lengthAdjust="spacingAndGlyphs" textLength="250" x="1580.9298" y="673.2028">Realizar pago</text><text fill="#000000" font-family="Helvetica" font-size="40.625" lengthAdjust="spacingAndGlyphs" textLength="206.25" x="1602.8048" y="728.5341">electrónico</text><!--MD5=[79a439086b036a57b90a01d7b2f8bbd1]
+entity admin--><ellipse cx="153.125" cy="110.0188" fill="#F8F8F8" rx="25" ry="25" style="stroke: #383838; stroke-width: 4.6875;"/><path d="M153.125,135.0188 L153.125,219.3938 M112.5,160.0188 L193.75,160.0188 M153.125,219.3938 L112.5,266.2688 M153.125,219.3938 L193.75,266.2688 " fill="none" style="stroke: #383838; stroke-width: 4.6875;"/><text fill="#000000" font-family="Helvetica" font-size="40.625" lengthAdjust="spacingAndGlyphs" textLength="268.75" x="18.75" y="317.5095">Administrador</text><!--MD5=[4ed4c762997f516e53c9477b4944427a]
+entity resident--><ellipse cx="153.125" cy="581.8938" fill="#F8F8F8" rx="25" ry="25" style="stroke: #383838; stroke-width: 4.6875;"/><path d="M153.125,606.8938 L153.125,691.2688 M112.5,631.8938 L193.75,631.8938 M153.125,691.2688 L112.5,738.1438 M153.125,691.2688 L193.75,738.1438 " fill="none" style="stroke: #383838; stroke-width: 4.6875;"/><text fill="#000000" font-family="Helvetica" font-size="40.625" lengthAdjust="spacingAndGlyphs" textLength="184.375" x="60.9375" y="789.3845">Residente</text><!--MD5=[d44de248372f66f57a0d757bde20c94c]
+link admin to CU004--><path d="M287.9375,234.8001 C368.5,252.8626 473.5938,276.3938 566.3438,297.1438 " fill="none" id="admin-CU004" style="stroke: #383838; stroke-width: 3.125;"/><!--MD5=[6bff1262d1a82184d6e122ce25498280]
+link admin to CU005--><path d="M287.8125,196.8001 C344,193.1438 396.875,189.7063 396.875,189.7063 C396.875,189.7063 400,189.7063 400,189.7063 C400,189.7063 1065.625,217.8313 1065.625,217.8313 C1065.625,217.8313 1320.125,275.2063 1507.5313,317.4876 " fill="none" id="admin-CU005" style="stroke: #383838; stroke-width: 3.125;"/><!--MD5=[a0a62719321f85a31c645a5e109acb4a]
+link resident to CU017--><path d="M246.25,677.2063 C322.2188,677.2063 434.7188,677.2063 537.25,677.2063 " fill="none" id="resident-CU017" style="stroke: #383838; stroke-width: 3.125;"/><!--MD5=[2d7d362a5c11738ff35dc5989a110a83]
+link CU004 to CU017--><path d="M787.5,425.7063 C787.5,466.6751 787.5,517.3001 787.5,562.3938 " fill="none" id="CU004-&gt;CU017" style="stroke: #383838; stroke-width: 3.125; stroke-dasharray: 7.0,7.0;"/><polygon fill="#383838" points="787.5,578.7063,800,550.5813,787.5,563.0813,775,550.5813,787.5,578.7063" style="stroke: #383838; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="40.625" lengthAdjust="spacingAndGlyphs" textLength="178.125" x="659.375" y="519.072">«include»</text><!--MD5=[328e73813a2ec3bdcb0a4f74f18916a7]
+reverse link CU017 to CU005--><path d="M993.1563,607.1438 C1157.0313,550.4563 1384.9688,471.6126 1537.9688,418.7063 " fill="none" id="CU017&lt;-CU005" style="stroke: #383838; stroke-width: 3.125; stroke-dasharray: 7.0,7.0;"/><polygon fill="#383838" points="977.5,612.5813,1008.1625,615.2414,992.2733,607.4932,1000.0215,591.604,977.5,612.5813" style="stroke: #383838; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="40.625" lengthAdjust="spacingAndGlyphs" textLength="178.125" x="1178.125" y="470.6345">«include»</text><!--MD5=[a2693af34396a7c88fb35975c38195a1]
+link CU017 to CU010--><path d="M1037.5625,673.8313 C1192.5625,671.7063 1388.7188,669.0188 1527.8438,667.1126 " fill="none" id="CU017-&gt;CU010" style="stroke: #383838; stroke-width: 3.125; stroke-dasharray: 7.0,7.0;"/><polygon fill="#383838" points="1543.6563,666.8938,1515.3556,654.7968,1528.0328,667.117,1515.7127,679.7943,1543.6563,666.8938" style="stroke: #383838; stroke-width: 3.125;"/><text fill="#000000" font-family="Helvetica" font-size="40.625" lengthAdjust="spacingAndGlyphs" textLength="175" x="1179.6875" y="658.1345">«extend»</text><!--MD5=[12caa6961d12ae64da323151c6eec2dc]
+@startuml
+skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam linetype polyline
+skinparam packageStyle rectangle
+skinparam packageTitleAlignment right
+skinparam nodesep 30
+skinparam ranksep 70
+left to right direction
+title Casos de uso: notificaciones
+
+actor "Administrador" as admin
+actor "Residente" as resident
+
+rectangle "SoftPh - Notificaciones" {
+  usecase "CU-004\nRegistrar pago manual" as CU004
+  usecase "CU-005\nGestionar feedback" as CU005
+  usecase "CU-017\nGestionar notificaciones\nal residente" as CU017
+  usecase "CU-010\nRealizar pago\nelectrónico" as CU010
+}
+
+admin - - CU004
+admin - - CU005
+resident - - CU017
+CU004 .> CU017 : <<include>>
+CU017 <.. CU005 : <<include>>
+CU017 ..> CU010 : <<extend>>
+@enduml
+
+PlantUML version 1.2020.02(Sun Mar 01 05:22:07 COT 2020)
+(GPL source distribution)
+Java Runtime: OpenJDK Runtime Environment
+JVM: OpenJDK 64-Bit Server VM
+Java Version: 21.0.13.0.3+1-1-24.04.1-Ubuntu
+Operating System: Linux
+Default Encoding: UTF-8
+Language: es
+Country: CO
+--></g></svg>

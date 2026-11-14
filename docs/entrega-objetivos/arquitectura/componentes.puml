@@ -4,6 +4,8 @@
 ' a un lado, los componentes transversales; las flechas solo van hacia abajo o hacia ellos.
 ' Correspondencia: ../correspondencia.md (Anexo C); archivo y líneas: ../verificacion-arquitectura.md.
 skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Helvetica
 skinparam defaultFontSize 9

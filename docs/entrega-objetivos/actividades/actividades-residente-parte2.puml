@@ -1,0 +1,49 @@
+@startuml
+' Diagrama de actividades UML del residente, parte 2 de 2 (Figura 8, DA-02): las operaciones de los
+' módulos del panel, con sus validaciones y su resultado. La parte 1 cubre activación, acceso y navegación.
+' Flujo tomado del código de la versión v1.1-academico:
+'   pages/resident/demo-payments.astro y demo-payments/checkout.astro; backend/app/services/demo_payments.py
+'       y demo_instruments.py: el monto (mayor que cero, hasta 2 decimales, hasta el saldo de la
+'       obligación) se valida; una sola transacción en curso por obligación; la transacción vence a los
+'       15 minutos; el instrumento de prueba ficticio aprueba, rechaza o falla; solo una aprobación a
+'       tiempo sobre una obligación que aún tiene saldo crea el pago, su aplicación y la notificación
+'   pages/resident/feedback/new.astro y services/resident_feedback.py: categoría, urgencia, asunto y
+'       mensaje validados; el feedback queda Pendiente
+'   pages/resident/account-statement, payments y notifications: solo lectura de lo propio
+' Cada decisión tiene sus dos guardas [sí] / [no] (if anidados, no elseif).
+skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 24
+
+title Flujo de actividades del residente (DA-02), parte 2 de 2: operaciones de los módulos\n(empieza al elegir un módulo en la parte 1 y vuelve a ella al terminar)
+
+start
+if (¿Pagar una obligación?) then ([sí])
+  repeat
+    :Elegir la obligación\ny el monto (total\no parcial);
+  backward:Mostrar el error\ndel monto o de\nla obligación;
+  repeat while (¿Monto válido y\nsin otro pago\nen curso?) is ([no]) not ([sí])
+  :Crear la transacción\n(vence en 15 minutos);
+  :Elegir un instrumento\nde prueba ficticio\no cancelar;
+  if (¿Aprobada a tiempo\ny con saldo en\nla obligación?) then ([sí])
+    :Registrar el pago,\naplicarlo y crear\nla notificación;
+    :Ofrecer el\ncomprobante PDF;
+  else ([no])
+    :Mostrar el rechazo,\nel error técnico,\nla cancelación o el\nvencimiento (sin pago);
+  endif
+else ([no])
+  if (¿Enviar un feedback?) then ([sí])
+    repeat
+      :Escribir\ncategoría,\nurgencia, asunto\ny mensaje;
+    backward:Mostrar los\nerrores de\ncada campo\n(422);
+    repeat while (¿Datos válidos?) is ([no]) not ([sí])
+    :Registrar el\nfeedback como\nPendiente;
+  else ([no])
+    :Consultar lo\npropio: estado\nde cuenta, pagos,\nrespuestas y\nnotificaciones;
+  endif
+endif
+stop
+@enduml

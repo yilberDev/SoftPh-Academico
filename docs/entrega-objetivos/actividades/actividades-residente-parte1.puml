@@ -1,0 +1,49 @@
+@startuml
+' Diagrama de actividades UML del residente, parte 1 de 2 (Figura 8, DA-02): activación, acceso y
+' navegación por el panel. La parte 2 detalla las operaciones de cada módulo.
+' Flujo tomado del código de la versión v1.1-academico:
+'   pages/activate-account.astro (HU-019)                 activación con el enlace de la invitación
+'   pages/forgot-password.astro y reset-password.astro    restablecimiento de la contraseña (HU-016)
+'   frontend/src/middleware.ts y lib/auth/page-access.ts  503 sin API · /login sin sesión · 403 con otro rol
+'   lib/auth/roles.ts                                     /resident solo para RESIDENTE; su inicio es /resident
+'   pages/login.astro y lib/auth/login-form.ts           error del campo · alerta genérica (401) · bloqueo (429)
+' Cada decisión tiene sus dos guardas [sí] / [no].
+skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 28
+
+title Flujo de actividades del residente (DA-02), parte 1 de 2: activación, acceso y navegación
+
+start
+if (¿Cuenta activada?) then ([no])
+  :Abrir el enlace de la invitación\ny fijar documento, teléfono\ny contraseña (HU-019);
+else ([sí])
+endif
+:Abrir una página de /resident\n(el middleware SSR consulta la sesión);
+if (¿API disponible?) then ([no])
+  :Responder 503;
+  stop
+else ([sí])
+endif
+if (¿Sesión vigente?\n(8 h, 30 min sin actividad)) then ([no])
+  repeat
+    :Escribir en /login correo y contraseña,\ny enviarlos (si la olvidó: pedir un enlace\ny fijar una nueva, HU-016);
+  backward:Mostrar el error del campo,\nla alerta genérica (401)\no el bloqueo temporal (429);
+  repeat while (¿Datos completos, credenciales\nválidas y correo sin bloqueo?) is ([no]) not ([sí])
+  :Crear la sesión (cookie HttpOnly);
+else ([sí])
+endif
+if (¿Rol RESIDENTE?) then ([no])
+  :Mostrar «Acceso no\nautorizado» (403);
+  stop
+else ([sí])
+endif
+repeat
+  :Elegir en el panel: estado de cuenta,\nmis pagos, pago de demostración,\nmis feedback o notificaciones,\ny operar en él (parte 2);
+repeat while (¿Continuar?) is ([sí]) not ([no])
+:Cerrar sesión (se revoca\nen el servidor);
+stop
+@enduml

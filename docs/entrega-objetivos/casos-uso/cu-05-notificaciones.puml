@@ -1,0 +1,47 @@
+@startuml
+' Casos de uso del módulo «Notificaciones» (Figura 6; diagrama D05 del documento).
+' Nombres: fichas oficiales en docs/casos-uso/; CU-017 relaciona CU-004, CU-005 y CU-010.
+' Relaciones, según el código (backend/app/services/notifications.add_notification):
+'   CU-004 <<include>> CU-017: todo pago manual crea su notificación (services/payments.py, en la
+'   misma transacción del pago).
+'   CU-005 <<include>> CU-017: responder o resolver un feedback siempre notifica al residente
+'   (HU-017 criterio 1; services/feedback.py). Se escribe «CU017 <.. CU005» para que Graphviz deje
+'   CU-005 en la segunda columna; la flecha va de CU-005 (base) a CU-017 (incluido).
+'   CU-017 <<extend>> CU-010: solo cuando el pago de demostración se aprueba y se aplica
+'   (services/demo_payments.py).
+' CU-004, CU-005 y CU-010 pertenecen a otros módulos (Figuras 4 y 5); aquí solo se muestran por su
+' relación con CU-017.
+skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam linetype polyline
+skinparam packageStyle rectangle
+skinparam packageTitleAlignment right
+skinparam nodesep 30
+skinparam ranksep 70
+left to right direction
+title Casos de uso: notificaciones
+
+actor "Administrador" as admin
+actor "Residente" as resident
+
+rectangle "SoftPh – Notificaciones" {
+  usecase "CU-004\nRegistrar pago manual" as CU004
+  usecase "CU-005\nGestionar feedback" as CU005
+  usecase "CU-017\nGestionar notificaciones\nal residente" as CU017
+  usecase "CU-010\nRealizar pago\nelectrónico" as CU010
+}
+
+admin -- CU004
+admin -- CU005
+resident -- CU017
+' Primera columna: CU-004 (que incluye a CU-017, flecha corta y vertical) y CU-017; segunda columna:
+' los casos que CU-017 extiende. CU-010 lo realiza el Residente (Figura 4); aquí solo se muestra
+' por su relación con CU-017, como en el diagrama D05, que solo asocia al Residente con CU-017.
+CU004 .> CU017 : <<include>>
+CU017 <.. CU005 : <<include>>
+CU017 ..> CU010 : <<extend>>
+@enduml

@@ -1,0 +1,30 @@
+@startuml
+' Casos de uso del módulo «Gestión de feedback» (Figura 5; diagrama D04 del documento).
+' Nombres: fichas oficiales en docs/casos-uso/. Las fichas de CU-005 y CU-009 se relacionan entre sí
+' (el administrador gestiona lo que el residente registra) sin que uno incluya o extienda al otro:
+' son dos actores distintos en momentos distintos. La notificación al residente está en la Figura 6.
+skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam linetype polyline
+skinparam packageStyle rectangle
+skinparam packageTitleAlignment right
+skinparam nodesep 30
+skinparam ranksep 70
+left to right direction
+title Casos de uso: gestión de feedback
+
+actor "Administrador" as admin
+actor "Residente" as resident
+
+rectangle "SoftPh – Gestión de feedback" {
+  usecase "CU-005\nGestionar feedback" as CU005
+  usecase "CU-009\nRegistrar y consultar\nfeedback" as CU009
+}
+
+admin -- CU005
+resident -- CU009
+@enduml

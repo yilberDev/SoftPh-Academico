@@ -5,6 +5,7 @@ Este guion muestra, para cada componente y cada comunicación de la Figura 9 del
 - **Versión:** líneas comprobadas el 2026-11-09 sobre la rama `main`. Su código de aplicación (`backend/`, `frontend/`, `database/`) es idéntico al de la etiqueta `v1.1-academico`: `git diff v1.1-academico main -- backend frontend database` no muestra diferencias.
 - **Dónde ejecutar:** todos los comandos se ejecutan desde la raíz del repositorio.
 - **Comandos:** `grep -n` muestra el número de línea y `sed -n 'A,Bp' archivo` muestra el fragmento citado.
+- **Etiquetas:** desde el 2026-11-13, la Figura 9 abrevia los nombres y las etiquetas para leerse a 8 pt o más (por ejemplo, «HTTP /api/v1» o «llamada»). Los títulos de este guion describen cada comunicación completa: son los mismos componentes y las mismas flechas.
 
 ```bash
 cd SoftPh-Academico

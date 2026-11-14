@@ -1,0 +1,41 @@
+@startuml
+' Casos de uso del módulo «Gestión de pagos y estado financiero» (Figura 4; diagrama D03 del documento).
+' Nombres: fichas oficiales en docs/casos-uso/. Relación:
+'   CU-011 <<extend>> CU-012: fichas de CU-011 y CU-012 (se relacionan entre sí); en el código, cada
+'   fila del reporte de saldos pendientes enlaza con el estado de cuenta del residente
+'   (frontend/src/lib/reports/reports.ts, accountStatementPath).
+skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam linetype polyline
+skinparam packageStyle rectangle
+skinparam packageTitleAlignment right
+skinparam nodesep 30
+skinparam ranksep 70
+left to right direction
+title Casos de uso: gestión de pagos y estado financiero
+
+actor "Administrador" as admin
+actor "Residente" as resident
+
+rectangle "SoftPh – Gestión de pagos y estado financiero" {
+  usecase "CU-004\nRegistrar pago manual" as CU004
+  usecase "CU-012\nGenerar reportes\nfinancieros" as CU012
+  usecase "CU-011\nConsultar estado\nde cuenta" as CU011
+  usecase "CU-008\nConsultar historial\nde pagos" as CU008
+  usecase "CU-010\nRealizar pago\nelectrónico" as CU010
+  usecase "CU-014\nConsultar estado de\ncuenta propio" as CU014
+}
+
+admin -- CU004
+admin -- CU012
+admin -- CU011
+resident -- CU008
+resident -- CU010
+resident -- CU014
+' Flecha corta (.>): CU-011 queda en la misma columna que CU-012, justo debajo.
+CU011 .> CU012 : <<extend>>
+@enduml

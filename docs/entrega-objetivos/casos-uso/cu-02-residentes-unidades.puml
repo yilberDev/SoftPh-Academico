@@ -1,0 +1,39 @@
+@startuml
+' Casos de uso del módulo «Gestión de residentes y unidades» (Figura 3; diagrama D02 del documento).
+' Nombres: fichas oficiales en docs/casos-uso/. Relación:
+'   CU-015 <<extend>> CU-006: fichas de CU-006 y CU-015; en el código, la edición y la eliminación
+'   se inician desde el listado de residentes (frontend/src/pages/admin/residents/index.astro enlaza
+'   cada fila con /admin/residents/{id}, donde están Guardar y Eliminar).
+skinparam dpi 300
+skinparam monochrome true
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam linetype polyline
+skinparam packageStyle rectangle
+skinparam packageTitleAlignment right
+skinparam nodesep 30
+skinparam ranksep 70
+left to right direction
+title Casos de uso: gestión de residentes y unidades
+
+actor "Administrador" as admin
+actor "Residente" as resident
+
+rectangle "SoftPh – Gestión de residentes y unidades" {
+  usecase "CU-013\nGestionar unidades\nresidenciales" as CU013
+  usecase "CU-003\nInvitar residente" as CU003
+  usecase "CU-006\nConsultar residentes" as CU006
+  usecase "CU-015\nGestionar información\ndel residente" as CU015
+  usecase "CU-019\nActivar cuenta\nde residente" as CU019
+}
+
+admin -- CU013
+admin -- CU003
+admin -- CU006
+admin -- CU015
+resident -- CU019
+' Flecha corta (.>): CU-015 queda en la misma columna que CU-006, justo debajo.
+CU015 .> CU006 : <<extend>>
+@enduml
