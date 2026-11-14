@@ -4,14 +4,16 @@ Cada diagrama muestra sus tablas con todas las columnas y sus tipos, copiadas ta
 completo (leído de information_schema). Cada relación se dibuja en el diagrama de la tabla que tiene
 la clave foránea; si la tabla referenciada es de otra parte o de otra figura, se repite en gris, solo
 con su clave primaria, como referencia. Así, las 24 relaciones del modelo se dibujan una vez cada una.
-La mora (charges.source_charge_id) va hacia un recuadro gris «charges (la misma tabla)»: PlantUML
-1.2020 dibuja la relación de una tabla consigo misma como un bucle con las marcas superpuestas.
+La mora (charges.source_charge_id) va hacia un recuadro gris «charges: origen de la mora», con la
+etiqueta «source_charge_id», igual que en el Anexo B: PlantUML 1.2020 dibuja la relación de una tabla
+consigo misma como un bucle con las marcas superpuestas.
 Dos datos se calculan del modelo: las columnas de otras partes o figuras que apuntan a las tablas
 del diagrama («Referencias») y las columnas generadas que el modelo omite. Van en la leyenda o en
 notas sueltas, según lo que dé mayor letra en cada figura (clave «notes» de FIGURES).
 
 Cada figura se lee a 8 pt o más en una hoja carta (comprobado con verificar_diagramas.py); la
-disposición de cada una (orientación, letra en px de PlantUML, nodesep y ranksep) se fija en FIGURES.
+disposición de cada una (orientación, letra en px de PlantUML, nodesep y ranksep) se fija en FIGURES;
+con «split», una tabla gris se repite sobre cada tabla que la referencia (para evitar cruces).
 
 Uso, desde la raíz del repositorio:
     python3 -I docs/entrega-objetivos/scripts/generar_areas.py docs/entrega-objetivos/modelo-datos
@@ -44,8 +46,11 @@ FIGURES = {
     "modelo-datos-finanzas-comunicacion-parte1": {
         "title": "Modelo lógico de datos: finanzas y comunicación (1 de 2): obligaciones y pagos",
         "tables": ["charges", "payments"],
-        "layout": ("tb", 16, 12, 15),
+        "layout": ("tb", 16, 12, 45),
         "notes": "leyenda",
+        # units is repeated (one grey box over charges, another over payments): with a single box the
+        # relations to payments met at one corner, with overlapping marks, and one of them crossed.
+        "split": ["units"],
     },
     "modelo-datos-finanzas-comunicacion-parte2": {
         "title": "Modelo lógico de datos: finanzas y comunicación (2 de 2): aplicaciones, pagos de demostración y comunicación",
@@ -76,6 +81,7 @@ skinparam nodesep {nodesep}
 skinparam ranksep {ranksep}
 ' Título (no se dibuja; lo pone el pie de figura del informe): {title}
 """
+NBSP = "\u00a0"
 LEGEND = [
     "MySQL 8 (InnoDB) · esquema Alembic d33ea6140186 (head)",
     "* = NOT NULL · <<PK>> clave primaria · <<FK>> clave foránea · <<UK>> única",
@@ -118,14 +124,22 @@ for name, figure in FIGURES.items():
                          direction="left to right direction" if direction == "lr" else "top to bottom direction")]
     for t in own:
         out.append(f'entity "{t}" as {t} {{\n{entities[t]}\n}}\n')
+    split = figure.get("split", [])
     for t in stubs:
-        out.append(f'entity "{t}" as {t} #DDDDDD {{\n  *id : bigint <<PK>>\n}}\n')
+        children = sorted({b for _, a, b, _ in used if a == t}) if t in split else [None]
+        for child in children:
+            alias = f"{t}_{child}" if child else t
+            out.append(f'entity "{t}" as {alias} #DDDDDD {{\n  *id : bigint <<PK>>\n}}\n')
     for line, a, b, label in used:
         if a == b:  # the late fee and its origin, drawn towards a grey box of the same table
-            out.append(f'entity "{a} (la misma tabla)" as {a}_origen #DDDDDD {{\n  *id : bigint <<PK>>\n}}\n')
-            # Same row (one dash), so the grey box sits beside the table instead of below it.
-            same_row = line.replace("--", "-", 1).replace(f" {b} :", f" {b}_origen :", 1)
-            out.append(same_row.replace(" (", "\\n(") + "\n")
+            # The same name and label as in Annex B (dividir_modelo_datos.py). Same row (one dash), so the
+            # grey box sits beside the table; the label is the column alone, with three no-break spaces
+            # on each side to keep it clear of the border of the table.
+            out.append(f'entity "{a}: origen\\nde la mora" as {a}_origen #DDDDDD {{\n  *id : bigint <<PK>>\n}}\n')
+            left, right = re.match(r"^\w+ (\S+?)--(\S+) ", line).groups()
+            out.append(f'{a} {left}-{right} {a}_origen : "{NBSP * 3}{label.split(" (")[0]}{NBSP * 3}"\n')
+        elif a in split:
+            out.append(line.replace(f"{a} ", f"{a}_{b} ", 1) + "\n")
         else:
             out.append(line + "\n")
     drawn += [r[0] for r in used]
@@ -133,6 +147,8 @@ for name, figure in FIGURES.items():
     # «notas», into free notes: whichever gives the larger print size for that figure.
     legend = LEGEND if stubs or any(a == b for _, a, b, _ in used) else LEGEND[:3]
     legend = list(legend)
+    for t in split:
+        legend.append(f"{t} se repite en gris sobre cada tabla que la referencia, para que sus relaciones no se crucen.")
     incoming = sorted(f"{b}.{label.split(' ')[0]} → {a}" for _, a, b, label in relations
                       if a in own and b not in own and a != b)
     gen = [f"{t}.{c}" for t, c in generated if t in own]

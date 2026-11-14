@@ -19,7 +19,7 @@ skinparam defaultFontSize 24
 
 start
 if (¿Cuenta activada?) then ([no])
-  :Abrir el enlace de la invitación y fijar\ndocumento, teléfono y contraseña (HU-019);
+  :Abrir el enlace de la invitación y fijar\ndocumento, teléfono (opcional) y contraseña (HU-019);
 else ([sí])
 endif
 :Abrir una página de /resident\n(el middleware SSR consulta la sesión);

@@ -8,43 +8,43 @@
 '   backend/app/core/errors   422 con el campo y el motivo; 409 por versión, saldo o disponibilidad
 '   backend/app/services/*    una transacción por operación, con su registro en audit_logs; el correo
 '                             (invitación, recibo PDF, respuesta de feedback) se envía después de guardar
-'                             y su fallo queda registrado sin deshacer la operación
+'                             y su resultado (enviado o fallido) queda registrado sin deshacer la operación
 ' Cada decisión tiene sus dos guardas [sí] / [no] (if anidados, no elseif).
 skinparam dpi 300
 skinparam monochrome true
 skinparam backgroundColor white
 skinparam shadowing false
 skinparam defaultFontName Helvetica
-skinparam defaultFontSize 20
+skinparam defaultFontSize 22
 
 ' Título (no se dibuja; lo pone el pie de figura del informe): Flujo de actividades del administrador (DA-01), parte 2 de 2: operación en un módulo
 
 start
 :Abrir el módulo elegido (parte 1);
 if (¿La acción modifica datos?) then ([no])
-  :Buscar, filtrar, ordenar y paginar\nen el servidor (GET);
+  :Buscar, filtrar, ordenar\ny paginar (GET);
   :Mostrar la lista o el detalle,\no el mensaje sin registros;
 else ([sí])
   repeat
     :Completar o corregir el formulario;
     if (¿Elimina o afecta a otros datos?) then ([sí])
       :Pedir confirmación;
+      if (¿Confirma?) then ([no])
+        :Cancelar sin cambios y\nvolver al panel (parte 1);
+        stop
+      else ([sí])
+      endif
     else ([no])
     endif
     :Enviar con Origin y X-CSRF-Token;
-  backward:Mostrar los errores\njunto a cada campo (422);
+  backward:Mostrar los\nerrores de cada\ncampo (422);
   repeat while (¿Datos válidos?) is ([no]) not ([sí])
   if (¿Sin conflicto de versión,\nsaldo o disponibilidad?) then ([no])
     :Mostrar el conflicto (409)\ny recargar los datos;
   else ([sí])
     :Guardar en una transacción\ny registrar la auditoría;
     if (¿La operación envía correo?\n(invitación, recibo, respuesta)) then ([sí])
-      :Enviar el correo después de guardar;
-      if (¿Envío correcto?) then ([no])
-        :Registrar el fallo del envío\n(la operación se conserva);
-      else ([sí])
-        :Registrar el envío;
-      endif
+      :Enviar el correo y registrar el resultado\n(si falla, la operación se conserva);
     else ([no])
     endif
     :Mostrar la confirmación\ny los datos actualizados;
