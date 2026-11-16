@@ -71,10 +71,10 @@ python3 -I scripts/verificar_diagramas.py */*.svg                  # letra, cruc
 | `cu-03-pagos-estado-financiero` | 4 | 1450 × 2006 | 8,3 pt | **12,0 pt** | 0 | 0 | 0 |
 | `cu-04-feedback` | 5 | 1115 × 729 | **22,8 pt** | 17,1 pt | 0 | 0 | 0 |
 | `cu-05-notificaciones` | 6 | 2025 × 803 | **13,0 pt** | 9,4 pt | 0 | 0 | 0 |
-| `actividades-administrador-parte1` | 7 (1/2) | 2165 × 4472 | 5,7 pt | **8,3 pt** | 0 | 0 | 0 |
-| `actividades-administrador-parte2` | 7 (2/2) | 3465 × 4856 | 5,8 pt | **8,4 pt** | 0 | 0 | 0 |
-| `actividades-residente-parte1` | 8 (1/2) | 3234 × 5291 | 5,8 pt | **8,4 pt** | 0 | 0 | 0 |
-| `actividades-residente-parte2` | 8 (2/2) | 3978 × 3726 | 8,3 pt | **8,9 pt** | 0 | 0 | 0 |
+| `actividades-administrador-parte1` | 7 (1/2) | 2925 × 3894 | 6,6 pt | **9,5 pt** | 0 | 0 | 0 |
+| `actividades-administrador-parte2` | 7 (2/2) | 3981 × 4856 | 5,8 pt | **8,1 pt** | 0 | 0 | 0 |
+| `actividades-residente-parte1` | 8 (1/2) | 3343 × 5264 | 5,9 pt | **8,4 pt** | 0 | 0 | 0 |
+| `actividades-residente-parte2` | 8 (2/2) | 4103 × 3726 | 8,3 pt | **8,6 pt** | 0 | 0 | 0 |
 | `componentes-resumen` | 9 | 1943 × 3418 | 6,0 pt | **8,7 pt** | 0 | 0 | 0 |
 | `despliegue` | 10 | 2284 × 1859 | **9,7 pt** | 9,0 pt | 0 | 0 | 0 |
 | `modelo-datos-usuarios-seguridad` | 11 | 3973 × 2063 | **8,2 pt** | 5,9 pt | 0 | 0 | 0 |

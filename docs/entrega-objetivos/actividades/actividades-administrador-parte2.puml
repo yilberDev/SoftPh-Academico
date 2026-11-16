@@ -22,7 +22,7 @@ skinparam defaultFontSize 22
 start
 :Abrir el módulo elegido (parte 1);
 if (¿La acción modifica datos?) then ([no])
-  :Buscar, filtrar, ordenar\ny paginar (GET);
+  :Buscar, filtrar, ordenar\ny paginar, según el módulo (GET);
   :Mostrar la lista o el detalle,\no el mensaje sin registros;
 else ([sí])
   repeat
@@ -40,7 +40,7 @@ else ([sí])
   backward:Mostrar los\nerrores de cada\ncampo (422);
   repeat while (¿Datos válidos?) is ([no]) not ([sí])
   if (¿Sin conflicto de versión,\nsaldo o disponibilidad?) then ([no])
-    :Mostrar el conflicto (409)\ny recargar los datos;
+    :Mostrar el conflicto (409);\nsi es de versión, recargar los datos;
   else ([sí])
     :Guardar en una transacción\ny registrar la auditoría;
     if (¿La operación envía correo?\n(invitación, recibo, respuesta)) then ([sí])

@@ -4,9 +4,9 @@
 ' Flujo tomado del código de la versión v1.1-academico:
 '   pages/activate-account.astro (HU-019)                 activación con el enlace de la invitación
 '   pages/forgot-password.astro y reset-password.astro    restablecimiento de la contraseña (HU-016)
-'   frontend/src/middleware.ts y lib/auth/page-access.ts  503 sin API · /login sin sesión · 403 con otro rol
+'   frontend/src/middleware.ts y lib/auth/page-access.ts  503 sin API · /login sin sesión · 403 solo con sesión vigente de otro rol
 '   lib/auth/roles.ts                                     /resident solo para RESIDENTE; su inicio es /resident
-'   pages/login.astro y lib/auth/login-form.ts           error del campo · alerta genérica (401) · bloqueo (429)
+'   pages/login.astro y lib/auth/login-form.ts           error del campo · 401 · 429 · panel del rol (homePathForRole)
 ' Cada decisión tiene sus dos guardas [sí] / [no].
 skinparam dpi 300
 skinparam monochrome true
@@ -19,7 +19,7 @@ skinparam defaultFontSize 24
 
 start
 if (¿Cuenta activada?) then ([no])
-  :Abrir el enlace de la invitación y fijar\ndocumento, teléfono (opcional) y contraseña (HU-019);
+  :Abrir el enlace de la invitación\ny fijar documento, teléfono\n(opcional) y contraseña (HU-019);
 else ([sí])
 endif
 :Abrir una página de /resident\n(el middleware SSR consulta la sesión);
@@ -30,19 +30,20 @@ else ([sí])
 endif
 if (¿Sesión vigente?\n(8 h, 30 min sin actividad)) then ([no])
   repeat
-    :Escribir en /login correo y contraseña, y enviarlos\n(si la olvidó: pedir un enlace y fijar una nueva, HU-016);
+    :Escribir en /login correo y\ncontraseña, y enviarlos (si la\nolvidó: pedir un enlace y\nfijar una nueva, HU-016);
   backward:Mostrar el error del campo,\nla alerta genérica (401)\no el bloqueo temporal (429);
   repeat while (¿Datos completos, credenciales\nválidas y correo sin bloqueo?) is ([no]) not ([sí])
   :Crear la sesión (cookie HttpOnly);
+  :Ir al panel del rol de la cuenta;
 else ([sí])
-endif
-if (¿Rol RESIDENTE?) then ([no])
-  :Mostrar «Acceso no autorizado» (403);
-  stop
-else ([sí])
+  if (¿Rol RESIDENTE?) then ([no])
+    :Mostrar «Acceso no\nautorizado» (403);
+    stop
+  else ([sí])
+  endif
 endif
 repeat
-  :Elegir en el panel: estado de cuenta, mis pagos,\npago de demostración, mis feedback o notificaciones,\ny operar en él (parte 2);
+  :Elegir en el panel: estado de\ncuenta, mis pagos, pago de\ndemostración, mis feedback o\nnotificaciones, y operar en él\n(parte 2);
 repeat while (¿Continuar?) is ([sí]) not ([no])
 :Cerrar sesión (se revoca en el servidor);
 stop

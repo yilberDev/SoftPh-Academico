@@ -3,10 +3,12 @@
 ' navegación por el panel. La parte 2 detalla la operación de cada módulo.
 ' Flujo tomado del código de la versión v1.1-academico:
 '   frontend/src/middleware.ts y lib/auth/page-access.ts  decisión de acceso de cada página
-'       (503 sin API · redirección a /login sin sesión · 403 con otro rol · página permitida)
+'       (503 sin API · redirección a /login sin sesión · 403 solo con sesión vigente de otro rol ·
+'       página permitida)
 '   lib/auth/roles.ts                                       /admin solo para ADMINISTRADOR; su inicio es /admin
 '   pages/login.astro y lib/auth/login-form.ts             error junto al campo · alerta genérica (401) ·
-'                                                           bloqueo temporal (429) · sesión creada
+'                                                           bloqueo temporal (429) · sesión creada e ida
+'                                                           al panel del rol (homePathForRole)
 '   backend/app/services/auth.py y sessions.py              sesión de 8 h y 30 min de inactividad; logout
 ' El inicio de sesión es un bucle: cualquiera de sus tres rechazos (dato inválido, 401, 429) vuelve a
 ' pedir los datos. Cada decisión tiene sus dos guardas [sí] / [no].
@@ -32,12 +34,13 @@ if (¿Sesión vigente?\n(8 h, 30 min sin actividad)) then ([no])
   backward:Mostrar el error del campo,\nla alerta genérica (401)\no el bloqueo temporal (429);
   repeat while (¿Datos completos, credenciales\nválidas y correo sin bloqueo?) is ([no]) not ([sí])
   :Crear la sesión (cookie HttpOnly);
+  :Ir al panel del rol de la cuenta;
 else ([sí])
-endif
-if (¿Rol ADMINISTRADOR?) then ([no])
-  :Mostrar «Acceso no\nautorizado» (403);
-  stop
-else ([sí])
+  if (¿Rol ADMINISTRADOR?) then ([no])
+    :Mostrar «Acceso no\nautorizado» (403);
+    stop
+  else ([sí])
+  endif
 endif
 repeat
   :Elegir en el panel un módulo: unidades,\nresidentes, invitaciones, obligaciones,\npagos, reportes o feedback, y operar\nen él (parte 2);

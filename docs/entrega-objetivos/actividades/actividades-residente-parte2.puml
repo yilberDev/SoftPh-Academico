@@ -7,8 +7,8 @@
 '       obligación) se valida; una sola transacción en curso por obligación; la transacción vence a los
 '       15 minutos; el instrumento de prueba ficticio aprueba, rechaza o falla; solo una aprobación a
 '       tiempo sobre una obligación que aún tiene saldo crea el pago, su aplicación y la notificación
-'   pages/resident/feedback/new.astro y services/resident_feedback.py: categoría, urgencia, asunto y
-'       mensaje validados; el feedback queda Pendiente
+'   pages/resident/feedback/new.astro y services/resident_feedback.py: categoría, urgencia, asunto
+'       (opcional) y mensaje validados; el feedback queda Pendiente
 '   pages/resident/account-statement, payments y notifications: solo lectura de lo propio
 ' Cada decisión tiene sus dos guardas [sí] / [no] (if anidados, no elseif).
 skinparam dpi 300
@@ -37,7 +37,7 @@ if (¿Pagar una obligación?) then ([sí])
 else ([no])
   if (¿Enviar un feedback?) then ([sí])
     repeat
-      :Escribir\ncategoría,\nurgencia, asunto\ny mensaje;
+      :Escribir categoría,\nurgencia, asunto\n(opcional) y mensaje;
     backward:Mostrar los\nerrores de\ncada campo\n(422);
     repeat while (¿Datos válidos?) is ([no]) not ([sí])
     :Registrar el\nfeedback como\nPendiente;
